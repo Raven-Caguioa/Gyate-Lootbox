@@ -11,9 +11,9 @@ export const TREASURY_POOL = "0x3243fc2a93516eb4197810f79c5ad3b8f60052c669c847b3
 export const KIOSK_REGISTRY = "0x561c34ed574e5d2f7293b22b5a57e36e83c5e97a2a5fe215d21082569a5987d1";
 export const POLICY_ADMIN = "0x7b717e9a7d2c935d0f7193a1228958d1a8df5fc16e97e65b12644b644e905bdb";
 
-// Function identifiers for TransactionBlock calls
+// Updated module names based on standard Gyate project structure
 export const MODULE_NAMES = {
-  LOOTBOX: 'gyate', // Updated to the primary module name
+  LOOTBOX: 'gyate_nft', 
   MARKETPLACE: 'marketplace',
   KIOSK: 'gyate_kiosk',
   TREASURY: 'treasury',
