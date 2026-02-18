@@ -1,4 +1,4 @@
-export const SUI_NETWORK = 'mainnet';
+export const SUI_NETWORK = 'testnet';
 
 export const PACKAGE_ID = "0x0565d4e63f46ff07d1799b1f55f5f3c4c6e9af093f30a395d9cb3057f0d4c7cc";
 export const UPGRADE_CAP = "0x530b6829b033ab499f1c591c3d956bd76a35cb3a86c7791ba3069381399e34fe";
@@ -13,7 +13,7 @@ export const POLICY_ADMIN = "0x7b717e9a7d2c935d0f7193a1228958d1a8df5fc16e97e65b1
 
 // Function identifiers for TransactionBlock calls
 export const MODULE_NAMES = {
-  LOOTBOX: 'lootbox',
+  LOOTBOX: 'gyate', // Updated to the primary module name
   MARKETPLACE: 'marketplace',
   KIOSK: 'gyate_kiosk',
   TREASURY: 'treasury',
