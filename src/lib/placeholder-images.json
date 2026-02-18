@@ -1,3 +1,34 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-bg",
+      "description": "Epic cosmic fantasy landscape",
+      "imageUrl": "https://images.unsplash.com/photo-1762009366676-cf155a52b588?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8Y29zbWljJTIwZmFudGFzeXxlbnwwfHx8fDE3NzE0MDc4MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "cosmic fantasy"
+    },
+    {
+      "id": "lootbox-classic",
+      "description": "Ornate glowing chest",
+      "imageUrl": "https://images.unsplash.com/photo-1632809199725-72a4245e846b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHx0cmVhc3VyZSUyMGNoZXN0fGVufDB8fHx8MTc3MTQwNzgzNnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "treasure chest"
+    },
+    {
+      "id": "nft-common",
+      "description": "Fantasy character portrait",
+      "imageUrl": "https://images.unsplash.com/photo-1743355694962-40376ef681da?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHx3YXJyaW9yJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzcxMzM3NDY2fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "warrior portrait"
+    },
+    {
+      "id": "nft-rare",
+      "description": "Glowy fantasy creature",
+      "imageUrl": "https://images.unsplash.com/photo-1760772481689-2ad7a480c0ca?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxtYWdpY2FsJTIwY3JlYXR1cmV8ZW58MHx8fHwxNzcxNDA3ODM2fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "magical creature"
+    },
+    {
+      "id": "nft-legendary",
+      "description": "Celestial being portrait",
+      "imageUrl": "https://images.unsplash.com/photo-1681751129941-adce83dc0a89?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxjZWxlc3RpYWwlMjBnb2R8ZW58MHx8fHwxNzcxNDA3ODM2fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "celestial god"
+    }
+  ]
 }
