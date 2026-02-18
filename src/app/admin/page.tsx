@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -16,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 interface LootboxOption {
   id: string;
@@ -71,7 +71,11 @@ export default function AdminPage() {
     setIsLoadingBoxes(true);
     try {
       const response = await suiClient.queryObjects({
-        filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::LootboxConfig` },
+        filter: { 
+          MatchAll: [
+            { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::LootboxConfig` }
+          ]
+        },
         options: { showContent: true }
       });
 
@@ -85,7 +89,6 @@ export default function AdminPage() {
         };
       });
 
-      // Filter to only boxes where current user is admin (optional, depends on Move logic)
       setMyLootboxes(boxes);
     } catch (err) {
       console.error("Failed to fetch boxes:", err);
@@ -120,7 +123,7 @@ export default function AdminPage() {
         toast({ title: "Step 1 Complete", description: "Draft created. Refreshing list..." });
         setIsPending(false);
         setNewBoxName("");
-        setTimeout(fetchLootboxes, 3000); // Wait for indexing
+        setTimeout(fetchLootboxes, 3000); 
       },
       onError: (err) => { toast({ variant: "destructive", title: "Failed", description: err.message }); setIsPending(false); },
     });
