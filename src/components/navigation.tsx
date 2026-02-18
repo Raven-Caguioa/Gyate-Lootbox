@@ -1,13 +1,16 @@
+
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wallet, Store, ShoppingBag, LayoutDashboard, Coins } from "lucide-react";
+import { Wallet, Store, ShoppingBag, LayoutDashboard, Coins, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
 
 export function Navigation() {
   const pathname = usePathname();
+  const account = useCurrentAccount();
 
   const navItems = [
     { href: "/", label: "Home", icon: LayoutDashboard },
@@ -15,6 +18,8 @@ export function Navigation() {
     { href: "/inventory", label: "Inventory", icon: ShoppingBag },
     { href: "/marketplace", label: "Market", icon: Coins },
   ];
+
+  const isAdmin = account?.address === "0x8a00a0227d2bcec1bf3dfa86c312ae037bbd9518113cbc1d60253090ac7905d8"; // Example admin check
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/80 backdrop-blur-md">
@@ -48,19 +53,32 @@ export function Navigation() {
               </Link>
             );
           })}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium",
+                pathname === "/admin" 
+                  ? "bg-red-500/10 text-red-500" 
+                  : "text-red-400 hover:text-red-300 hover:bg-white/5"
+              )}
+            >
+              <ShieldAlert className="w-4 h-4" />
+              <span className="hidden md:inline">Admin</span>
+            </Link>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
           <div className="hidden lg:flex flex-col items-end mr-2">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Balance</span>
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Network</span>
             <span className="text-sm font-bold flex items-center gap-1">
-              <span className="text-accent">1,250</span> $GYATE
+              <span className="text-accent">Sui Mainnet</span>
             </span>
           </div>
-          <Button variant="outline" size="sm" className="gap-2 border-primary/50 hover:bg-primary/10">
-            <Wallet className="w-4 h-4" />
-            <span className="hidden sm:inline">Connect Wallet</span>
-          </Button>
+          <div className="sui-connect-wrapper">
+             <ConnectButton />
+          </div>
         </div>
       </div>
     </nav>

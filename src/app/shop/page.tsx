@@ -1,17 +1,66 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
 import { MOCK_LOOTBOXES } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
-import { Store, Shield, Sparkles, AlertCircle } from "lucide-react";
+import { Store, Shield, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { Progress } from "@/components/ui/progress";
+import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 export default function ShopPage() {
   const [openingBox, setOpeningBox] = useState<any>(null);
+  const [isPending, setIsPending] = useState(false);
+  const account = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { toast } = useToast();
+
+  const handleBuyLootbox = async (box: any) => {
+    if (!account) {
+      toast({ variant: "destructive", title: "Wallet not connected", description: "Please connect your Sui wallet to purchase lootboxes." });
+      return;
+    }
+
+    setIsPending(true);
+    const txb = new Transaction();
+
+    // Payment in SUI (MIST)
+    const [coin] = txb.splitCoins(txb.gas, [box.price * 1_000_000_000]);
+
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BUY_LOOTBOX}`,
+      arguments: [
+        txb.object(LOOTBOX_REGISTRY),
+        txb.object(TREASURY_POOL),
+        txb.pure.string(box.id),
+        coin,
+      ],
+    });
+
+    signAndExecute(
+      { transaction: txb },
+      {
+        onSuccess: (result) => {
+          toast({ title: "Purchase Successful", description: `Transaction: ${result.digest.slice(0, 10)}...` });
+          setOpeningBox(box);
+          setIsPending(false);
+        },
+        onError: (err) => {
+          console.error(err);
+          toast({ variant: "destructive", title: "Transaction Failed", description: err.message });
+          setIsPending(false);
+        },
+      }
+    );
+  };
 
   return (
     <div className="min-h-screen gradient-bg">
@@ -30,12 +79,11 @@ export default function ShopPage() {
               </p>
             </div>
 
-            {/* Pity Tracker UI */}
             <Card className="glass-card border-accent/20 w-full md:w-80">
               <CardContent className="p-4 space-y-4">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Pity Tracker</span>
-                  <Badge variant="outline" className="border-accent/50 text-[10px]">Active</Badge>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">On-Chain Progress</span>
+                  <Badge variant="outline" className="border-accent/50 text-[10px]">Connected</Badge>
                 </div>
                 <div className="space-y-3">
                   <div className="space-y-1">
@@ -44,13 +92,6 @@ export default function ShopPage() {
                       <span>42/100</span>
                     </div>
                     <Progress value={42} className="h-1 bg-white/5" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
-                      <span>Ultra Rare Pity</span>
-                      <span>15/50</span>
-                    </div>
-                    <Progress value={30} className="h-1 bg-white/5" />
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-accent/80 font-bold uppercase">
@@ -101,35 +142,16 @@ export default function ShopPage() {
                     </div>
                     <Button 
                       className="w-full h-12 font-bold text-lg glow-purple"
-                      onClick={() => setOpeningBox(box)}
+                      disabled={isPending}
+                      onClick={() => handleBuyLootbox(box)}
                     >
-                      Summon Now
+                      {isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                      {isPending ? "Confirming..." : "Summon Now"}
                     </Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
-          </div>
-
-          <div className="mt-20 p-8 glass-card rounded-3xl border-white/5">
-             <div className="grid md:grid-cols-4 gap-8">
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Common Drop Rate</h4>
-                  <div className="text-2xl font-bold font-headline">40.0%</div>
-                </div>
-                <div className="space-y-2 text-blue-400">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Rare Drop Rate</h4>
-                  <div className="text-2xl font-bold font-headline">30.0%</div>
-                </div>
-                <div className="space-y-2 text-purple-400">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">SR/SSR Drop Rate</h4>
-                  <div className="text-2xl font-bold font-headline">24.0%</div>
-                </div>
-                <div className="space-y-2 text-yellow-400">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Ultra/Legend Rate</h4>
-                  <div className="text-2xl font-bold font-headline">6.0%</div>
-                </div>
-             </div>
           </div>
         </div>
       </div>
@@ -139,19 +161,6 @@ export default function ShopPage() {
         open={!!openingBox} 
         onOpenChange={(open) => !open && setOpeningBox(null)} 
       />
-    </div>
-  );
-}
-
-function Badge({ children, variant = "default", className }: any) {
-  const variants: any = {
-    default: "bg-primary text-primary-foreground",
-    outline: "border border-input bg-transparent",
-    secondary: "bg-secondary text-secondary-foreground"
-  };
-  return (
-    <div className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors ${variants[variant]} ${className}`}>
-      {children}
     </div>
   );
 }
