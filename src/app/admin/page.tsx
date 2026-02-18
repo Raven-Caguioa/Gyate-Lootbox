@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -5,31 +6,33 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
+import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ShieldCheck, ArrowUpRight, Lock, Plus, Package, Settings, Sparkles, Sword, Shield, Zap, Image as ImageIcon, CheckCircle2, ListPlus } from "lucide-react";
-import { useState } from "react";
+import { Coins, ShieldCheck, ArrowUpRight, Lock, Plus, Package, Settings, Sparkles, Sword, Shield, Zap, Image as ImageIcon, CheckCircle2, ListPlus, RefreshCw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+interface LootboxOption {
+  id: string;
+  name: string;
+  isSetup: boolean;
+  isActive: boolean;
+}
+
 export default function AdminPage() {
   const account = useCurrentAccount();
+  const suiClient = useSuiClient();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const { toast } = useToast();
 
   const [isPending, setIsPending] = useState(false);
+  const [myLootboxes, setMyLootboxes] = useState<LootboxOption[]>([]);
+  const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
 
   // --- Step 1: Draft State ---
   const [newBoxName, setNewBoxName] = useState("");
@@ -63,6 +66,38 @@ export default function AdminPage() {
   const [mintAmount, setMintAmount] = useState("");
   const [mintRecipient, setMintRecipient] = useState("");
 
+  const fetchLootboxes = useCallback(async () => {
+    if (!account) return;
+    setIsLoadingBoxes(true);
+    try {
+      const response = await suiClient.queryObjects({
+        filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::LootboxConfig` },
+        options: { showContent: true }
+      });
+
+      const boxes: LootboxOption[] = response.data.map((obj: any) => {
+        const fields = obj.data?.content?.fields;
+        return {
+          id: obj.data?.objectId,
+          name: fields?.name || "Unnamed Box",
+          isSetup: fields?.is_setup_mode || false,
+          isActive: fields?.is_active || false,
+        };
+      });
+
+      // Filter to only boxes where current user is admin (optional, depends on Move logic)
+      setMyLootboxes(boxes);
+    } catch (err) {
+      console.error("Failed to fetch boxes:", err);
+    } finally {
+      setIsLoadingBoxes(false);
+    }
+  }, [account, suiClient]);
+
+  useEffect(() => {
+    fetchLootboxes();
+  }, [fetchLootboxes]);
+
   const handleCreateDraft = async () => {
     if (!newBoxName || !newBoxPrice) return;
     setIsPending(true);
@@ -82,8 +117,10 @@ export default function AdminPage() {
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Step 1 Complete", description: "Draft created. Now add NFT types." });
+        toast({ title: "Step 1 Complete", description: "Draft created. Refreshing list..." });
         setIsPending(false);
+        setNewBoxName("");
+        setTimeout(fetchLootboxes, 3000); // Wait for indexing
       },
       onError: (err) => { toast({ variant: "destructive", title: "Failed", description: err.message }); setIsPending(false); },
     });
@@ -111,6 +148,7 @@ export default function AdminPage() {
       onSuccess: () => {
         toast({ title: "NFT Type Added", description: `${nftName} added to rarity tier ${nftRarity}.` });
         setIsPending(false);
+        setNftName("");
       },
       onError: (err) => { toast({ variant: "destructive", title: "Failed", description: err.message }); setIsPending(false); },
     });
@@ -132,6 +170,7 @@ export default function AdminPage() {
       onSuccess: () => {
         toast({ title: "Lootbox Activated!", description: "Box is now live for players." });
         setIsPending(false);
+        setTimeout(fetchLootboxes, 3000);
       },
       onError: (err) => { toast({ variant: "destructive", title: "Activation Failed", description: err.message }); setIsPending(false); },
     });
@@ -182,9 +221,21 @@ export default function AdminPage() {
               <h1 className="font-headline text-5xl font-bold mb-4 tracking-tight">Platform Forge</h1>
               <p className="text-muted-foreground text-lg">On-chain protocol management for the GyateGyate ecosystem.</p>
             </div>
-            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 px-4 py-2 text-sm">
-              <Lock className="w-4 h-4 mr-2" /> Admin Session Active
-            </Badge>
+            <div className="flex items-center gap-3">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchLootboxes} 
+                disabled={isLoadingBoxes}
+                className="bg-white/5 border-white/10"
+              >
+                <RefreshCw className={cn("w-4 h-4 mr-2", isLoadingBoxes && "animate-spin")} />
+                Sync Drafts
+              </Button>
+              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 px-4 py-2 text-sm">
+                <Lock className="w-4 h-4 mr-2" /> Admin Session Active
+              </Badge>
+            </div>
           </div>
 
           <Tabs defaultValue="lootbox" className="space-y-8">
@@ -253,12 +304,26 @@ export default function AdminPage() {
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Badge className="bg-primary/20 text-primary">02</Badge> Add Contents
                     </CardTitle>
-                    <CardDescription>Define NFT types for the box</CardDescription>
+                    <CardDescription>Define NFT types for your drafts</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Target Lootbox ID</Label>
-                      <Input value={targetBoxId} onChange={(e) => setTargetBoxId(e.target.value)} placeholder="0x..." />
+                      <Label>Select Draft Box</Label>
+                      <Select value={targetBoxId} onValueChange={setTargetBoxId}>
+                        <SelectTrigger className="bg-white/5 border-white/10">
+                          <SelectValue placeholder={isLoadingBoxes ? "Loading..." : "Choose a draft..."} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {myLootboxes.filter(b => b.isSetup).map(box => (
+                            <SelectItem key={box.id} value={box.id}>
+                              {box.name} <span className="text-[10px] opacity-50 ml-2">({box.id.slice(0,6)}...)</span>
+                            </SelectItem>
+                          ))}
+                          {myLootboxes.filter(b => b.isSetup).length === 0 && !isLoadingBoxes && (
+                            <SelectItem value="none" disabled>No drafts found</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-2">
@@ -281,19 +346,19 @@ export default function AdminPage() {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div className="space-y-1"><Label className="text-[10px]">HP Range</Label><Input placeholder="100-200" onChange={(e) => {
-                        const [min, max] = e.target.value.split("-");
-                        if(max) setStats({...stats, minHp: min, maxHp: max});
+                        const parts = e.target.value.split("-");
+                        if(parts.length === 2) setStats({...stats, minHp: parts[0], maxHp: parts[1]});
                       }} /></div>
                       <div className="space-y-1"><Label className="text-[10px]">ATK Range</Label><Input placeholder="10-20" onChange={(e) => {
-                        const [min, max] = e.target.value.split("-");
-                        if(max) setStats({...stats, minAtk: min, maxAtk: max});
+                        const parts = e.target.value.split("-");
+                        if(parts.length === 2) setStats({...stats, minAtk: parts[0], maxAtk: parts[1]});
                       }} /></div>
                       <div className="space-y-1"><Label className="text-[10px]">SPD Range</Label><Input placeholder="5-15" onChange={(e) => {
-                        const [min, max] = e.target.value.split("-");
-                        if(max) setStats({...stats, minSpd: min, maxSpd: max});
+                        const parts = e.target.value.split("-");
+                        if(parts.length === 2) setStats({...stats, minSpd: parts[0], maxSpd: parts[1]});
                       }} /></div>
                     </div>
-                    <Button variant="outline" className="w-full border-white/10 hover:bg-white/10" onClick={handleAddNftType} disabled={isPending}>
+                    <Button variant="outline" className="w-full border-white/10 hover:bg-white/10" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
                       Add NFT Type
                     </Button>
                   </CardContent>
@@ -307,13 +372,26 @@ export default function AdminPage() {
                     </CardTitle>
                     <CardDescription>Activate the lootbox for all</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6 flex flex-col justify-center h-[300px]">
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto animate-pulse">
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label>Select Ready Draft</Label>
+                      <Select value={targetBoxId} onValueChange={setTargetBoxId}>
+                        <SelectTrigger className="bg-white/5 border-white/10">
+                          <SelectValue placeholder="Select box to activate..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {myLootboxes.filter(b => b.isSetup).map(box => (
+                            <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="text-center space-y-4 pt-4">
+                      <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto">
                         <CheckCircle2 className="w-8 h-8 text-accent" />
                       </div>
                       <p className="text-sm text-muted-foreground px-4">
-                        Ensure all rarities (Common to Legend) have at least one NFT type defined before activating.
+                        Ensure you've added NFT types to the required rarity tiers before activation.
                       </p>
                     </div>
                     <Button className="w-full glow-violet bg-accent hover:bg-accent/80 font-bold" onClick={handleFinalize} disabled={isPending || !targetBoxId}>
@@ -379,8 +457,13 @@ export default function AdminPage() {
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Target Box ID</Label>
-                        <Input value={targetBoxId} onChange={(e) => setTargetBoxId(e.target.value)} />
+                        <Label>Target Box</Label>
+                        <Select value={targetBoxId} onValueChange={setTargetBoxId}>
+                          <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {myLootboxes.map(box => <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Base NFT Name</Label>
