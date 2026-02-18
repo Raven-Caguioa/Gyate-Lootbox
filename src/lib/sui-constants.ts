@@ -1,4 +1,3 @@
-
 export const SUI_NETWORK = 'mainnet';
 
 export const PACKAGE_ID = "0x0565d4e63f46ff07d1799b1f55f5f3c4c6e9af093f30a395d9cb3057f0d4c7cc";
@@ -17,6 +16,7 @@ export const MODULE_NAMES = {
   LOOTBOX: 'lootbox',
   MARKETPLACE: 'marketplace',
   KIOSK: 'gyate_kiosk',
+  TREASURY: 'treasury',
 };
 
 export const FUNCTIONS = {
@@ -24,5 +24,8 @@ export const FUNCTIONS = {
   OPEN_LOOTBOX: 'open_lootbox',
   LIST_NFT: 'list_nft',
   BUY_NFT: 'buy_nft',
-  CLAIM_TREASURY: 'claim_treasury',
+  CLAIM_FEES: 'claim_fees',
+  CREATE_LOOTBOX: 'create_lootbox',
+  UPDATE_PRICE: 'update_price',
+  TOGGLE_STATUS: 'toggle_status',
 };
