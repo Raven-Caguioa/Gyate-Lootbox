@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -67,19 +68,28 @@ export default function AdminPage() {
   const [mintRecipient, setMintRecipient] = useState("");
 
   const fetchLootboxes = useCallback(async () => {
-    if (!account) return;
     setIsLoadingBoxes(true);
     try {
-      const response = await suiClient.queryObjects({
-        filter: { 
-          MatchAll: [
-            { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::LootboxConfig` }
-          ]
-        },
+      // 1. Fetch Registry to get all lootbox IDs
+      const registryObj = await suiClient.getObject({
+        id: LOOTBOX_REGISTRY,
         options: { showContent: true }
       });
 
-      const boxes: LootboxOption[] = response.data.map((obj: any) => {
+      const allIds = (registryObj.data?.content as any)?.fields?.all_ids || [];
+      
+      if (allIds.length === 0) {
+        setMyLootboxes([]);
+        return;
+      }
+
+      // 2. Multi-get the lootbox objects
+      const boxesData = await suiClient.multiGetObjects({
+        ids: allIds,
+        options: { showContent: true }
+      });
+
+      const boxes: LootboxOption[] = boxesData.map((obj: any) => {
         const fields = obj.data?.content?.fields;
         return {
           id: obj.data?.objectId,
@@ -91,11 +101,12 @@ export default function AdminPage() {
 
       setMyLootboxes(boxes);
     } catch (err) {
-      console.error("Failed to fetch boxes:", err);
+      console.error("Failed to fetch boxes from registry:", err);
+      toast({ variant: "destructive", title: "Sync Failed", description: "Could not retrieve lootbox registry." });
     } finally {
       setIsLoadingBoxes(false);
     }
-  }, [account, suiClient]);
+  }, [suiClient, toast]);
 
   useEffect(() => {
     fetchLootboxes();
@@ -120,12 +131,15 @@ export default function AdminPage() {
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Step 1 Complete", description: "Draft created. Refreshing list..." });
+        toast({ title: "Draft Created", description: "Lootbox draft successfully deployed on-chain." });
         setIsPending(false);
         setNewBoxName("");
         setTimeout(fetchLootboxes, 3000); 
       },
-      onError: (err) => { toast({ variant: "destructive", title: "Failed", description: err.message }); setIsPending(false); },
+      onError: (err) => { 
+        toast({ variant: "destructive", title: "Creation Failed", description: err.message }); 
+        setIsPending(false); 
+      },
     });
   };
 
@@ -153,7 +167,10 @@ export default function AdminPage() {
         setIsPending(false);
         setNftName("");
       },
-      onError: (err) => { toast({ variant: "destructive", title: "Failed", description: err.message }); setIsPending(false); },
+      onError: (err) => { 
+        toast({ variant: "destructive", title: "Addition Failed", description: err.message }); 
+        setIsPending(false); 
+      },
     });
   };
 
@@ -171,11 +188,14 @@ export default function AdminPage() {
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Lootbox Activated!", description: "Box is now live for players." });
+        toast({ title: "Lootbox Activated!", description: "Box is now live for all players." });
         setIsPending(false);
         setTimeout(fetchLootboxes, 3000);
       },
-      onError: (err) => { toast({ variant: "destructive", title: "Activation Failed", description: err.message }); setIsPending(false); },
+      onError: (err) => { 
+        toast({ variant: "destructive", title: "Activation Failed", description: err.message }); 
+        setIsPending(false); 
+      },
     });
   };
 
