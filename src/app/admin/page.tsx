@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, TREASURY_POOL, UPGRADE_CAP, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
+import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ShieldCheck, TrendingDown, ArrowUpRight, Lock, Plus, Package, Settings } from "lucide-react";
+import { Coins, ShieldCheck, ArrowUpRight, Lock, Plus, Package, Settings, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -28,19 +29,30 @@ export default function AdminPage() {
 
   const [newBoxName, setNewBoxName] = useState("");
   const [newBoxPrice, setNewBoxPrice] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [targetBoxId, setTargetBoxId] = useState("");
   const [isPending, setIsPending] = useState(false);
 
-  const handleClaimTreasury = () => {
+  // Pity Settings
+  const [pityEnabled, setPityEnabled] = useState(false);
+  const [pityRare, setPityRare] = useState("10");
+  const [pitySuperRare, setPitySuperRare] = useState("50");
+  const [pityUltraRare, setPityUltraRare] = useState("100");
+
+  const handleWithdraw = () => {
+    if (!withdrawAmount) return;
     const txb = new Transaction();
     txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::${FUNCTIONS.CLAIM_FEES}`,
-      arguments: [txb.object(TREASURY_POOL), txb.object(UPGRADE_CAP)],
+      target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::${FUNCTIONS.WITHDRAW}`,
+      arguments: [
+        txb.object(TREASURY_POOL),
+        txb.pure.u64(BigInt(parseFloat(withdrawAmount) * 1_000_000_000)),
+      ],
     });
 
     signAndExecute({ transaction: txb }, {
-      onSuccess: () => toast({ title: "Treasury Claimed", description: "All accrued platform fees have been sent to admin wallet." }),
-      onError: (err) => toast({ variant: "destructive", title: "Claim Failed", description: err.message }),
+      onSuccess: () => toast({ title: "Withdrawal Initiated", description: "SUI has been sent to the admin address defined in Move." }),
+      onError: (err) => toast({ variant: "destructive", title: "Withdrawal Failed", description: err.message }),
     });
   };
 
@@ -50,18 +62,21 @@ export default function AdminPage() {
 
     const txb = new Transaction();
     txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.CREATE_LOOTBOX}`,
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.CREATE_DRAFT}`,
       arguments: [
         txb.object(LOOTBOX_REGISTRY),
-        txb.object(UPGRADE_CAP),
         txb.pure.string(newBoxName),
-        txb.pure.u64(BigInt(parseFloat(newBoxPrice) * 1_000_000_000)), // Convert SUI to MIST
+        txb.pure.u64(BigInt(parseFloat(newBoxPrice) * 1_000_000_000)),
+        txb.pure.bool(pityEnabled),
+        txb.pure.u64(BigInt(pityRare)),
+        txb.pure.u64(BigInt(pitySuperRare)),
+        txb.pure.u64(BigInt(pityUltraRare)),
       ],
     });
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Lootbox Created", description: `${newBoxName} has been registered on-chain.` });
+        toast({ title: "Draft Lootbox Created", description: `${newBoxName} is now in setup mode. Add NFT types next.` });
         setNewBoxName("");
         setNewBoxPrice("");
         setIsPending(false);
@@ -73,21 +88,20 @@ export default function AdminPage() {
     });
   };
 
-  const handleToggleStatus = (boxId: string) => {
+  const handlePause = (boxId: string) => {
     if (!boxId) return;
     const txb = new Transaction();
     txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.TOGGLE_STATUS}`,
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.PAUSE}`,
       arguments: [
         txb.object(LOOTBOX_REGISTRY),
-        txb.object(UPGRADE_CAP),
-        txb.pure.string(boxId),
+        txb.object(boxId),
       ],
     });
 
     signAndExecute({ transaction: txb }, {
-      onSuccess: () => toast({ title: "Status Toggled", description: `Lootbox ${boxId} visibility updated.` }),
-      onError: (err) => toast({ variant: "destructive", title: "Update Failed", description: err.message }),
+      onSuccess: () => toast({ title: "Lootbox Paused", description: "Sales have been halted." }),
+      onError: (err) => toast({ variant: "destructive", title: "Pause Failed", description: err.message }),
     });
   };
 
@@ -100,11 +114,11 @@ export default function AdminPage() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div>
               <h1 className="font-headline text-5xl font-bold mb-4">Platform Governance</h1>
-              <p className="text-muted-foreground text-lg">On-chain protocol management and registry controls.</p>
+              <p className="text-muted-foreground text-lg">On-chain protocol management for GyateGyate.</p>
             </div>
             <div className="flex gap-4">
               <Badge className="bg-red-500/20 text-red-400 border-red-500/30 px-4 py-2 text-sm">
-                <Lock className="w-4 h-4 mr-2" /> Admin Session Active
+                <Lock className="w-4 h-4 mr-2" /> Admin Session
               </Badge>
             </div>
           </div>
@@ -114,14 +128,22 @@ export default function AdminPage() {
             <Card className="glass-card border-primary/20">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <Coins className="w-5 h-5 text-accent" /> Treasury Control
+                  <Coins className="w-5 h-5 text-accent" /> Treasury Pool
                 </CardTitle>
-                <CardDescription>Withdraw accumulated SUI fees</CardDescription>
+                <CardDescription>Manage collected platform fees</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="text-4xl font-bold font-headline">Syncing...</div>
-                <Button className="w-full glow-purple font-bold" onClick={handleClaimTreasury}>
-                  Withdraw to Admin Wallet <ArrowUpRight className="w-4 h-4 ml-2" />
+                <div className="space-y-2">
+                  <Label>Withdraw Amount (SUI)</Label>
+                  <Input 
+                    type="number" 
+                    placeholder="0.0" 
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                  />
+                </div>
+                <Button className="w-full glow-purple font-bold" onClick={handleWithdraw}>
+                  Withdraw to Admin <ArrowUpRight className="w-4 h-4 ml-2" />
                 </Button>
               </CardContent>
             </Card>
@@ -130,60 +152,72 @@ export default function AdminPage() {
             <Card className="glass-card border-primary/20">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <Package className="w-5 h-5 text-blue-400" /> Registry Actions
+                  <Package className="w-5 h-5 text-blue-400" /> Registry
                 </CardTitle>
-                <CardDescription>Manage on-chain configurations</CardDescription>
+                <CardDescription>Create draft lootboxes</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button variant="outline" className="w-full justify-start gap-2 bg-white/5 border-white/10">
-                      <Plus className="w-4 h-4" /> Create New Lootbox
+                      <Plus className="w-4 h-4" /> Create Draft Box
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="glass-card border-white/10">
+                  <DialogContent className="glass-card border-white/10 max-w-md">
                     <DialogHeader>
-                      <DialogTitle>New Lootbox Config</DialogTitle>
+                      <DialogTitle>New Lootbox Draft</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label htmlFor="boxName">Display Name</Label>
-                        <Input 
-                          id="boxName" 
-                          placeholder="e.g. Mythic Crate" 
-                          value={newBoxName}
-                          onChange={(e) => setNewBoxName(e.target.value)}
-                        />
+                        <Label>Name</Label>
+                        <Input value={newBoxName} onChange={(e) => setNewBoxName(e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="boxPrice">Price (SUI)</Label>
-                        <Input 
-                          id="boxPrice" 
-                          type="number" 
-                          placeholder="1.0" 
-                          value={newBoxPrice}
-                          onChange={(e) => setNewBoxPrice(e.target.value)}
-                        />
+                        <Label>Price (SUI)</Label>
+                        <Input type="number" value={newBoxPrice} onChange={(e) => setNewBoxPrice(e.target.value)} />
+                      </div>
+                      
+                      <div className="pt-4 space-y-4 border-t border-white/10">
+                        <div className="flex items-center justify-between">
+                          <Label className="flex items-center gap-2"><Sparkles className="w-3 h-3 text-accent" /> Enable Pity</Label>
+                          <Switch checked={pityEnabled} onCheckedChange={setPityEnabled} />
+                        </div>
+                        {pityEnabled && (
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Rare</Label>
+                              <Input size={1} value={pityRare} onChange={(e) => setPityRare(e.target.value)} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">SR</Label>
+                              <Input size={1} value={pitySuperRare} onChange={(e) => setPitySuperRare(e.target.value)} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">UR</Label>
+                              <Input size={1} value={pityUltraRare} onChange={(e) => setPityUltraRare(e.target.value)} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <DialogFooter>
                       <Button onClick={handleCreateLootbox} disabled={isPending || !newBoxName || !newBoxPrice} className="w-full glow-purple">
-                        {isPending ? "Transacting..." : "Deploy Config"}
+                        {isPending ? "Deploying..." : "Create Draft"}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
 
                 <div className="pt-4 border-t border-white/10 space-y-4">
-                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Toggle Box Status</Label>
+                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Quick Pause</Label>
                   <div className="flex gap-2">
                     <Input 
-                      placeholder="Lootbox ID String" 
+                      placeholder="Box ID" 
                       className="bg-white/5" 
                       value={targetBoxId}
                       onChange={(e) => setTargetBoxId(e.target.value)}
                     />
-                    <Button variant="outline" onClick={() => handleToggleStatus(targetBoxId)}>Toggle</Button>
+                    <Button variant="outline" onClick={() => handlePause(targetBoxId)}>Pause</Button>
                   </div>
                 </div>
               </CardContent>
@@ -193,20 +227,18 @@ export default function AdminPage() {
             <Card className="glass-card border-primary/20">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <Settings className="w-5 h-5 text-green-400" /> Maintenance
+                  <Settings className="w-5 h-5 text-green-400" /> System
                 </CardTitle>
-                <CardDescription>Protocol-wide system flags</CardDescription>
+                <CardDescription>Protocol information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                 <Button variant="outline" className="w-full justify-between bg-white/5 border-white/10">
-                   Emergency Halt <Badge variant="secondary" className="bg-red-500/20 text-red-400">INACTIVE</Badge>
-                 </Button>
                  <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-[10px] text-muted-foreground leading-relaxed">
+                   <strong>Package:</strong> <code>{PACKAGE_ID.slice(0, 16)}...</code><br/>
                    <strong>Registry:</strong> <code>{LOOTBOX_REGISTRY.slice(0, 16)}...</code><br/>
-                   <strong>UpgradeCap:</strong> <code>{UPGRADE_CAP.slice(0, 16)}...</code>
+                   <strong>Treasury:</strong> <code>{TREASURY_POOL.slice(0, 16)}...</code>
                  </div>
                  <p className="text-[10px] text-muted-foreground italic">
-                   All changes require UpgradeCap signature for Transaction Block authorization.
+                   Admin actions require the wallet designated as @admin in the Move package.
                  </p>
               </CardContent>
             </Card>

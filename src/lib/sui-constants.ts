@@ -10,22 +10,33 @@ export const LOOTBOX_REGISTRY = "0x13d6c6bda2f590fa2cdc3e17dcce3ec7785149301c4e7
 export const TREASURY_POOL = "0x3243fc2a93516eb4197810f79c5ad3b8f60052c669c847b3f47678bc54f9b254";
 export const KIOSK_REGISTRY = "0x561c34ed574e5d2f7293b22b5a57e36e83c5e97a2a5fe215d21082569a5987d1";
 export const POLICY_ADMIN = "0x7b717e9a7d2c935d0f7193a1228958d1a8df5fc16e97e65b12644b644e905bdb";
+export const RANDOM_STATE = "0x8"; // Standard Random object on testnet
 
-// Updated module names based on standard Gyate project structure
+// Updated module names based on the Move code provided
 export const MODULE_NAMES = {
-  LOOTBOX: 'gyate_nft', 
+  LOOTBOX: 'lootbox', 
   MARKETPLACE: 'marketplace',
-  KIOSK: 'gyate_kiosk',
-  TREASURY: 'treasury',
+  KIOSK: 'marketplace', // Kiosk functions are in marketplace module in your code
+  TREASURY: 'pool',     // pool.move contains the TreasuryPool and withdraw function
+  NFT: 'nft',
+  GYATE_COIN: 'gyate_coin'
 };
 
 export const FUNCTIONS = {
-  BUY_LOOTBOX: 'buy_lootbox',
+  // Lootbox module
+  CREATE_DRAFT: 'create_draft',
   OPEN_LOOTBOX: 'open_lootbox',
+  OPEN_LOOTBOX_WITH_GYATE: 'open_lootbox_with_gyate',
+  PAUSE: 'pause',
+  UNPAUSE: 'unpause',
+  INITIALIZE_PROGRESS: 'initialize_progress',
+  
+  // Pool module
+  WITHDRAW: 'withdraw',
+  FUND: 'fund',
+
+  // Marketplace module
+  CREATE_KIOSK: 'create_kiosk',
   LIST_NFT: 'list_nft',
   BUY_NFT: 'buy_nft',
-  CLAIM_FEES: 'claim_fees',
-  CREATE_LOOTBOX: 'create_lootbox',
-  UPDATE_PRICE: 'update_price',
-  TOGGLE_STATUS: 'toggle_status',
 };

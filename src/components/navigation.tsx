@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -19,7 +18,8 @@ export function Navigation() {
     { href: "/marketplace", label: "Market", icon: Coins },
   ];
 
-  const isAdmin = account?.address === "0x8a00a0227d2bcec1bf3dfa86c312ae037bbd9518113cbc1d60253090ac7905d8"; // Example admin check
+  // Updated to match the admin address from your Move.toml
+  const isAdmin = account?.address === "0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a"; 
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/80 backdrop-blur-md">
@@ -73,7 +73,7 @@ export function Navigation() {
           <div className="hidden lg:flex flex-col items-end mr-2">
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Network</span>
             <span className="text-sm font-bold flex items-center gap-1">
-              <span className="text-accent">Sui Mainnet</span>
+              <span className="text-accent">Sui Testnet</span>
             </span>
           </div>
           <div className="sui-connect-wrapper">

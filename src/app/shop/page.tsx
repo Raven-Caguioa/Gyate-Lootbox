@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -10,9 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useState } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { Progress } from "@/components/ui/progress";
-import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
+import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
+import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 
@@ -20,6 +19,7 @@ export default function ShopPage() {
   const [openingBox, setOpeningBox] = useState<any>(null);
   const [isPending, setIsPending] = useState(false);
   const account = useCurrentAccount();
+  const suiClient = useSuiClient();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const { toast } = useToast();
 
@@ -30,36 +30,63 @@ export default function ShopPage() {
     }
 
     setIsPending(true);
-    const txb = new Transaction();
+    
+    try {
+      // 1. Find user's Kiosk in the registry or local objects
+      // For MVP, we assume the user has a Kiosk. In a full app, we'd call marketplace::create_kiosk if missing.
+      const ownedObjects = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
+      });
 
-    // Payment in SUI (MIST)
-    const [coin] = txb.splitCoins(txb.gas, [box.price * 1_000_000_000]);
-
-    txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BUY_LOOTBOX}`,
-      arguments: [
-        txb.object(LOOTBOX_REGISTRY),
-        txb.object(TREASURY_POOL),
-        txb.pure.string(box.id),
-        coin,
-      ],
-    });
-
-    signAndExecute(
-      { transaction: txb },
-      {
-        onSuccess: (result) => {
-          toast({ title: "Purchase Successful", description: `Transaction: ${result.digest.slice(0, 10)}...` });
-          setOpeningBox(box);
-          setIsPending(false);
-        },
-        onError: (err) => {
-          console.error(err);
-          toast({ variant: "destructive", title: "Transaction Failed", description: err.message });
-          setIsPending(false);
-        },
+      if (ownedObjects.data.length === 0) {
+        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Gyate Kiosk to receive NFTs. Please visit the marketplace to create one." });
+        setIsPending(false);
+        return;
       }
-    );
+
+      const kioskCapId = ownedObjects.data[0].data?.objectId;
+      // We need to fetch the Kiosk ID associated with this Cap
+      const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
+      const kioskId = (capObject.data?.content as any)?.fields?.for;
+
+      const txb = new Transaction();
+
+      // Payment in SUI (MIST)
+      const [paymentCoin] = txb.splitCoins(txb.gas, [BigInt(box.price * 1_000_000_000)]);
+
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.OPEN_LOOTBOX}`,
+        arguments: [
+          txb.object(box.onChainId || box.id), // The specific LootboxConfig shared object
+          txb.object(LOOTBOX_REGISTRY),
+          txb.object(TREASURY_POOL),
+          paymentCoin,
+          txb.object(RANDOM_STATE),
+          txb.object(kioskId),
+          txb.object(kioskCapId!),
+        ],
+      });
+
+      signAndExecute(
+        { transaction: txb },
+        {
+          onSuccess: (result) => {
+            toast({ title: "Summon Successful", description: "Your hero is being minted on-chain!" });
+            setOpeningBox(box);
+            setIsPending(false);
+          },
+          onError: (err) => {
+            console.error(err);
+            toast({ variant: "destructive", title: "Transaction Failed", description: err.message });
+            setIsPending(false);
+          },
+        }
+      );
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Setup Error", description: err.message });
+      setIsPending(false);
+    }
   };
 
   return (
@@ -75,28 +102,19 @@ export default function ShopPage() {
                 <Sparkles className="w-8 h-8 text-accent animate-pulse" />
               </h1>
               <p className="text-muted-foreground text-lg">
-                Verified on-chain randomness. Transparent drop rates. Epic rewards.
+                Verified on-chain randomness. Transparent drop rates.
               </p>
             </div>
 
             <Card className="glass-card border-accent/20 w-full md:w-80">
               <CardContent className="p-4 space-y-4">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">On-Chain Progress</span>
-                  <Badge variant="outline" className="border-accent/50 text-[10px]">Connected</Badge>
-                </div>
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
-                      <span>Legend Rare Pity</span>
-                      <span>42/100</span>
-                    </div>
-                    <Progress value={42} className="h-1 bg-white/5" />
-                  </div>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Network Info</span>
+                  <Badge variant="outline" className="border-accent/50 text-[10px]">Testnet</Badge>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-accent/80 font-bold uppercase">
                   <AlertCircle className="w-3 h-3" />
-                  Guaranteed LR at 100 pulls
+                  Kiosk system active
                 </div>
               </CardContent>
             </Card>
