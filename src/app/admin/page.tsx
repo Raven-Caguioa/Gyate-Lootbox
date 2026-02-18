@@ -47,7 +47,7 @@ interface NFTTypeData {
   max_atk: string;
   min_spd: string;
   max_spd: string;
-  rarity?: number; // Added locally for easier mapping
+  rarity?: number;
 }
 
 interface LootboxFullData {
@@ -101,8 +101,8 @@ export default function AdminPage() {
   // --- Step 3: Variants State ---
   const [selectedNftForVariant, setSelectedNftForVariant] = useState<string>(""); // Format: "name|rarity"
   const [variantName, setVariantName] = useState("");
-  const [variantDropRate, setVariantDropRate] = useState("500"); // 5% in BPS
-  const [variantMultiplier, setVariantMultiplier] = useState("15000"); // 1.5x in BPS
+  const [variantDropRate, setVariantDropRate] = useState("5"); // 5%
+  const [variantMultiplier, setVariantMultiplier] = useState("150"); // 1.5x (150 * 100 = 15000 BPS)
   const [variantImage, setVariantImage] = useState("");
 
   // --- Treasury State ---
@@ -141,11 +141,10 @@ export default function AdminPage() {
       setMyLootboxes(boxes);
     } catch (err) {
       console.error("Failed to fetch boxes from registry:", err);
-      toast({ variant: "destructive", title: "Sync Failed", description: "Could not retrieve lootbox registry." });
     } finally {
       setIsLoadingBoxes(false);
     }
-  }, [suiClient, toast]);
+  }, [suiClient]);
 
   const fetchFullBoxData = useCallback(async (id: string) => {
     if (!id) return;
@@ -272,6 +271,8 @@ export default function AdminPage() {
     const [name, rarity] = selectedNftForVariant.split("|");
     setIsPending(true);
     const txb = new Transaction();
+    
+    // Move function signature: (lootbox, nft_name, rarity, variant_name, drop_rate_pct, value_multiplier_pct, image_url, has_seq, from, until, max)
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_VARIANT}`,
       arguments: [
@@ -279,8 +280,8 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(variantDropRate)),
-        txb.pure.u64(BigInt(variantMultiplier)),
+        txb.pure.u64(BigInt(variantDropRate)), // Passed as percentage (e.g. 5 for 5%)
+        txb.pure.u64(BigInt(variantMultiplier)), // Passed as percentage (e.g. 150 for 1.5x)
         txb.pure.string(variantImage),
         txb.pure.bool(true), // has_sequential_id
         txb.pure.u64(BigInt(0)), // available_from
@@ -297,7 +298,12 @@ export default function AdminPage() {
         fetchFullBoxData(targetBoxId);
       },
       onError: (err) => { 
-        toast({ variant: "destructive", title: "Failed", description: err.message }); 
+        console.error("Add Variant Error:", err);
+        toast({ 
+          variant: "destructive", 
+          title: "Failed to Add Variant", 
+          description: "Ensure the drop rate doesn't exceed 100% and you are the box admin." 
+        }); 
         setIsPending(false); 
       },
     });
@@ -371,7 +377,7 @@ export default function AdminPage() {
                   <Badge variant="outline" className="text-[9px] py-0 border-white/10">ATK: {nft.min_atk}-{nft.max_atk}</Badge>
                 </div>
               </div>
-              {nft.variant_configs && nft.variant_configs.length > 1 && (
+              {nft.variant_configs && nft.variant_configs.length > 0 && (
                 <div className="pl-14 space-y-1">
                   <div className="text-[9px] uppercase font-bold text-accent tracking-widest mb-1 flex items-center gap-1">
                     <Sparkles className="w-2 h-2" /> Variants
@@ -514,7 +520,7 @@ export default function AdminPage() {
                             <Select value={nftRarity} onValueChange={setNftRarity}>
                               <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                {[0,1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{r} (Tier)</SelectItem>)}
+                                {[0,1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{RARITY_LABELS[r as keyof typeof RARITY_LABELS]}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
@@ -700,14 +706,16 @@ export default function AdminPage() {
                         <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} placeholder="e.g. Holographic" />
                       </div>
                       <div className="space-y-2">
-                        <Label>Drop Rate (BPS - 100 = 1%)</Label>
-                        <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
+                        <Label>Drop Rate (% of Total Box)</Label>
+                        <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} placeholder="e.g. 5" />
+                        <p className="text-[10px] text-muted-foreground mt-1">1 = 1% probability</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Multiplier (BPS - 10000 = 1x)</Label>
-                        <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} />
+                        <Label>Value Multiplier (%)</Label>
+                        <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} placeholder="e.g. 150" />
+                        <p className="text-[10px] text-muted-foreground mt-1">100 = 1x, 150 = 1.5x</p>
                       </div>
                       <div className="space-y-2">
                         <Label>Custom Variant Image URL</Label>
