@@ -1,0 +1,192 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * CORE PHILOSOPHY:
+     * This ruleset enforces a strict hybrid security model combining Path-Based Ownership,
+     * Role-Based Access Control (RBAC), and Attribute-Based Access Control (ABAC).
+     *
+     * DATA STRUCTURE:
+     * - Global Shared Objects: Registries and platform-level configurations are at the root.
+     * - User-Scoped Data: Individual progress and personal settings are under /users/{userId}.
+     * - Resource-Scoped Data: Lootboxes and NFTs are top-level but carry ownership attributes.
+     *
+     * KEY SECURITY DECISIONS:
+     * 1. Platform Admins: A marker collection (/platformAdmins) defines global administrative power.
+     * 2. Authorization Independence: Critical documents (Lootboxes, Treasury) contain an 'admin' 
+     *    field to allow for flexible, non-path-dependent ownership.
+     * 3. Prototyping Flexibility: Schema validation for content is omitted to allow rapid iteration,
+     *    focusing strictly on identity and relational integrity.
+     * 4. Denormalization: Fields like 'admin' or 'creator' are expected within documents to 
+     *    avoid costly cross-document get() calls during security evaluation.
+     */
+
+    // --- Global Helper Functions ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
+    }
+
+    function isDocumentAdmin(adminField) {
+      return isSignedIn() && request.auth.uid == adminField;
+    }
+
+    // --- Match Rules ---
+
+    /**
+     * @description Marker collection for platform-level administrators.
+     * @path /platformAdmins/{adminId}
+     * @allow get: if signed-in; create: if isAdmin() (recursive admin creation).
+     * @deny write: if non-admin attempts to grant themselves privileges.
+     * @principle Role-Based Access Control (RBAC).
+     */
+    match /platformAdmins/{adminId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Global registry for lootbox statistics and metadata.
+     * @path /lootboxRegistry/main
+     * @allow get: if true (public discovery); write: if isAdmin().
+     * @deny write: if non-platform admin attempts to modify global stats.
+     * @principle Restricts global configuration to verified platform admins.
+     */
+    match /lootboxRegistry/main {
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
+
+      /**
+       * @description Metadata index for specific lootboxes.
+       * @path /lootboxRegistry/main/lootboxMetas/{lootboxId}
+       * @allow get: if true; write: if isAdmin() or isDocumentAdmin(resource.data.creator).
+       * @deny create: if the incoming creator field does not match the auth user.
+       * @principle QAPs (Query Accessibility Patterns) using denormalized metadata.
+       */
+      match /lootboxMetas/{lootboxId} {
+        allow get, list: if true;
+        allow create: if isAdmin() || request.resource.data.creator == request.auth.uid;
+        allow update, delete: if isAdmin() || (resource != null && isDocumentAdmin(resource.data.creator));
+      }
+    }
+
+    /**
+     * @description Individual lootbox configurations.
+     * @path /lootboxes/{lootboxId}
+     * @allow get: if document is active or user is the creator/admin.
+     * @deny update: if non-admin attempts to modify config or change the immutable admin field.
+     * @principle Attribute-Based Access Control (ABAC) using internal 'admin' field.
+     */
+    match /lootboxes/{lootboxId} {
+      allow get, list: if resource.data.isActive == true || isAdmin() || isDocumentAdmin(resource.data.admin);
+      allow create: if isSignedIn() && request.resource.data.admin == request.auth.uid;
+      allow update: if (isAdmin() || isDocumentAdmin(resource.data.admin)) && request.resource.data.admin == resource.data.admin;
+      allow delete: if isAdmin() || (resource != null && isDocumentAdmin(resource.data.admin));
+    }
+
+    /**
+     * @description User-specific pity progress for lootboxes.
+     * @path /users/{userId}/userProgress/{lootboxId}
+     * @allow read/write: if request.auth.uid == userId.
+     * @deny access: if any user attempts to read or modify another user's progress.
+     * @principle Path-Based Ownership.
+     */
+    match /users/{userId}/userProgress/{lootboxId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.user == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.user == userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Global registry for platform Kiosks.
+     * @path /kioskRegistry/main
+     * @allow get: if true; write: if isAdmin().
+     * @principle Restricts platform-wide registry to admins.
+     */
+    match /kioskRegistry/main {
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
+
+      /**
+       * @description Maps user addresses to their Kiosk IDs.
+       * @path /kioskRegistry/main/kioskEntries/{ownerAddress}
+       * @allow create: if user matches ownerAddress; update: if user matches ownerAddress.
+       * @deny write: if ownerAddress in path does not match auth context.
+       * @principle Verified Identity and Path-Based Authorization.
+       */
+      match /kioskEntries/{ownerAddress} {
+        allow get, list: if true;
+        allow create: if isOwner(ownerAddress);
+        allow update: if isExistingOwner(ownerAddress);
+        allow delete: if isAdmin();
+      }
+    }
+
+    /**
+     * @description Administrative markers for transfer policies.
+     * @path /policyAdmin/main
+     * @allow get: if true; write: if isDocumentAdmin(resource.data.admin).
+     * @principle Self-managed administrative documents.
+     */
+    match /policyAdmin/main {
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update: if isDocumentAdmin(resource.data.admin) && request.resource.data.admin == resource.data.admin;
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Shared treasury for platform revenue.
+     * @path /treasuryPool/main
+     * @allow get: if true; write: if isDocumentAdmin(resource.data.admin).
+     * @principle Centralized treasury managed by designated admin address.
+     */
+    match /treasuryPool/main {
+      allow get, list: if true;
+      allow create: if isAdmin();
+      allow update: if isDocumentAdmin(resource.data.admin) && request.resource.data.admin == resource.data.admin;
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Read-only mirror of blockchain NFT data.
+     * @path /nfts/{nftId}
+     * @allow get: if true; write: if false (System Only).
+     * @deny write: if any user attempts to modify blockchain-mirrored data.
+     * @principle Read-only index for public accessibility; writes restricted to Cloud Functions.
+     */
+    match /nfts/{nftId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; 
+    }
+
+    /**
+     * @description Map of creators to their lootboxes for efficient listing.
+     * @path /creatorLootboxMappings/{creatorAddress}
+     * @allow get: if true; write: if isAdmin() || isOwner(creatorAddress).
+     * @principle QAPs (Query Accessibility Patterns) combined with ownership.
+     */
+    match /creatorLootboxMappings/{creatorAddress} {
+      allow get, list: if true;
+      allow create: if isOwner(creatorAddress) || isAdmin();
+      allow update: if (isExistingOwner(creatorAddress) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+  }
+}
