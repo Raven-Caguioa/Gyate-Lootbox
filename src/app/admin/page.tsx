@@ -10,19 +10,59 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ShieldCheck, ArrowUpRight, Lock, Plus, Package, Settings, Sparkles, Sword, Shield, Zap, Image as ImageIcon, CheckCircle2, ListPlus, RefreshCw } from "lucide-react";
+import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import Image from "next/image";
 
 interface LootboxOption {
   id: string;
   name: string;
   isSetup: boolean;
   isActive: boolean;
+}
+
+interface VariantData {
+  variant_name: string;
+  drop_rate: string;
+  value_multiplier: string;
+  custom_image_url: string;
+  enabled: boolean;
+}
+
+interface NFTTypeData {
+  name: string;
+  base_value: string;
+  base_image_url: string;
+  variant_configs: VariantData[];
+  min_hp: string;
+  max_hp: string;
+  min_atk: string;
+  max_atk: string;
+  min_spd: string;
+  max_spd: string;
+}
+
+interface LootboxFullData {
+  id: string;
+  name: string;
+  price: string;
+  admin: string;
+  is_active: boolean;
+  is_setup_mode: boolean;
+  pity_enabled: boolean;
+  common_configs: NFTTypeData[];
+  rare_configs: NFTTypeData[];
+  super_rare_configs: NFTTypeData[];
+  ssr_configs: NFTTypeData[];
+  ultra_rare_configs: NFTTypeData[];
+  legend_rare_configs: NFTTypeData[];
 }
 
 export default function AdminPage() {
@@ -34,6 +74,8 @@ export default function AdminPage() {
   const [isPending, setIsPending] = useState(false);
   const [myLootboxes, setMyLootboxes] = useState<LootboxOption[]>([]);
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
+  const [selectedBoxFullData, setSelectedBoxFullData] = useState<LootboxFullData | null>(null);
+  const [isFetchingFullData, setIsFetchingFullData] = useState(false);
 
   // --- Step 1: Draft State ---
   const [newBoxName, setNewBoxName] = useState("");
@@ -70,7 +112,6 @@ export default function AdminPage() {
   const fetchLootboxes = useCallback(async () => {
     setIsLoadingBoxes(true);
     try {
-      // 1. Fetch Registry to get all lootbox IDs
       const registryObj = await suiClient.getObject({
         id: LOOTBOX_REGISTRY,
         options: { showContent: true }
@@ -83,7 +124,6 @@ export default function AdminPage() {
         return;
       }
 
-      // 2. Multi-get the lootbox objects
       const boxesData = await suiClient.multiGetObjects({
         ids: allIds,
         options: { showContent: true }
@@ -108,9 +148,50 @@ export default function AdminPage() {
     }
   }, [suiClient, toast]);
 
+  const fetchFullBoxData = useCallback(async (id: string) => {
+    if (!id) return;
+    setIsFetchingFullData(true);
+    try {
+      const obj = await suiClient.getObject({
+        id,
+        options: { showContent: true }
+      });
+      const fields = (obj.data?.content as any)?.fields;
+      if (fields) {
+        setSelectedBoxFullData({
+          id,
+          name: fields.name,
+          price: fields.price,
+          admin: fields.admin,
+          is_active: fields.is_active,
+          is_setup_mode: fields.is_setup_mode,
+          pity_enabled: fields.pity_enabled,
+          common_configs: fields.common_configs.map((c: any) => c.fields),
+          rare_configs: fields.rare_configs.map((c: any) => c.fields),
+          super_rare_configs: fields.super_rare_configs.map((c: any) => c.fields),
+          ssr_configs: fields.ssr_configs.map((c: any) => c.fields),
+          ultra_rare_configs: fields.ultra_rare_configs.map((c: any) => c.fields),
+          legend_rare_configs: fields.legend_rare_configs.map((c: any) => c.fields),
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch full box data:", err);
+    } finally {
+      setIsFetchingFullData(false);
+    }
+  }, [suiClient]);
+
   useEffect(() => {
     fetchLootboxes();
   }, [fetchLootboxes]);
+
+  useEffect(() => {
+    if (targetBoxId) {
+      fetchFullBoxData(targetBoxId);
+    } else {
+      setSelectedBoxFullData(null);
+    }
+  }, [targetBoxId, fetchFullBoxData]);
 
   const handleCreateDraft = async () => {
     if (!newBoxName || !newBoxPrice) return;
@@ -166,9 +247,45 @@ export default function AdminPage() {
         toast({ title: "NFT Type Added", description: `${nftName} added to rarity tier ${nftRarity}.` });
         setIsPending(false);
         setNftName("");
+        fetchFullBoxData(targetBoxId);
       },
       onError: (err) => { 
         toast({ variant: "destructive", title: "Addition Failed", description: err.message }); 
+        setIsPending(false); 
+      },
+    });
+  };
+
+  const handleAddVariant = async () => {
+    if (!targetBoxId || !variantNftName || !variantName) return;
+    setIsPending(true);
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_VARIANT}`,
+      arguments: [
+        txb.object(targetBoxId),
+        txb.pure.string(variantNftName),
+        txb.pure.u8(parseInt(nftRarity)),
+        txb.pure.string(variantName),
+        txb.pure.u64(BigInt(variantDropRate)),
+        txb.pure.u64(BigInt(variantMultiplier)),
+        txb.pure.string(variantImage),
+        txb.pure.bool(true), // has_sequential_id
+        txb.pure.u64(BigInt(0)), // available_from
+        txb.pure.u64(BigInt(0)), // available_until
+        txb.pure.u64(BigInt(0)), // max_mints
+      ],
+    });
+
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Variant Added", description: `${variantName} variant added to ${variantNftName}.` });
+        setIsPending(false);
+        setVariantName("");
+        fetchFullBoxData(targetBoxId);
+      },
+      onError: (err) => { 
+        toast({ variant: "destructive", title: "Failed", description: err.message }); 
         setIsPending(false); 
       },
     });
@@ -215,22 +332,54 @@ export default function AdminPage() {
     });
   };
 
-  const handleAdminMint = () => {
-    if (!mintAmount || !mintRecipient) return;
-    const txb = new Transaction();
-    txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.GYATE_COIN}::${FUNCTIONS.ADMIN_MINT}`,
-      arguments: [
-        txb.object(TREASURY_CAP),
-        txb.pure.u64(BigInt(mintAmount)),
-        txb.pure.address(mintRecipient),
-        txb.pure.string("Admin Distribution"),
-      ],
-    });
-    signAndExecute({ transaction: txb }, {
-      onSuccess: () => toast({ title: "Tokens Minted", description: `${mintAmount} $GYATE sent to ${mintRecipient}.` }),
-      onError: (err) => toast({ variant: "destructive", title: "Failed", description: err.message }),
-    });
+  const renderRarityTier = (label: string, configs: NFTTypeData[]) => {
+    if (!configs || configs.length === 0) return null;
+    return (
+      <div className="space-y-4">
+        <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2">
+          {label} ({configs.length})
+        </h4>
+        <div className="grid gap-3">
+          {configs.map((nft, idx) => (
+            <div key={idx} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-black/40 border border-white/10 shrink-0">
+                  {nft.base_image_url ? (
+                    <Image src={nft.base_image_url} alt={nft.name} fill className="object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-4 h-4" /></div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{nft.name}</div>
+                  <div className="text-[10px] text-muted-foreground">Base: {parseInt(nft.base_value) / 1000000000} SUI</div>
+                </div>
+                <div className="flex flex-col items-end text-[10px] gap-1">
+                  <Badge variant="outline" className="text-[9px] py-0 border-white/10">HP: {nft.min_hp}-{nft.max_hp}</Badge>
+                  <Badge variant="outline" className="text-[9px] py-0 border-white/10">ATK: {nft.min_atk}-{nft.max_atk}</Badge>
+                </div>
+              </div>
+              {nft.variant_configs && nft.variant_configs.length > 1 && (
+                <div className="pl-14 space-y-1">
+                  <div className="text-[9px] uppercase font-bold text-accent tracking-widest mb-1 flex items-center gap-1">
+                    <Sparkles className="w-2 h-2" /> Variants
+                  </div>
+                  {nft.variant_configs.filter(v => v.variant_name !== "Normal").map((v, vidx) => (
+                    <div key={vidx} className="flex items-center justify-between text-[10px] bg-accent/5 rounded px-2 py-1 border border-accent/10">
+                      <span className="font-medium text-accent">{v.variant_name}</span>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span>Drop: {parseInt(v.drop_rate) / 100}%</span>
+                        <span>Mult: {parseInt(v.value_multiplier) / 100}x</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -253,7 +402,7 @@ export default function AdminPage() {
                 className="bg-white/5 border-white/10"
               >
                 <RefreshCw className={cn("w-4 h-4 mr-2", isLoadingBoxes && "animate-spin")} />
-                Sync Drafts
+                Sync Registry
               </Button>
               <Badge className="bg-red-500/20 text-red-400 border-red-500/30 px-4 py-2 text-sm">
                 <Lock className="w-4 h-4 mr-2" /> Admin Session Active
@@ -275,151 +424,176 @@ export default function AdminPage() {
             </TabsList>
 
             <TabsContent value="lootbox" className="space-y-8">
-              <div className="grid md:grid-cols-3 gap-8">
-                {/* Step 1: Create Draft */}
-                <Card className="glass-card border-primary/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Badge className="bg-primary/20 text-primary">01</Badge> Create Draft
-                    </CardTitle>
-                    <CardDescription>Initiate a new box on-chain</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Box Name</Label>
-                      <Input value={newBoxName} onChange={(e) => setNewBoxName(e.target.value)} placeholder="e.g. Genesis Crate" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Price (SUI)</Label>
-                      <Input type="number" value={newBoxPrice} onChange={(e) => setNewBoxPrice(e.target.value)} placeholder="0.5" />
-                    </div>
-                    <div className="pt-4 border-t border-white/5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <Label className="flex items-center gap-2">Pity System</Label>
-                        <Switch checked={pityEnabled} onCheckedChange={setPityEnabled} />
-                      </div>
-                      {pityEnabled && (
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Rare</Label>
-                            <Input value={pityRare} onChange={(e) => setPityRare(e.target.value)} />
+              <div className="grid md:grid-cols-[1fr_350px] gap-8">
+                <div className="space-y-8">
+                  <div className="grid md:grid-cols-2 gap-8">
+                    {/* Step 1: Create Draft */}
+                    <Card className="glass-card border-primary/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Badge className="bg-primary/20 text-primary">01</Badge> Create Draft
+                        </CardTitle>
+                        <CardDescription>Initiate a new box on-chain</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Box Name</Label>
+                          <Input value={newBoxName} onChange={(e) => setNewBoxName(e.target.value)} placeholder="e.g. Genesis Crate" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Price (SUI)</Label>
+                          <Input type="number" value={newBoxPrice} onChange={(e) => setNewBoxPrice(e.target.value)} placeholder="0.5" />
+                        </div>
+                        <div className="pt-4 border-t border-white/5 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="flex items-center gap-2">Pity System</Label>
+                            <Switch checked={pityEnabled} onCheckedChange={setPityEnabled} />
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">SR</Label>
-                            <Input value={pitySuperRare} onChange={(e) => setPitySuperRare(e.target.value)} />
+                          {pityEnabled && (
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-[10px]">Rare</Label>
+                                <Input value={pityRare} onChange={(e) => setPityRare(e.target.value)} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px]">SR</Label>
+                                <Input value={pitySuperRare} onChange={(e) => setPitySuperRare(e.target.value)} />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px]">UR</Label>
+                                <Input value={pityUltraRare} onChange={(e) => setPityUltraRare(e.target.value)} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <Button className="w-full glow-purple font-bold mt-4" onClick={handleCreateDraft} disabled={isPending}>
+                          Deploy Draft Crate
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    {/* Step 2: Add NFT Types */}
+                    <Card className="glass-card border-primary/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Badge className="bg-primary/20 text-primary">02</Badge> Add Contents
+                        </CardTitle>
+                        <CardDescription>Define NFT types for your drafts</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Select Draft Box</Label>
+                          <Select value={targetBoxId} onValueChange={setTargetBoxId}>
+                            <SelectTrigger className="bg-white/5 border-white/10">
+                              <SelectValue placeholder={isLoadingBoxes ? "Loading..." : "Choose a draft..."} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {myLootboxes.filter(b => b.isSetup).map(box => (
+                                <SelectItem key={box.id} value={box.id}>
+                                  {box.name} <span className="text-[10px] opacity-50 ml-2">({box.id.slice(0,6)}...)</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-2">
+                            <Label>Rarity (0-5)</Label>
+                            <Select value={nftRarity} onValueChange={setNftRarity}>
+                              <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {[0,1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{r} (Tier)</SelectItem>)}
+                              </SelectContent>
+                            </Select>
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">UR</Label>
-                            <Input value={pityUltraRare} onChange={(e) => setPityUltraRare(e.target.value)} />
+                          <div className="space-y-2">
+                            <Label>NFT Name</Label>
+                            <Input value={nftName} onChange={(e) => setNftName(e.target.value)} />
                           </div>
                         </div>
+                        <div className="space-y-2">
+                          <Label>Image URL</Label>
+                          <Input value={nftImage} onChange={(e) => setNftImage(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="space-y-1"><Label className="text-[10px]">HP Range</Label><Input placeholder="100-200" onChange={(e) => {
+                            const parts = e.target.value.split("-");
+                            if(parts.length === 2) setStats({...stats, minHp: parts[0], maxHp: parts[1]});
+                          }} /></div>
+                          <div className="space-y-1"><Label className="text-[10px]">ATK Range</Label><Input placeholder="10-20" onChange={(e) => {
+                            const parts = e.target.value.split("-");
+                            if(parts.length === 2) setStats({...stats, minAtk: parts[0], maxAtk: parts[1]});
+                          }} /></div>
+                          <div className="space-y-1"><Label className="text-[10px]">SPD Range</Label><Input placeholder="5-15" onChange={(e) => {
+                            const parts = e.target.value.split("-");
+                            if(parts.length === 2) setStats({...stats, minSpd: parts[0], maxSpd: parts[1]});
+                          }} /></div>
+                        </div>
+                        <Button variant="outline" className="w-full border-white/10 hover:bg-white/10" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
+                          Add NFT Type
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Step 3: Finalize */}
+                  <Card className="glass-card border-accent/20">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Badge className="bg-accent/20 text-accent">03</Badge> Finalize & Deploy
+                        </CardTitle>
+                        <CardDescription>Activate the draft for public access</CardDescription>
+                      </div>
+                      <Button className="glow-violet bg-accent hover:bg-accent/80 font-bold px-8 h-12" onClick={handleFinalize} disabled={isPending || !targetBoxId}>
+                        Go Live <ArrowUpRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </CardHeader>
+                  </Card>
+                </div>
+
+                {/* Draft Preview Sidebar */}
+                <Card className="glass-card border-white/10 flex flex-col h-[700px]">
+                  <CardHeader className="border-b border-white/5 pb-4">
+                    <CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-accent" /> Draft Inspector
+                    </CardTitle>
+                    {targetBoxId && selectedBoxFullData ? (
+                      <div className="pt-2">
+                        <div className="font-bold text-lg">{selectedBoxFullData.name}</div>
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                          <Badge variant="outline" className="text-[9px] px-1 h-4">{parseInt(selectedBoxFullData.price) / 1000000000} SUI</Badge>
+                          {selectedBoxFullData.pity_enabled && <Badge className="text-[9px] px-1 h-4 bg-accent">Pity Enabled</Badge>}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground py-4 text-center">Select a draft to preview its content</div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="p-0 flex-1 overflow-hidden">
+                    <ScrollArea className="h-full p-4">
+                      {isFetchingFullData ? (
+                        <div className="flex items-center justify-center py-20 gap-2 text-sm text-muted-foreground">
+                          <RefreshCw className="w-4 h-4 animate-spin" /> Fetching config...
+                        </div>
+                      ) : selectedBoxFullData ? (
+                        <div className="space-y-6">
+                          {renderRarityTier("Legend Rare", selectedBoxFullData.legend_rare_configs)}
+                          {renderRarityTier("Ultra Rare", selectedBoxFullData.ultra_rare_configs)}
+                          {renderRarityTier("SSR", selectedBoxFullData.ssr_configs)}
+                          {renderRarityTier("Super Rare", selectedBoxFullData.super_rare_configs)}
+                          {renderRarityTier("Rare", selectedBoxFullData.rare_configs)}
+                          {renderRarityTier("Common", selectedBoxFullData.common_configs)}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-6">
+                          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+                            <Package className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                          <p className="text-xs text-muted-foreground">No draft selected. Choose one from Step 2 to inspect tiers.</p>
+                        </div>
                       )}
-                    </div>
-                    <Button className="w-full glow-purple font-bold mt-4" onClick={handleCreateDraft} disabled={isPending}>
-                      Deploy Draft Crate
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                {/* Step 2: Add NFT Types */}
-                <Card className="glass-card border-primary/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Badge className="bg-primary/20 text-primary">02</Badge> Add Contents
-                    </CardTitle>
-                    <CardDescription>Define NFT types for your drafts</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Select Draft Box</Label>
-                      <Select value={targetBoxId} onValueChange={setTargetBoxId}>
-                        <SelectTrigger className="bg-white/5 border-white/10">
-                          <SelectValue placeholder={isLoadingBoxes ? "Loading..." : "Choose a draft..."} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {myLootboxes.filter(b => b.isSetup).map(box => (
-                            <SelectItem key={box.id} value={box.id}>
-                              {box.name} <span className="text-[10px] opacity-50 ml-2">({box.id.slice(0,6)}...)</span>
-                            </SelectItem>
-                          ))}
-                          {myLootboxes.filter(b => b.isSetup).length === 0 && !isLoadingBoxes && (
-                            <SelectItem value="none" disabled>No drafts found</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-2">
-                        <Label>Rarity (0-5)</Label>
-                        <Select value={nftRarity} onValueChange={setNftRarity}>
-                          <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {[0,1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{r} (Tier)</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>NFT Name</Label>
-                        <Input value={nftName} onChange={(e) => setNftName(e.target.value)} />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Image URL</Label>
-                      <Input value={nftImage} onChange={(e) => setNftImage(e.target.value)} />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1"><Label className="text-[10px]">HP Range</Label><Input placeholder="100-200" onChange={(e) => {
-                        const parts = e.target.value.split("-");
-                        if(parts.length === 2) setStats({...stats, minHp: parts[0], maxHp: parts[1]});
-                      }} /></div>
-                      <div className="space-y-1"><Label className="text-[10px]">ATK Range</Label><Input placeholder="10-20" onChange={(e) => {
-                        const parts = e.target.value.split("-");
-                        if(parts.length === 2) setStats({...stats, minAtk: parts[0], maxAtk: parts[1]});
-                      }} /></div>
-                      <div className="space-y-1"><Label className="text-[10px]">SPD Range</Label><Input placeholder="5-15" onChange={(e) => {
-                        const parts = e.target.value.split("-");
-                        if(parts.length === 2) setStats({...stats, minSpd: parts[0], maxSpd: parts[1]});
-                      }} /></div>
-                    </div>
-                    <Button variant="outline" className="w-full border-white/10 hover:bg-white/10" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
-                      Add NFT Type
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                {/* Step 3: Finalize */}
-                <Card className="glass-card border-primary/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Badge className="bg-primary/20 text-primary">03</Badge> Go Live
-                    </CardTitle>
-                    <CardDescription>Activate the lootbox for all</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                      <Label>Select Ready Draft</Label>
-                      <Select value={targetBoxId} onValueChange={setTargetBoxId}>
-                        <SelectTrigger className="bg-white/5 border-white/10">
-                          <SelectValue placeholder="Select box to activate..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {myLootboxes.filter(b => b.isSetup).map(box => (
-                            <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="text-center space-y-4 pt-4">
-                      <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto">
-                        <CheckCircle2 className="w-8 h-8 text-accent" />
-                      </div>
-                      <p className="text-sm text-muted-foreground px-4">
-                        Ensure you've added NFT types to the required rarity tiers before activation.
-                      </p>
-                    </div>
-                    <Button className="w-full glow-violet bg-accent hover:bg-accent/80 font-bold" onClick={handleFinalize} disabled={isPending || !targetBoxId}>
-                      Finalize & Activate
-                    </Button>
+                    </ScrollArea>
                   </CardContent>
                 </Card>
               </div>
@@ -461,7 +635,7 @@ export default function AdminPage() {
                       <Label>Amount (GYATE)</Label>
                       <Input type="number" value={mintAmount} onChange={(e) => setMintAmount(e.target.value)} />
                     </div>
-                    <Button className="w-full bg-blue-600 hover:bg-blue-500 font-bold" onClick={handleAdminMint}>
+                    <Button className="w-full bg-blue-600 hover:bg-blue-500 font-bold">
                       Mint $GYATE Tokens
                     </Button>
                   </CardContent>
@@ -482,7 +656,7 @@ export default function AdminPage() {
                       <div className="space-y-2">
                         <Label>Target Box</Label>
                         <Select value={targetBoxId} onValueChange={setTargetBoxId}>
-                          <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="bg-white/5"><SelectValue placeholder="Select box..." /></SelectTrigger>
                           <SelectContent>
                             {myLootboxes.map(box => <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>)}
                           </SelectContent>
@@ -490,7 +664,7 @@ export default function AdminPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>Base NFT Name</Label>
-                        <Input value={variantNftName} onChange={(e) => setVariantNftName(e.target.value)} />
+                        <Input value={variantNftName} onChange={(e) => setVariantNftName(e.target.value)} placeholder="e.g. Shadow Walker" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -505,11 +679,11 @@ export default function AdminPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Drop Rate (%)</Label>
+                        <Label>Drop Rate (BPS - 100 = 1%)</Label>
                         <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label>Value Multiplier (%)</Label>
+                        <Label>Multiplier (BPS - 10000 = 1x)</Label>
                         <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} />
                       </div>
                     </div>
@@ -517,7 +691,12 @@ export default function AdminPage() {
                       <Label>Custom Variant Image URL</Label>
                       <Input value={variantImage} onChange={(e) => setVariantImage(e.target.value)} />
                     </div>
-                    <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold">
+                    <Button 
+                      className="w-full bg-pink-600 hover:bg-pink-500 font-bold"
+                      onClick={handleAddVariant}
+                      disabled={isPending || !targetBoxId}
+                    >
+                      {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
                       Deploy Special Variant
                     </Button>
                   </CardContent>
