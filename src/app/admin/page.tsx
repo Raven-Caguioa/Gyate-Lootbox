@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -8,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, TREASURY_CAP } from "@/lib/sui-constants";
+import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Image from "next/image";
+import { RARITY_LABELS } from "@/lib/mock-data";
 
 interface LootboxOption {
   id: string;
@@ -40,13 +40,14 @@ interface NFTTypeData {
   name: string;
   base_value: string;
   base_image_url: string;
-  variant_configs: VariantData[];
+  variant_configs: { fields: VariantData }[];
   min_hp: string;
   max_hp: string;
   min_atk: string;
   max_atk: string;
   min_spd: string;
   max_spd: string;
+  rarity?: number; // Added locally for easier mapping
 }
 
 interface LootboxFullData {
@@ -98,16 +99,14 @@ export default function AdminPage() {
   });
 
   // --- Step 3: Variants State ---
-  const [variantNftName, setVariantNftName] = useState("");
+  const [selectedNftForVariant, setSelectedNftForVariant] = useState<string>(""); // Format: "name|rarity"
   const [variantName, setVariantName] = useState("");
-  const [variantDropRate, setVariantDropRate] = useState("5"); // 5%
-  const [variantMultiplier, setVariantMultiplier] = useState("150"); // 1.5x
+  const [variantDropRate, setVariantDropRate] = useState("500"); // 5% in BPS
+  const [variantMultiplier, setVariantMultiplier] = useState("15000"); // 1.5x in BPS
   const [variantImage, setVariantImage] = useState("");
 
   // --- Treasury State ---
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [mintAmount, setMintAmount] = useState("");
-  const [mintRecipient, setMintRecipient] = useState("");
 
   const fetchLootboxes = useCallback(async () => {
     setIsLoadingBoxes(true);
@@ -166,12 +165,12 @@ export default function AdminPage() {
           is_active: fields.is_active,
           is_setup_mode: fields.is_setup_mode,
           pity_enabled: fields.pity_enabled,
-          common_configs: fields.common_configs.map((c: any) => c.fields),
-          rare_configs: fields.rare_configs.map((c: any) => c.fields),
-          super_rare_configs: fields.super_rare_configs.map((c: any) => c.fields),
-          ssr_configs: fields.ssr_configs.map((c: any) => c.fields),
-          ultra_rare_configs: fields.ultra_rare_configs.map((c: any) => c.fields),
-          legend_rare_configs: fields.legend_rare_configs.map((c: any) => c.fields),
+          common_configs: fields.common_configs.map((c: any) => ({ ...c.fields, rarity: 0 })),
+          rare_configs: fields.rare_configs.map((c: any) => ({ ...c.fields, rarity: 1 })),
+          super_rare_configs: fields.super_rare_configs.map((c: any) => ({ ...c.fields, rarity: 2 })),
+          ssr_configs: fields.ssr_configs.map((c: any) => ({ ...c.fields, rarity: 3 })),
+          ultra_rare_configs: fields.ultra_rare_configs.map((c: any) => ({ ...c.fields, rarity: 4 })),
+          legend_rare_configs: fields.legend_rare_configs.map((c: any) => ({ ...c.fields, rarity: 5 })),
         });
       }
     } catch (err) {
@@ -192,6 +191,18 @@ export default function AdminPage() {
       setSelectedBoxFullData(null);
     }
   }, [targetBoxId, fetchFullBoxData]);
+
+  const allAvailableNfts = useMemo(() => {
+    if (!selectedBoxFullData) return [];
+    return [
+      ...selectedBoxFullData.common_configs,
+      ...selectedBoxFullData.rare_configs,
+      ...selectedBoxFullData.super_rare_configs,
+      ...selectedBoxFullData.ssr_configs,
+      ...selectedBoxFullData.ultra_rare_configs,
+      ...selectedBoxFullData.legend_rare_configs,
+    ];
+  }, [selectedBoxFullData]);
 
   const handleCreateDraft = async () => {
     if (!newBoxName || !newBoxPrice) return;
@@ -257,15 +268,16 @@ export default function AdminPage() {
   };
 
   const handleAddVariant = async () => {
-    if (!targetBoxId || !variantNftName || !variantName) return;
+    if (!targetBoxId || !selectedNftForVariant || !variantName) return;
+    const [name, rarity] = selectedNftForVariant.split("|");
     setIsPending(true);
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_VARIANT}`,
       arguments: [
         txb.object(targetBoxId),
-        txb.pure.string(variantNftName),
-        txb.pure.u8(parseInt(nftRarity)),
+        txb.pure.string(name),
+        txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
         txb.pure.u64(BigInt(variantDropRate)),
         txb.pure.u64(BigInt(variantMultiplier)),
@@ -279,7 +291,7 @@ export default function AdminPage() {
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Variant Added", description: `${variantName} variant added to ${variantNftName}.` });
+        toast({ title: "Variant Added", description: `${variantName} variant added to ${name}.` });
         setIsPending(false);
         setVariantName("");
         fetchFullBoxData(targetBoxId);
@@ -364,12 +376,12 @@ export default function AdminPage() {
                   <div className="text-[9px] uppercase font-bold text-accent tracking-widest mb-1 flex items-center gap-1">
                     <Sparkles className="w-2 h-2" /> Variants
                   </div>
-                  {nft.variant_configs.filter(v => v.variant_name !== "Normal").map((v, vidx) => (
+                  {nft.variant_configs.filter(v => v.fields.variant_name !== "Normal").map((v, vidx) => (
                     <div key={vidx} className="flex items-center justify-between text-[10px] bg-accent/5 rounded px-2 py-1 border border-accent/10">
-                      <span className="font-medium text-accent">{v.variant_name}</span>
+                      <span className="font-medium text-accent">{v.fields.variant_name}</span>
                       <div className="flex items-center gap-2 text-muted-foreground">
-                        <span>Drop: {parseInt(v.drop_rate) / 100}%</span>
-                        <span>Mult: {parseInt(v.value_multiplier) / 100}x</span>
+                        <span>Drop: {parseInt(v.fields.drop_rate) / 100}%</span>
+                        <span>Mult: {parseInt(v.fields.value_multiplier) / 10000}x</span>
                       </div>
                     </div>
                   ))}
@@ -402,7 +414,7 @@ export default function AdminPage() {
                 className="bg-white/5 border-white/10"
               >
                 <RefreshCw className={cn("w-4 h-4 mr-2", isLoadingBoxes && "animate-spin")} />
-                Sync Registry
+                Sync Drafts
               </Button>
               <Badge className="bg-red-500/20 text-red-400 border-red-500/30 px-4 py-2 text-sm">
                 <Lock className="w-4 h-4 mr-2" /> Admin Session Active
@@ -629,11 +641,11 @@ export default function AdminPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label>Recipient Address</Label>
-                      <Input placeholder="0x..." value={mintRecipient} onChange={(e) => setMintRecipient(e.target.value)} />
+                      <Input placeholder="0x..." />
                     </div>
                     <div className="space-y-2">
                       <Label>Amount (GYATE)</Label>
-                      <Input type="number" value={mintAmount} onChange={(e) => setMintAmount(e.target.value)} />
+                      <Input type="number" />
                     </div>
                     <Button className="w-full bg-blue-600 hover:bg-blue-500 font-bold">
                       Mint $GYATE Tokens
@@ -663,8 +675,23 @@ export default function AdminPage() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Base NFT Name</Label>
-                        <Input value={variantNftName} onChange={(e) => setVariantNftName(e.target.value)} placeholder="e.g. Shadow Walker" />
+                        <Label>Base NFT Selection</Label>
+                        <Select value={selectedNftForVariant} onValueChange={setSelectedNftForVariant} disabled={!targetBoxId}>
+                          <SelectTrigger className="bg-white/5">
+                            <SelectValue placeholder={targetBoxId ? "Select base hero..." : "Select box first..."} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allAvailableNfts.length > 0 ? (
+                              allAvailableNfts.map((nft, idx) => (
+                                <SelectItem key={idx} value={`${nft.name}|${nft.rarity}`}>
+                                  {nft.name} ({RARITY_LABELS[nft.rarity as keyof typeof RARITY_LABELS]})
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <div className="p-2 text-center text-xs text-muted-foreground">No NFTs found in this box.</div>
+                            )}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -673,28 +700,24 @@ export default function AdminPage() {
                         <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} placeholder="e.g. Holographic" />
                       </div>
                       <div className="space-y-2">
-                        <Label>Rarity (0-5)</Label>
-                        <Input type="number" value={nftRarity} onChange={(e) => setNftRarity(e.target.value)} />
+                        <Label>Drop Rate (BPS - 100 = 1%)</Label>
+                        <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Drop Rate (BPS - 100 = 1%)</Label>
-                        <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
                         <Label>Multiplier (BPS - 10000 = 1x)</Label>
                         <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Custom Variant Image URL</Label>
-                      <Input value={variantImage} onChange={(e) => setVariantImage(e.target.value)} />
+                      <div className="space-y-2">
+                        <Label>Custom Variant Image URL</Label>
+                        <Input value={variantImage} onChange={(e) => setVariantImage(e.target.value)} />
+                      </div>
                     </div>
                     <Button 
                       className="w-full bg-pink-600 hover:bg-pink-500 font-bold"
                       onClick={handleAddVariant}
-                      disabled={isPending || !targetBoxId}
+                      disabled={isPending || !targetBoxId || !selectedNftForVariant}
                     >
                       {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
                       Deploy Special Variant
