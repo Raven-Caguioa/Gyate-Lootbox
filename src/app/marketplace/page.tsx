@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 export default function MarketplacePage() {
   const [selectedNft, setSelectedNft] = useState<any>(null);
