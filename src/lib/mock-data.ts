@@ -20,6 +20,19 @@ export const RARITY_COLORS: Record<Rarity, string> = {
   5: "text-red-500",
 };
 
+/**
+ * On-chain burn rewards scale by rarity. 
+ * Values match the move contract logic (in full tokens, not MIST).
+ */
+export const BURN_REWARDS: Record<Rarity, number> = {
+  0: 10,    // Common
+  1: 25,    // Rare
+  2: 75,    // Super Rare
+  3: 200,   // SSR
+  4: 500,   // Ultra Rare
+  5: 1500,  // Legend Rare
+};
+
 export interface NFT {
   id: string;
   name: string;
@@ -35,6 +48,8 @@ export interface NFT {
   globalId: number;
   price?: number; // For marketplace
   seller?: string;
+  kioskId?: string;
+  kioskCapId?: string;
 }
 
 export interface Lootbox {

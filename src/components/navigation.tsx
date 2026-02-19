@@ -1,16 +1,51 @@
-
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wallet, Store, ShoppingBag, LayoutDashboard, Coins, ShieldAlert, User } from "lucide-react";
+import { Wallet, Store, ShoppingBag, LayoutDashboard, Coins, ShieldAlert, User, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
+import { ConnectButton, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
+import { PACKAGE_ID, MODULE_NAMES } from "@/lib/sui-constants";
+import { useState, useEffect, useCallback } from "react";
 
 export function Navigation() {
   const pathname = usePathname();
   const account = useCurrentAccount();
+  const suiClient = useSuiClient();
+
+  const [gyateBalance, setGyateBalance] = useState<string | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
+
+  const fetchGyateBalance = useCallback(async () => {
+    if (!account) {
+      setGyateBalance(null);
+      return;
+    }
+    setIsFetching(true);
+    try {
+      const gyateType = `${PACKAGE_ID}::${MODULE_NAMES.GYATE_COIN}::GYATE_COIN`;
+      const coins = await suiClient.getCoins({ 
+        owner: account.address, 
+        coinType: gyateType 
+      });
+      
+      const total = coins.data.reduce((acc, coin) => acc + BigInt(coin.balance), BigInt(0));
+      // Display as whole tokens (assuming 9 decimals like SUI, but $GYATE often used as units)
+      // If $GYATE is units (0 decimals in contract), keep as is. Usually it's 9.
+      setGyateBalance((Number(total) / 1_000_000_000).toFixed(0));
+    } catch (err) {
+      console.error("Failed to fetch $GYATE balance:", err);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [account, suiClient]);
+
+  useEffect(() => {
+    fetchGyateBalance();
+    const interval = setInterval(fetchGyateBalance, 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, [fetchGyateBalance]);
 
   const navItems = [
     { href: "/", label: "Home", icon: LayoutDashboard },
@@ -73,10 +108,12 @@ export function Navigation() {
 
         <div className="flex items-center gap-3">
           <div className="hidden lg:flex flex-col items-end mr-2">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Network</span>
-            <span className="text-sm font-bold flex items-center gap-1">
-              <span className="text-accent">Sui Testnet</span>
-            </span>
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Balance</span>
+            <div className="flex items-center gap-2">
+               <span className="text-sm font-bold flex items-center gap-1 text-primary">
+                {isFetching && !gyateBalance ? <RefreshCw className="w-3 h-3 animate-spin" /> : (gyateBalance || "0")} <span className="text-[10px]">$GYATE</span>
+              </span>
+            </div>
           </div>
           <div className="sui-connect-wrapper">
              <ConnectButton />

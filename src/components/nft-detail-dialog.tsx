@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState } from "react";
-import { NFT, RARITY_LABELS } from "@/lib/mock-data";
+import { NFT, RARITY_LABELS, BURN_REWARDS } from "@/lib/mock-data";
 import {
   Dialog,
   DialogContent,
@@ -76,6 +75,8 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
     }
   };
 
+  const burnReward = BURN_REWARDS[nft.rarity];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-background border-white/10 glass-card">
@@ -127,12 +128,16 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
                     <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 space-y-3">
                        <div className="flex items-center justify-between">
                          <h3 className="text-xs uppercase font-bold tracking-widest text-red-400">Burn Station</h3>
-                         <Coins className="w-4 h-4 text-red-400" />
+                         <div className="flex items-center gap-1 text-red-400 font-bold text-xs">
+                           +{burnReward} <Coins className="w-3 h-3" />
+                         </div>
                        </div>
-                       <p className="text-[10px] text-muted-foreground">Sacrifice this hero to the void to receive $GYATE tokens based on rarity.</p>
-                       <Button variant="destructive" className="w-full h-10 gap-2" onClick={onBurn} disabled={isBurning}>
+                       <p className="text-[10px] text-muted-foreground">
+                         Sacrifice this hero to receive <span className="text-red-400 font-bold">{burnReward} $GYATE</span> tokens based on its {RARITY_LABELS[nft.rarity]} rarity.
+                       </p>
+                       <Button variant="destructive" className="w-full h-10 gap-2 font-bold" onClick={onBurn} disabled={isBurning}>
                          {isBurning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}
-                         Burn for $GYATE
+                         Burn for {burnReward} $GYATE
                        </Button>
                     </div>
                   </div>
