@@ -1,6 +1,6 @@
 "use client";
 
-import { Navigation } from "@/navigation";
+import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
 import { Button } from "@/components/ui/button";
 import { Search, Filter, CreditCard, RefreshCw, Loader2, ShoppingCart } from "lucide-react";
