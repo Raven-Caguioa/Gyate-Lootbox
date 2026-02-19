@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
+import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles } from "lucide-react";
+import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Users, FileText, Gift } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -74,12 +74,33 @@ interface LootboxFullData {
   legend_rare_configs: NFTTypeData[];
 }
 
+interface AchievementDef {
+  id: string;
+  name: string;
+  description: string;
+  badge_image_url: string;
+  gyate_reward: string;
+  requirement_type: number;
+  requirement_value: string;
+  requirement_rarity: number;
+  enabled: boolean;
+  total_claimed: string;
+}
+
 interface TreasuryStats {
   balance: string;
   totalFromLootboxes: string;
   totalFromMarketplace: string;
   totalWithdrawn: string;
 }
+
+const REQ_LABELS: Record<number, string> = {
+  0: "Open Count",
+  1: "Burn Count",
+  2: "Rarity Mint",
+  3: "GYATE Spent",
+  4: "Admin Granted",
+};
 
 export default function AdminPage() {
   const account = useCurrentAccount();
@@ -92,6 +113,21 @@ export default function AdminPage() {
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
   const [selectedBoxFullData, setSelectedBoxFullData] = useState<LootboxFullData | null>(null);
   const [isFetchingFullData, setIsFetchingFullData] = useState(false);
+
+  // --- Achievement State ---
+  const [achievements, setAchievements] = useState<AchievementDef[]>([]);
+  const [isLoadingAchievements, setIsLoadingAchievements] = useState(false);
+  const [newAch, setNewAch] = useState({
+    name: "",
+    description: "",
+    imageUrl: "",
+    reward: "100",
+    reqType: "0",
+    reqValue: "10",
+    reqRarity: "0"
+  });
+  const [grantTarget, setGrantTarget] = useState("");
+  const [selectedGrantAch, setSelectedGrantAch] = useState("");
 
   // --- Treasury State ---
   const [treasuryStats, setTreasuryStats] = useState<TreasuryStats | null>(null);
@@ -133,6 +169,22 @@ export default function AdminPage() {
   const [availFrom, setAvailFrom] = useState("0");
   const [availUntil, setAvailUntil] = useState("0");
   const [maxMints, setMaxMints] = useState("0");
+
+  const fetchAchievements = useCallback(async () => {
+    setIsLoadingAchievements(true);
+    try {
+      const obj = await suiClient.getObject({
+        id: ACHIEVEMENT_REGISTRY,
+        options: { showContent: true }
+      });
+      const achs = (obj.data?.content as any)?.fields?.achievements || [];
+      setAchievements(achs.map((a: any) => a.fields));
+    } catch (err) {
+      console.error("Failed to fetch achievements:", err);
+    } finally {
+      setIsLoadingAchievements(false);
+    }
+  }, [suiClient]);
 
   const fetchTreasuryData = useCallback(async () => {
     setIsFetchingTreasury(true);
@@ -234,7 +286,8 @@ export default function AdminPage() {
   useEffect(() => {
     fetchLootboxes();
     fetchTreasuryData();
-  }, [fetchLootboxes, fetchTreasuryData]);
+    fetchAchievements();
+  }, [fetchLootboxes, fetchTreasuryData, fetchAchievements]);
 
   useEffect(() => {
     if (targetBoxId) {
@@ -363,6 +416,83 @@ export default function AdminPage() {
     });
   };
 
+  const handleCreateAchievement = async () => {
+    if (!newAch.name || !newAch.description) return;
+    setIsPending(true);
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::${FUNCTIONS.CREATE_ACHIEVEMENT}`,
+      arguments: [
+        txb.object(ACHIEVEMENT_REGISTRY),
+        txb.pure.string(newAch.name),
+        txb.pure.string(newAch.description),
+        txb.pure.string(newAch.imageUrl),
+        txb.pure.u64(BigInt(newAch.reward)),
+        txb.pure.u8(parseInt(newAch.reqType)),
+        txb.pure.u64(BigInt(newAch.reqValue)),
+        txb.pure.u8(parseInt(newAch.reqRarity)),
+      ],
+    });
+
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Achievement Created", description: "New on-chain goal registered." });
+        setIsPending(false);
+        setNewAch({ ...newAch, name: "", description: "" });
+        fetchAchievements();
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Creation Failed", description: err.message });
+        setIsPending(false);
+      }
+    });
+  };
+
+  const handleAdminGrant = async () => {
+    if (!grantTarget || !selectedGrantAch) return;
+    setIsPending(true);
+    
+    try {
+      // Need PlayerStats for the target address
+      const statsObjects = await suiClient.getOwnedObjects({
+        owner: grantTarget,
+        filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` }
+      });
+
+      if (statsObjects.data.length === 0) {
+        toast({ variant: "destructive", title: "User Error", description: "Target address has not initialized stats." });
+        setIsPending(false);
+        return;
+      }
+
+      const txb = new Transaction();
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::CLAIM_ACHIEVEMENT`, // Admin grant actually uses special logic in contract
+        arguments: [
+           txb.object(ACHIEVEMENT_REGISTRY),
+           txb.object(statsObjects.data[0].data!.objectId),
+           txb.pure.u64(BigInt(selectedGrantAch)),
+           txb.object(TREASURY_CAP),
+           txb.pure.address(grantTarget)
+        ],
+      });
+
+      signAndExecute({ transaction: txb }, {
+        onSuccess: () => {
+          toast({ title: "Badge Granted", description: "Achievement soulbound to target wallet." });
+          setIsPending(false);
+        },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Grant Failed", description: err.message });
+          setIsPending(false);
+        }
+      });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "System Error", description: err.message });
+      setIsPending(false);
+    }
+  };
+
   const handleFinalize = async () => {
     if (!targetBoxId) return;
     setIsPending(true);
@@ -415,22 +545,6 @@ export default function AdminPage() {
                   <Badge variant="outline" className="text-[9px] py-0 border-white/10">ATK: {nft.min_atk}-{nft.max_atk}</Badge>
                 </div>
               </div>
-              {nft.variant_configs && nft.variant_configs.length > 0 && (
-                <div className="pl-14 space-y-1">
-                  <div className="text-[9px] uppercase font-bold text-accent tracking-widest mb-1 flex items-center gap-1">
-                    <Sparkles className="w-2 h-2" /> Variants
-                  </div>
-                  {nft.variant_configs.filter(v => v.fields.variant_name !== "Normal").map((v, vidx) => (
-                    <div key={vidx} className="flex items-center justify-between text-[10px] bg-accent/5 rounded px-2 py-1 border border-accent/10">
-                      <span className="font-medium text-accent">{v.fields.variant_name}</span>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <span>Drop: {parseInt(v.fields.drop_rate) / 100}%</span>
-                        <span>Mult: {parseInt(v.fields.value_multiplier) / 10000}x</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -453,20 +567,23 @@ export default function AdminPage() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => { fetchLootboxes(); fetchTreasuryData(); }} 
-                disabled={isLoadingBoxes || isFetchingTreasury}
+                onClick={() => { fetchLootboxes(); fetchTreasuryData(); fetchAchievements(); }} 
+                disabled={isLoadingBoxes || isFetchingTreasury || isLoadingAchievements}
                 className="bg-white/5 border-white/10"
               >
-                <RefreshCw className={cn("w-4 h-4 mr-2", (isLoadingBoxes || isFetchingTreasury) && "animate-spin")} />
+                <RefreshCw className={cn("w-4 h-4 mr-2", (isLoadingBoxes || isFetchingTreasury || isLoadingAchievements) && "animate-spin")} />
                 Sync
               </Button>
             </div>
           </div>
 
           <Tabs defaultValue="lootbox" className="space-y-8">
-            <TabsList className="bg-white/5 border border-white/10 p-1 h-14">
+            <TabsList className="bg-white/5 border border-white/10 p-1 h-14 overflow-x-auto whitespace-nowrap">
               <TabsTrigger value="lootbox" className="px-8 h-full data-[state=active]:bg-primary">
                 <Package className="w-4 h-4 mr-2" /> Lootbox Factory
+              </TabsTrigger>
+              <TabsTrigger value="achievements" className="px-8 h-full data-[state=active]:bg-primary">
+                <Trophy className="w-4 h-4 mr-2" /> Achievements
               </TabsTrigger>
               <TabsTrigger value="treasury" className="px-8 h-full data-[state=active]:bg-primary">
                 <Coins className="w-4 h-4 mr-2" /> Treasury
@@ -480,7 +597,6 @@ export default function AdminPage() {
               <div className="grid md:grid-cols-[1fr_350px] gap-8">
                 <div className="space-y-8">
                   <div className="grid md:grid-cols-2 gap-8">
-                    {/* Step 1: Create Draft */}
                     <Card className="glass-card border-primary/20">
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
@@ -503,55 +619,12 @@ export default function AdminPage() {
                             <Input type="number" value={newGyatePrice} onChange={(e) => setNewGyatePrice(e.target.value)} />
                           </div>
                         </div>
-
-                        <div className="pt-4 border-t border-white/5 space-y-4">
-                          <div className="flex items-center justify-between">
-                            <Label className="flex items-center gap-2">Pity System</Label>
-                            <Switch checked={pityEnabled} onCheckedChange={setPityEnabled} />
-                          </div>
-                          {pityEnabled && (
-                            <div className="grid grid-cols-3 gap-2">
-                              {Object.keys(pityThresholds).map((rarity) => (
-                                <div key={rarity} className="space-y-1">
-                                  <Label className="text-[10px] uppercase">{rarity}</Label>
-                                  <Input 
-                                    value={pityThresholds[rarity as keyof typeof pityThresholds]} 
-                                    onChange={(e) => setPityThresholds({...pityThresholds, [rarity]: e.target.value})} 
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-between">
-                            <Label className="flex items-center gap-2">Multi-Open (Batching)</Label>
-                            <Switch checked={multiOpenEnabled} onCheckedChange={setMultiOpenEnabled} />
-                          </div>
-                          {multiOpenEnabled && (
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <Label className="text-[10px]">Batch Size</Label>
-                                <Input value={multiOpenSize} onChange={(e) => setMultiOpenSize(e.target.value)} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-[10px]">Guaranteed Rarity</Label>
-                                <Select value={guaranteeRarity} onValueChange={setGuaranteeRarity}>
-                                  <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {[1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{RARITY_LABELS[r as keyof typeof RARITY_LABELS]}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                          )}
-                        </div>
                         <Button className="w-full glow-purple font-bold" onClick={handleCreateDraft} disabled={isPending}>
                           Deploy Protocol Draft
                         </Button>
                       </CardContent>
                     </Card>
 
-                    {/* Step 2: Add NFT Types */}
                     <Card className="glass-card border-primary/20">
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-lg">
@@ -588,18 +661,6 @@ export default function AdminPage() {
                             <Input value={nftName} onChange={(e) => setNftName(e.target.value)} />
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label>Image URL</Label>
-                          <Input value={nftImage} onChange={(e) => setNftImage(e.target.value)} />
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="space-y-1"><Label className="text-[10px]">HP</Label><Input placeholder="Min-Max" onChange={(e) => {
-                            const [min, max] = e.target.value.split("-");
-                            if(min && max) setStats({...stats, minHp: min, maxHp: max});
-                          }} /></div>
-                          <div className="space-y-1"><Label className="text-[10px]">ATK</Label><Input placeholder="Min-Max" /></div>
-                          <div className="space-y-1"><Label className="text-[10px]">SPD</Label><Input placeholder="Min-Max" /></div>
-                        </div>
                         <Button variant="outline" className="w-full" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
                           Register NFT Type
                         </Button>
@@ -607,7 +668,6 @@ export default function AdminPage() {
                     </Card>
                   </div>
 
-                  {/* Step 3: Finalize */}
                   <Card className="glass-card border-accent/20">
                     <CardHeader className="flex flex-row items-center justify-between">
                       <div>
@@ -621,7 +681,6 @@ export default function AdminPage() {
                   </Card>
                 </div>
 
-                {/* Draft Preview Sidebar */}
                 <Card className="glass-card border-white/10 flex flex-col h-[700px]">
                   <CardHeader className="border-b border-white/5">
                     <CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2">
@@ -649,6 +708,134 @@ export default function AdminPage() {
                     </ScrollArea>
                   </CardContent>
                 </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="achievements" className="space-y-8">
+              <div className="grid md:grid-cols-[1fr_400px] gap-8">
+                <div className="space-y-8">
+                  <Card className="glass-card border-primary/20">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Trophy className="w-5 h-5 text-accent" /> Achievement Factory
+                      </CardTitle>
+                      <CardDescription>Define on-chain goals and rewards</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Title</Label>
+                          <Input value={newAch.name} onChange={(e) => setNewAch({...newAch, name: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>GYATE Reward</Label>
+                          <Input type="number" value={newAch.reward} onChange={(e) => setNewAch({...newAch, reward: e.target.value})} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Input value={newAch.description} onChange={(e) => setNewAch({...newAch, description: e.target.value})} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Badge Image URL</Label>
+                        <Input value={newAch.imageUrl} onChange={(e) => setNewAch({...newAch, imageUrl: e.target.value})} />
+                      </div>
+                      
+                      <div className="pt-4 border-t border-white/5 grid md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Req Type</Label>
+                          <Select value={newAch.reqType} onValueChange={(v) => setNewAch({...newAch, reqType: v})}>
+                            <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(REQ_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Threshold</Label>
+                          <Input type="number" value={newAch.reqValue} onChange={(e) => setNewAch({...newAch, reqValue: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Rarity (If Type=2)</Label>
+                          <Select value={newAch.reqRarity} onValueChange={(v) => setNewAch({...newAch, reqRarity: v})}>
+                            <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {[0,1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{RARITY_LABELS[r as keyof typeof RARITY_LABELS]}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <Button className="w-full glow-purple h-12 mt-4" onClick={handleCreateAchievement} disabled={isPending}>
+                        Register On-Chain Achievement
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="glass-card border-accent/20">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Gift className="w-5 h-5 text-accent" /> Manual Grant
+                      </CardTitle>
+                      <CardDescription>Award a badge directly to a player wallet</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                       <div className="space-y-2">
+                         <Label>Target Player Address</Label>
+                         <Input placeholder="0x..." value={grantTarget} onChange={(e) => setGrantTarget(e.target.value)} />
+                       </div>
+                       <div className="space-y-2">
+                         <Label>Select Achievement</Label>
+                         <Select value={selectedGrantAch} onValueChange={setSelectedGrantAch}>
+                           <SelectTrigger className="bg-white/5"><SelectValue placeholder="Choose achievement..." /></SelectTrigger>
+                           <SelectContent>
+                             {achievements.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                           </SelectContent>
+                         </Select>
+                       </div>
+                       <Button variant="secondary" className="w-full bg-accent/20 hover:bg-accent/40 text-accent h-12" onClick={handleAdminGrant} disabled={isPending || !grantTarget || !selectedGrantAch}>
+                         Grant Soulbound Badge
+                       </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Registry Index
+                  </h3>
+                  <ScrollArea className="h-[700px] pr-4">
+                    <div className="grid gap-4">
+                      {isLoadingAchievements ? (
+                        <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
+                          <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading...
+                        </div>
+                      ) : achievements.length > 0 ? (
+                        achievements.map((a, idx) => (
+                          <Card key={idx} className="bg-white/5 border-white/5 p-4 space-y-3">
+                            <div className="flex items-center gap-3">
+                               <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center border border-accent/20">
+                                 {a.badge_image_url ? (
+                                   <Image src={a.badge_image_url} alt={a.name} width={40} height={40} className="rounded-full" />
+                                 ) : <Trophy className="w-4 h-4 text-accent" />}
+                               </div>
+                               <div className="flex-1">
+                                 <div className="text-sm font-bold">{a.name}</div>
+                                 <div className="text-[10px] text-muted-foreground">{REQ_LABELS[a.requirement_type]}: {a.requirement_value}</div>
+                               </div>
+                               <div className="text-right">
+                                 <div className="text-xs font-bold text-primary">+{a.gyate_reward} G</div>
+                                 <div className="text-[9px] text-muted-foreground">Claimed: {a.total_claimed}</div>
+                               </div>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground line-clamp-2">{a.description}</p>
+                          </Card>
+                        ))
+                      ) : (
+                        <div className="text-center py-20 text-xs text-muted-foreground">No achievements found in registry</div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
               </div>
             </TabsContent>
 
