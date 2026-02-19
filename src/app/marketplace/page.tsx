@@ -1,10 +1,9 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
 import { Button } from "@/components/ui/button";
-import { Search, RefreshCw, Info, ShoppingCart, Loader2, PackageSearch } from "lucide-react";
+import { Search, RefreshCw, Info, Loader2, PackageSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect, useCallback } from "react";
@@ -56,7 +55,7 @@ export default function MarketplacePage() {
         .map((e: any) => ({
           id: e.parsedJson.id,
           kioskId: e.parsedJson.kiosk,
-          price: e.parsedJson.price, // Note: standard kiosk event might not have price, checking kiosk later
+          price: e.parsedJson.price, 
         }))
         .filter(l => !soldIds.has(l.id) && !delistedIds.has(l.id));
 
@@ -92,8 +91,8 @@ export default function MarketplacePage() {
           actualValue: parseInt(fields.actual_value),
           lootboxSource: fields.lootbox_source,
           globalId: parseInt(fields.global_sequential_id),
-          price: meta.price ? parseInt(meta.price) / 1_000_000_000 : 1, // Fallback if price missing in event
-          seller: "On-Chain Listing", // Real seller is in the kiosk owner field
+          price: meta.price ? parseInt(meta.price) / 1_000_000_000 : 1, 
+          seller: "On-Chain Listing", 
           kioskId: meta.kioskId,
         };
       }).filter((n): n is NFT => n !== null);
