@@ -1,22 +1,20 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, CreditCard, RefreshCw, Loader2, ShoppingCart, Info } from "lucide-react";
+import { Search, Filter, RefreshCw, Loader2, ShoppingCart, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { useState, useMemo } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL, TRANSFER_POLICY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Transaction } from "@mysten/sui/transactions";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, query, where, doc, deleteDoc } from "firebase/firestore";
-import { NFT } from "@/lib/mock-data";
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from "@/firebase";
+import { collection, query, where, doc } from "firebase/firestore";
 
 export default function MarketplacePage() {
   const [selectedNft, setSelectedNft] = useState<any>(null);
@@ -29,7 +27,7 @@ export default function MarketplacePage() {
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const { toast } = useToast();
 
-  // Firestore query for listed items
+  // Firestore query for listed items acting as a Discovery Index
   const listingsQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, "nfts"), where("isListed", "==", true));
@@ -53,7 +51,7 @@ export default function MarketplacePage() {
 
     setIsPending(true);
     try {
-      // 1. Find buyer's Kiosk
+      // 1. Find buyer's KioskOwnerCap and Kiosk
       const ownedCaps = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
@@ -88,9 +86,9 @@ export default function MarketplacePage() {
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
           toast({ title: "Purchase Successful", description: "The character has been moved to your Kiosk." });
-          // Remove from Firestore index
+          // Remove from Discovery Index in Firestore
           if (db) {
-            deleteDoc(doc(db, "nfts", listing.id));
+            deleteDocumentNonBlocking(doc(db, "nfts", listing.id));
           }
           setIsPending(false);
         },
@@ -146,7 +144,7 @@ export default function MarketplacePage() {
               <div className="flex gap-3 items-start">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Items listed here are held in individual user Kiosks. The Marketplace Indexer tracks these listings in real-time.
+                  Items listed here are held in individual user Kiosks. The Discovery Index mirrors these listings for easy browsing.
                 </p>
               </div>
             </div>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -22,8 +21,8 @@ import { Input } from "@/components/ui/input";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
-import { useFirestore } from "@/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { useFirestore, setDocumentNonBlocking } from "@/firebase";
+import { doc } from "firebase/firestore";
 
 interface NFTDetailDialogProps {
   nft: NFT | null;
@@ -92,7 +91,6 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
     setIsPending(true);
 
     try {
-      // 1. Find user's KioskOwnerCap
       const ownedCaps = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
@@ -121,9 +119,9 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
 
       signAndExecute({ transaction: txb }, {
         onSuccess: async () => {
-          // Update Firestore Marketplace Index
+          // Update Firestore Discovery Index
           const nftRef = doc(db, "nfts", nft.id);
-          await setDoc(nftRef, {
+          setDocumentNonBlocking(nftRef, {
             id: nft.id,
             name: nft.name,
             rarity: nft.rarity,
