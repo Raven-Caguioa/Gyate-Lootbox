@@ -10,14 +10,13 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info, Wallet, Layers, Clock, Hash } from "lucide-react";
+import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Image from "next/image";
 import { RARITY_LABELS } from "@/lib/mock-data";
@@ -130,6 +129,7 @@ export default function AdminPage() {
   const [variantMultiplier, setVariantMultiplier] = useState("150"); 
   const [variantImage, setVariantImage] = useState("");
   const [hasSeqId, setHasSeqId] = useState(false);
+  const [useLimits, setUseLimits] = useState(false);
   const [availFrom, setAvailFrom] = useState("0");
   const [availUntil, setAvailUntil] = useState("0");
   const [maxMints, setMaxMints] = useState("0");
@@ -343,9 +343,9 @@ export default function AdminPage() {
         txb.pure.u64(BigInt(variantMultiplier)), 
         txb.pure.string(variantImage),
         txb.pure.bool(hasSeqId), 
-        txb.pure.u64(BigInt(availFrom)), 
-        txb.pure.u64(BigInt(availUntil)), 
-        txb.pure.u64(BigInt(maxMints)), 
+        txb.pure.u64(BigInt(useLimits ? availFrom : "0")), 
+        txb.pure.u64(BigInt(useLimits ? availUntil : "0")), 
+        txb.pure.u64(BigInt(useLimits ? maxMints : "0")), 
       ],
     });
 
@@ -752,25 +752,37 @@ export default function AdminPage() {
                         <Switch checked={hasSeqId} onCheckedChange={setHasSeqId} />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
-                            <Clock className="w-3 h-3" /> Available From (Epoch)
-                          </Label>
-                          <Input value={availFrom} onChange={(e) => setAvailFrom(e.target.value)} />
+                      <div className="flex items-center justify-between border-t border-white/5 pt-6">
+                        <div className="space-y-0.5">
+                          <Label className="flex items-center gap-2">Supply & Time Limits</Label>
+                          <p className="text-[10px] text-muted-foreground">Configure availability period and maximum total supply</p>
                         </div>
-                        <div className="space-y-2">
-                          <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
-                            <Clock className="w-3 h-3" /> Available Until (Epoch)
-                          </Label>
-                          <Input value={availUntil} onChange={(e) => setAvailUntil(e.target.value)} />
-                        </div>
+                        <Switch checked={useLimits} onCheckedChange={setUseLimits} />
                       </div>
 
-                      <div className="space-y-2">
-                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Max Total Mints</Label>
-                        <Input value={maxMints} onChange={(e) => setMaxMints(e.target.value)} placeholder="0 for unlimited" />
-                      </div>
+                      {useLimits && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
+                                <Clock className="w-3 h-3" /> Available From (Epoch)
+                              </Label>
+                              <Input value={availFrom} onChange={(e) => setAvailFrom(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
+                                <Clock className="w-3 h-3" /> Available Until (Epoch)
+                              </Label>
+                              <Input value={availUntil} onChange={(e) => setAvailUntil(e.target.value)} />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Max Total Mints</Label>
+                            <Input value={maxMints} onChange={(e) => setMaxMints(e.target.value)} placeholder="0 for unlimited" />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12 glow-violet" onClick={handleAddVariant} disabled={isPending || !targetBoxId || !selectedNftForVariant}>
