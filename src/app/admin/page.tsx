@@ -103,8 +103,6 @@ const REQ_LABELS: Record<number, string> = {
   4: "Admin Granted",
 };
 
-const U64_MAX = "18446744073709551615";
-
 export default function AdminPage() {
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
@@ -300,12 +298,10 @@ export default function AdminPage() {
     fetchAchievements();
   }, [fetchLootboxes, fetchTreasuryData, fetchAchievements]);
 
-  // Synchronize target box data for Content Lab
   useEffect(() => {
     fetchFullBoxData(targetBoxId, setContentBoxData);
   }, [targetBoxId, fetchFullBoxData]);
 
-  // Synchronize variant box data for Variant Lab
   useEffect(() => {
     fetchFullBoxData(variantBoxId, setVariantBoxData);
     setSelectedNftForVariant(""); 
@@ -408,9 +404,9 @@ export default function AdminPage() {
     setIsPending(true);
     const txb = new Transaction();
     
-    // Fix instruction 94: If limits are disabled, send a high until value to ensure logic 'until > from' passes
+    // Fix: Move code expects 0 for "disabled" limits (epoch/mint caps)
     const fromVal = useLimits ? (availFrom || "0") : "0";
-    const untilVal = useLimits ? (availUntil || "0") : U64_MAX; 
+    const untilVal = useLimits ? (availUntil || "0") : "0"; 
     const mintLimitVal = useLimits ? (maxMints || "0") : "0";
 
     txb.moveCall({
@@ -420,8 +416,11 @@ export default function AdminPage() {
         txb.pure.string(name.trim()),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName.trim()),
-        txb.pure.u64(BigInt(Math.floor(parseFloat(variantDropRate || "0") * 100))), 
-        txb.pure.u64(BigInt(Math.floor(parseFloat(variantMultiplier || "0") * 100))), 
+        // CRITICAL FIX: Removed the * 100 multiplication here because the Move code 
+        // already does `drop_rate_pct * 100` internally. Sending 500 resulted in 50000 
+        // which caused the underflow error instruction 94.
+        txb.pure.u64(BigInt(Math.floor(parseFloat(variantDropRate || "0")))), 
+        txb.pure.u64(BigInt(Math.floor(parseFloat(variantMultiplier || "0")))), 
         txb.pure.string(variantImage.trim()),
         txb.pure.bool(hasSeqId), 
         txb.pure.u64(BigInt(fromVal)), 
@@ -438,7 +437,7 @@ export default function AdminPage() {
         fetchFullBoxData(variantBoxId, setVariantBoxData);
       },
       onError: (err) => { 
-        toast({ variant: "destructive", title: "Failed", description: err.message }); 
+        toast({ variant: "destructive", title: "Variant Addition Failed", description: err.message }); 
         setIsPending(false); 
       },
     });
