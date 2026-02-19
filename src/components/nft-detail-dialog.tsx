@@ -55,7 +55,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
         nftImageUrl: nft.image,
       });
       setSuggestedName(result);
-      toast({ title: "Name Suggested!", description: "AI has generated a unique name for your character." });
+      toast({ title: "Name Suggested!", description: "AI has generated a unique name." });
     } catch (error) {
       toast({ variant: "destructive", title: "Generation failed" });
     } finally {
@@ -76,7 +76,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
         image_url: nft.image,
       });
       setSuggestedLore(result.lore);
-      toast({ title: "Lore Created!", description: "AI has woven a story for your hero." });
+      toast({ title: "Lore Created!", description: "AI has woven a story." });
     } catch (error) {
       toast({ variant: "destructive", title: "Lore generation failed" });
     } finally {
@@ -116,8 +116,8 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
       });
 
       signAndExecute({ transaction: txb }, {
-        onSuccess: async () => {
-          toast({ title: "Listed Successfully", description: `${nft.name} is now on the marketplace for ${listPrice} SUI.` });
+        onSuccess: () => {
+          toast({ title: "Listed Successfully", description: "The item is now available in your on-chain Kiosk." });
           setIsPending(false);
           onOpenChange(false);
         },
@@ -142,24 +142,12 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
               alt={nft.name}
               fill
               className="object-cover"
-              data-ai-hint="fantasy character"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
-            <div className="absolute bottom-6 left-6 right-6 flex flex-wrap gap-2">
-              <Badge variant="secondary" className="backdrop-blur-md border-white/10 uppercase font-bold tracking-widest text-xs py-1">
-                {RARITY_LABELS[nft.rarity]}
-              </Badge>
-              <Badge className="bg-accent/80 backdrop-blur-md text-xs py-1">
-                {nft.variantType} Variant
-              </Badge>
-            </div>
           </div>
 
           <div className="p-8 flex flex-col gap-6">
             <DialogHeader className="p-0">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">NFT ID #{nft.globalId || nft.id.slice(0, 6)}</span>
-              </div>
               <DialogTitle className="font-headline text-4xl font-bold flex items-center gap-3">
                 {suggestedName || nft.name}
                 {suggestedName && <Sparkles className="w-5 h-5 text-accent animate-pulse" />}
@@ -168,97 +156,48 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
 
             <ScrollArea className="max-h-[400px] pr-4">
               <div className="space-y-8">
-                {/* Stats Section */}
-                <div className="space-y-4">
-                  <h3 className="text-xs uppercase font-bold tracking-widest text-muted-foreground flex items-center gap-2">
-                    <Zap className="w-3 h-3" /> Core Statistics
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <StatItem icon={Shield} label="HP" value={nft.hp} max={2500} color="blue" />
-                    <StatItem icon={Sword} label="ATK" value={nft.atk} max={600} color="red" />
-                    <StatItem icon={Zap} label="SPD" value={nft.spd} max={400} color="yellow" />
-                  </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <StatItem icon={Shield} label="HP" value={nft.hp} max={2500} color="blue" />
+                  <StatItem icon={Sword} label="ATK" value={nft.atk} max={600} color="red" />
+                  <StatItem icon={Zap} label="SPD" value={nft.spd} max={400} color="yellow" />
                 </div>
 
-                {/* AI Tools Section */}
                 <div className="space-y-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                  <h3 className="text-xs uppercase font-bold tracking-widest text-accent flex items-center gap-2">
-                    <Sparkles className="w-3 h-3" /> AI Enhancement Lab
-                  </h3>
+                  <h3 className="text-xs uppercase font-bold tracking-widest text-accent">AI Lab</h3>
                   <div className="flex flex-wrap gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={handleSuggestName} 
-                      disabled={isGeneratingName}
-                      className="border-accent/30 hover:bg-accent/10"
-                    >
-                      {isGeneratingName ? <Wand2 className="w-4 h-4 animate-spin mr-2" /> : <Tag className="w-4 h-4 mr-2" />}
+                    <Button size="sm" variant="outline" onClick={handleSuggestName} disabled={isGeneratingName}>
                       Suggest Name
                     </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={handleGenerateLore} 
-                      disabled={isGeneratingLore}
-                      className="border-primary/30 hover:bg-primary/10"
-                    >
-                      {isGeneratingLore ? <Wand2 className="w-4 h-4 animate-spin mr-2" /> : <Info className="w-4 h-4 mr-2" />}
+                    <Button size="sm" variant="outline" onClick={handleGenerateLore} disabled={isGeneratingLore}>
                       Generate Lore
                     </Button>
                   </div>
-
                   {suggestedLore && (
-                    <div className="mt-4 p-4 rounded-lg bg-black/40 text-sm leading-relaxed text-muted-foreground">
-                      <p className="whitespace-pre-line italic">"{suggestedLore}"</p>
+                    <div className="mt-4 p-4 rounded-lg bg-black/40 text-sm italic text-muted-foreground">
+                      "{suggestedLore}"
                     </div>
                   )}
                 </div>
 
-                {/* Economy Info */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center py-3 border-t border-white/10">
-                    <span className="text-xs text-muted-foreground font-bold">Lootbox Source</span>
-                    <span className="text-sm font-medium">{nft.lootboxSource}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-t border-white/10">
-                    <span className="text-xs text-muted-foreground font-bold">Base Value</span>
-                    <span className="text-sm font-medium">{nft.baseValue} MIST</span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-t border-white/10">
-                    <span className="text-xs text-muted-foreground font-bold">Actual Value</span>
-                    <span className="text-sm font-bold text-accent">{nft.actualValue} MIST</span>
-                  </div>
-                </div>
-
                 {isInventory && (
                   <div className="pt-4 border-t border-white/10 space-y-4">
-                    <h3 className="text-xs uppercase font-bold tracking-widest text-primary">Marketplace Listing</h3>
+                    <h3 className="text-xs uppercase font-bold tracking-widest text-primary">On-Chain Listing</h3>
                     <div className="flex gap-3">
-                      <div className="relative flex-1">
-                        <Input 
-                          placeholder="Price in SUI" 
-                          type="number" 
-                          value={listPrice} 
-                          onChange={(e) => setListPrice(e.target.value)}
-                          className="bg-white/5"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground">SUI</span>
-                      </div>
-                      <Button onClick={handleListForSale} disabled={isPending || !listPrice} className="bg-primary/20 hover:bg-primary/40 text-primary border-primary/20">
-                        {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "List NFT"}
+                      <Input 
+                        placeholder="Price SUI" 
+                        type="number" 
+                        value={listPrice} 
+                        onChange={(e) => setListPrice(e.target.value)}
+                        className="bg-white/5"
+                      />
+                      <Button onClick={handleListForSale} disabled={isPending || !listPrice}>
+                        {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "List Now"}
                       </Button>
                     </div>
                   </div>
                 )}
               </div>
             </ScrollArea>
-
-            <div className="mt-auto pt-6 flex gap-3">
-              <Button className="flex-1 font-bold h-12 bg-primary hover:bg-primary/80 glow-purple">
-                Battle Mode
-              </Button>
-            </div>
           </div>
         </div>
       </DialogContent>

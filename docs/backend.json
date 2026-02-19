@@ -2,194 +2,22 @@
 {
   "entities": {
     "GyateNFT": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "GyateNFT",
       "type": "object",
-      "description": "Represents a single GyateGyate NFT, defining its identity, characteristics, stats, and economic properties. Includes marketplace listing metadata.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier (Sui Object ID) for the NFT."
-        },
-        "name": {
-          "type": "string",
-          "description": "The display name of the NFT type."
-        },
-        "rarity": {
-          "type": "number",
-          "description": "The rarity tier (0-5)."
-        },
-        "lootboxSource": {
-          "type": "string",
-          "description": "The source lootbox name."
-        },
-        "variantType": {
-          "type": "string",
-          "description": "The specific variant (e.g., 'Normal', 'Shiny')."
-        },
-        "variantMultiplier": {
-          "type": "number",
-          "description": "BPS multiplier for value."
-        },
-        "imageUrl": {
-          "type": "string",
-          "description": "The URL to the NFT's image.",
-          "format": "uri"
-        },
-        "globalSequentialId": {
-          "type": "number",
-          "description": "The Nth overall mint."
-        },
-        "variantSequentialId": {
-          "type": "number",
-          "description": "The Nth mint of this specific variant."
-        },
-        "variantHasId": {
-          "type": "boolean",
-          "description": "Whether this variant tracks sequential IDs."
-        },
-        "baseValue": {
-          "type": "number",
-          "description": "The base value in MIST."
-        },
-        "actualValue": {
-          "type": "number",
-          "description": "The calculated actual value in MIST."
-        },
-        "hp": {
-          "type": "number",
-          "description": "Health Points."
-        },
-        "atk": {
-          "type": "number",
-          "description": "Attack stat."
-        },
-        "spd": {
-          "type": "number",
-          "description": "Speed stat."
-        },
-        "upgradeLevel": {
-          "type": "number",
-          "description": "Current upgrade level."
-        },
-        "isListed": {
-          "type": "boolean",
-          "description": "Whether the item is currently listed on the marketplace."
-        },
-        "price": {
-          "type": "number",
-          "description": "The listing price in SUI."
-        },
-        "seller": {
-          "type": "string",
-          "description": "The Sui address of the seller."
-        },
-        "kioskId": {
-          "type": "string",
-          "description": "The Kiosk ID where the item is listed."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "rarity",
-        "lootboxSource",
-        "variantType",
-        "variantMultiplier",
-        "imageUrl",
-        "globalSequentialId",
-        "variantSequentialId",
-        "variantHasId",
-        "baseValue",
-        "actualValue",
-        "hp",
-        "atk",
-        "spd",
-        "upgradeLevel"
-      ]
-    },
-    "LootboxConfig": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "LootboxConfig",
-      "type": "object",
-      "description": "Configuration for a specific lootbox.",
+      "description": "Represents a single GyateGyate NFT on the Sui network.",
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
-        "price": { "type": "number" },
-        "admin": { "type": "string" },
-        "commonConfigs": { "type": "array", "items": { "type": "string" } },
-        "rareConfigs": { "type": "array", "items": { "type": "string" } },
-        "superRareConfigs": { "type": "array", "items": { "type": "string" } },
-        "ssrConfigs": { "type": "array", "items": { "type": "string" } },
-        "ultra_rare_configs": { "type": "array", "items": { "type": "string" } },
-        "legend_rare_configs": { "type": "array", "items": { "type": "string" } },
-        "totalOpened": { "type": "number" },
-        "isActive": { "type": "boolean" },
-        "isSetupMode": { "type": "boolean" },
-        "updateLogs": { "type": "array", "items": { "type": "string" } },
-        "pityEnabled": { "type": "boolean" },
-        "pityRareThreshold": { "type": "number" },
-        "pitySuperRareThreshold": { "type": "number" },
-        "pityUltraRareThreshold": { "type": "number" }
-      },
-      "required": ["id", "name", "price", "admin", "isActive", "isSetupMode"]
-    },
-    "LootboxRegistry": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "LootboxRegistry",
-      "type": "object",
-      "description": "A global shared object that serves as a central registry for all created lootboxes.",
-      "properties": {
-        "id": { "type": "string" },
-        "lootboxes": { "type": "array", "items": { "type": "string" } },
-        "activeIds": { "type": "array", "items": { "type": "string" } },
-        "allIds": { "type": "array", "items": { "type": "string" } },
-        "stats": { "type": "string" }
-      },
-      "required": ["id", "lootboxes", "activeIds", "allIds", "stats"]
-    },
-    "UserProgress": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "UserProgress",
-      "type": "object",
-      "description": "Tracks a user's progress towards pity guarantees.",
-      "properties": {
-        "id": { "type": "string" },
-        "user": { "type": "string" },
-        "lootboxId": { "type": "string" },
-        "opensSinceRare": { "type": "number" },
-        "opensSinceSuperRare": { "type": "number" },
-        "opensSinceUltraRare": { "type": "number" }
-      },
-      "required": ["id", "user", "lootboxId", "opensSinceRare", "opensSinceSuperRare", "opensSinceUltraRare"]
+        "rarity": { "type": "number" },
+        "variantType": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "hp": { "type": "number" },
+        "atk": { "type": "number" },
+        "spd": { "type": "number" }
+      }
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
-  },
-  "firestore": {
-    "structure": [
-      {
-        "path": "/nfts/{nftId}",
-        "definition": {
-          "entityName": "GyateNFT",
-          "schema": {
-            "$ref": "#/backend/entities/GyateNFT"
-          },
-          "description": "Marketplace index mirror for GyateNFTs.",
-          "params": [
-            {
-              "name": "nftId",
-              "description": "The Sui Object ID of the NFT."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "Using Firestore as a real-time indexing layer for the Sui Marketplace to enable efficient discovery of listed items across multiple Kiosks."
+    "providers": []
   }
 }
