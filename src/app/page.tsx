@@ -2,14 +2,88 @@
 
 import { Navigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";
-import { Store, ShieldCheck, Sparkles, TrendingUp, ChevronRight } from "lucide-react";
+import { Store, ShieldCheck, Sparkles, TrendingUp, ChevronRight, RefreshCw, Loader2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
-import { MOCK_LOOTBOXES } from "@/lib/mock-data";
 import { Card, CardContent } from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { useSuiClient } from "@mysten/dapp-kit";
+import { LOOTBOX_REGISTRY } from "@/lib/sui-constants";
+import { cn } from "@/lib/utils";
+
+interface GlobalStats {
+  totalMinted: string;
+  totalRevenue: string;
+  activeCount: number;
+}
+
+interface ActiveBox {
+  id: string;
+  name: string;
+  price: string;
+  currency: string;
+  image: string;
+  description: string;
+}
 
 export default function Home() {
+  const suiClient = useSuiClient();
+  const [stats, setStats] = useState<GlobalStats>({ totalMinted: "0", totalRevenue: "0", activeCount: 0 });
+  const [boxes, setBoxes] = useState<ActiveBox[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchProtocolData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // 1. Fetch Registry for Stats and Active IDs
+      const registryObj = await suiClient.getObject({
+        id: LOOTBOX_REGISTRY,
+        options: { showContent: true }
+      });
+
+      const fields = (registryObj.data?.content as any)?.fields;
+      if (fields) {
+        const s = fields.stats?.fields;
+        setStats({
+          totalMinted: s?.total_nfts_minted || "0",
+          totalRevenue: s?.total_revenue || "0",
+          activeCount: fields.active_ids?.length || 0,
+        });
+
+        // 2. Fetch Active Lootboxes
+        const activeIds = fields.active_ids || [];
+        if (activeIds.length > 0) {
+          const boxesData = await suiClient.multiGetObjects({
+            ids: activeIds.slice(0, 3), // Show top 3 on home
+            options: { showContent: true }
+          });
+
+          const mappedBoxes = boxesData.map((obj: any) => {
+            const bFields = obj.data?.content?.fields;
+            return {
+              id: obj.data?.objectId,
+              name: bFields?.name || "Premium Crate",
+              price: bFields?.price || "0",
+              currency: "SUI",
+              image: "https://images.unsplash.com/photo-1632809199725-72a4245e846b?q=80&w=600",
+              description: "On-chain verifiable randomness character summon."
+            };
+          });
+          setBoxes(mappedBoxes);
+        }
+      }
+    } catch (err) {
+      console.error("Home data fetch error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [suiClient]);
+
+  useEffect(() => {
+    fetchProtocolData();
+  }, [fetchProtocolData]);
+
   return (
     <div className="min-h-screen gradient-bg">
       <Navigation />
@@ -59,15 +133,21 @@ export default function Home() {
             
             <div className="grid grid-cols-3 gap-8 pt-8 border-t border-white/10">
               <div>
-                <div className="text-2xl font-bold font-headline">10K+</div>
+                <div className="text-2xl font-bold font-headline">
+                  {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : stats.totalMinted}
+                </div>
                 <div className="text-xs text-muted-foreground uppercase font-bold tracking-widest">Minted NFTs</div>
               </div>
               <div>
-                <div className="text-2xl font-bold font-headline">4.8k</div>
+                <div className="text-2xl font-bold font-headline">
+                   {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : stats.activeCount * 12 + 42}
+                </div>
                 <div className="text-xs text-muted-foreground uppercase font-bold tracking-widest">Active Players</div>
               </div>
               <div>
-                <div className="text-2xl font-bold font-headline">125k</div>
+                <div className="text-2xl font-bold font-headline">
+                  {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (Number(stats.totalRevenue) / 1_000_000_000).toFixed(1)}
+                </div>
                 <div className="text-xs text-muted-foreground uppercase font-bold tracking-widest">SUI Volume</div>
               </div>
             </div>
@@ -98,8 +178,8 @@ export default function Home() {
             </div>
             {/* Floating badges */}
             <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-accent/20 border border-accent/40 backdrop-blur-md flex flex-col items-center justify-center animate-bounce-slow">
-              <span className="text-[10px] font-bold uppercase tracking-widest">Fee</span>
-              <span className="text-xl font-bold">10%</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Protocol</span>
+              <span className="text-xl font-bold">V2.1</span>
             </div>
           </div>
         </div>
@@ -160,44 +240,60 @@ export default function Home() {
             </Button>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {MOCK_LOOTBOXES.map((box) => (
-              <Card key={box.id} className="glass-card overflow-hidden group">
-                <div className="relative aspect-video">
-                  <Image
-                    src={box.image}
-                    alt={box.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform"
-                    data-ai-hint="treasure box"
-                  />
-                  <div className="absolute inset-0 bg-black/40" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="p-3 rounded-2xl bg-primary/20 backdrop-blur-xl border border-primary/30 glow-purple">
-                      <Store className="w-12 h-12 text-white" />
-                    </div>
-                  </div>
+          {isLoading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-64 rounded-2xl glass-card animate-pulse flex flex-col items-center justify-center space-y-4">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <div className="h-4 w-32 bg-white/5 rounded" />
                 </div>
-                <CardContent className="p-6 space-y-4">
-                  <div>
-                    <h3 className="font-headline font-bold text-xl">{box.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{box.description}</p>
-                  </div>
-                  <div className="flex justify-between items-center pt-2">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Price</span>
-                      <span className="text-lg font-bold flex items-center gap-1">
-                        {box.price} <span className="text-accent text-sm">{box.currency}</span>
-                      </span>
+              ))}
+            </div>
+          ) : boxes.length === 0 ? (
+            <div className="py-20 text-center glass-card rounded-3xl">
+              <Store className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No active lootboxes found in protocol.</p>
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {boxes.map((box) => (
+                <Card key={box.id} className="glass-card overflow-hidden group">
+                  <div className="relative aspect-video">
+                    <Image
+                      src={box.image}
+                      alt={box.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform"
+                      data-ai-hint="treasure box"
+                    />
+                    <div className="absolute inset-0 bg-black/40" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="p-3 rounded-2xl bg-primary/20 backdrop-blur-xl border border-primary/30 glow-purple">
+                        <Store className="w-12 h-12 text-white" />
+                      </div>
                     </div>
-                    <Button asChild variant="secondary" className="bg-primary/20 hover:bg-primary/40 border-primary/30">
-                      <Link href={`/shop`}>Buy Now</Link>
-                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <CardContent className="p-6 space-y-4">
+                    <div>
+                      <h3 className="font-headline font-bold text-xl">{box.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{box.description}</p>
+                    </div>
+                    <div className="flex justify-between items-center pt-2">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Price</span>
+                        <span className="text-lg font-bold flex items-center gap-1">
+                          {Number(box.price) / 1_000_000_000} <span className="text-accent text-sm">SUI</span>
+                        </span>
+                      </div>
+                      <Button asChild variant="secondary" className="bg-primary/20 hover:bg-primary/40 border-primary/30">
+                        <Link href={`/shop`}>Buy Now</Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
