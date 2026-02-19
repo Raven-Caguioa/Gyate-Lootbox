@@ -4,9 +4,8 @@
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, LayoutGrid, List, RefreshCw, ShoppingBag, Flame, Coins, Loader2 } from "lucide-react";
+import { Search, RefreshCw, ShoppingBag, Loader2, LayoutGrid } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect, useCallback } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
@@ -49,6 +48,12 @@ export default function InventoryPage() {
       const fields = await suiClient.getDynamicFields({ parentId: kioskId });
       const nftType = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
       
+      if (fields.data.length === 0) {
+        setUserNfts([]);
+        setIsLoading(false);
+        return;
+      }
+
       const nftObjects = await suiClient.multiGetObjects({
         ids: fields.data.map(f => f.objectId),
         options: { showContent: true, showType: true }
@@ -57,6 +62,7 @@ export default function InventoryPage() {
       const mappedNfts: NFT[] = nftObjects
         .map((obj: any) => {
           const fields = obj.data?.content?.fields;
+          // Kiosk items are nested in Dynamic Fields
           const nftData = fields?.value?.fields || fields;
           if (!nftData || obj.data?.content?.type !== nftType) return null;
 

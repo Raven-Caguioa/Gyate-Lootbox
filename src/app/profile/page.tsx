@@ -4,16 +4,14 @@
 import { Navigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
-import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY } from "@/lib/sui-constants";
+import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Trophy, Wallet, UserCircle, RefreshCw, Zap, Flame, Package, Sparkles, Loader2, Info } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Transaction } from "@mysten/sui/transactions";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
-import { Progress } from "@/components/ui/progress";
 
 interface PlayerStatsData {
   id: string;
@@ -142,7 +140,6 @@ export default function ProfilePage() {
       <div className="container mx-auto px-4 py-12">
         <div className="max-w-6xl mx-auto space-y-8">
           
-          {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div className="flex items-center gap-4">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center glow-purple">
@@ -185,7 +182,6 @@ export default function ProfilePage() {
           ) : (
             <div className="grid lg:grid-cols-[1fr_400px] gap-8">
               <div className="space-y-8">
-                {/* Stats Overview */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <StatCard icon={Package} label="Total Summons" value={stats.total_opens} />
                   <StatCard icon={Flame} label="NFTs Burned" value={stats.total_burns} />
@@ -193,7 +189,6 @@ export default function ProfilePage() {
                   <StatCard icon={Trophy} label="Badges" value={badges.length.toString()} />
                 </div>
 
-                {/* Rarity Breakdown */}
                 <Card className="glass-card border-white/10">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -214,7 +209,6 @@ export default function ProfilePage() {
                 </Card>
               </div>
 
-              {/* Achievements / Badges Sidebar */}
               <div className="space-y-6">
                 <h3 className="font-headline text-xl font-bold flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-accent" /> Soulbound Badges
@@ -269,8 +263,8 @@ function StatCard({ icon: Icon, label, value }: { icon: any, label: string, valu
 }
 
 function RarityProgress({ label, count, color }: { label: string, count: string, color: string }) {
-  const num = parseInt(count);
-  const max = 100; // Just for visual normalization
+  const num = parseInt(count || "0");
+  const max = 100; 
   const progress = Math.min((num / max) * 100, 100);
   
   return (

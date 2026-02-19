@@ -10,7 +10,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Users, FileText, Gift } from "lucide-react";
+import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Users, FileText, Gift, AlertCircle } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -453,7 +453,6 @@ export default function AdminPage() {
     setIsPending(true);
     
     try {
-      // Need PlayerStats for the target address
       const statsObjects = await suiClient.getOwnedObjects({
         owner: grantTarget,
         filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` }
@@ -467,7 +466,7 @@ export default function AdminPage() {
 
       const txb = new Transaction();
       txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::CLAIM_ACHIEVEMENT`, // Admin grant actually uses special logic in contract
+        target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::CLAIM_ACHIEVEMENT`, 
         arguments: [
            txb.object(ACHIEVEMENT_REGISTRY),
            txb.object(statsObjects.data[0].data!.objectId),
@@ -494,7 +493,26 @@ export default function AdminPage() {
   };
 
   const handleFinalize = async () => {
-    if (!targetBoxId) return;
+    if (!targetBoxId || !selectedBoxFullData) return;
+
+    // Check for empty tiers that would cause "Dry run failed" instruction 14
+    const emptyTiers = [];
+    if (selectedBoxFullData.common_configs.length === 0) emptyTiers.push("Common");
+    if (selectedBoxFullData.rare_configs.length === 0) emptyTiers.push("Rare");
+    if (selectedBoxFullData.super_rare_configs.length === 0) emptyTiers.push("Super Rare");
+    if (selectedBoxFullData.ssr_configs.length === 0) emptyTiers.push("SSR");
+    if (selectedBoxFullData.ultra_rare_configs.length === 0) emptyTiers.push("Ultra Rare");
+    if (selectedBoxFullData.legend_rare_configs.length === 0) emptyTiers.push("Legend Rare");
+
+    if (emptyTiers.length > 0) {
+      toast({ 
+        variant: "destructive", 
+        title: "Incomplete Protocol", 
+        description: `Each rarity tier must have at least one NFT type. Missing: ${emptyTiers.join(", ")}` 
+      });
+      return;
+    }
+
     setIsPending(true);
     const txb = new Transaction();
     txb.moveCall({
@@ -519,35 +537,45 @@ export default function AdminPage() {
   };
 
   const renderRarityTier = (label: string, configs: NFTTypeData[]) => {
-    if (!configs || configs.length === 0) return null;
+    const isEmpty = !configs || configs.length === 0;
     return (
       <div className="space-y-4">
-        <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2">
-          {label} ({configs.length})
+        <h4 className={cn(
+          "text-xs font-bold uppercase tracking-widest border-b border-white/5 pb-2 flex justify-between",
+          isEmpty ? "text-red-400" : "text-muted-foreground"
+        )}>
+          {label} ({configs?.length || 0})
+          {isEmpty && <AlertCircle className="w-3 h-3" />}
         </h4>
-        <div className="grid gap-3">
-          {configs.map((nft, idx) => (
-            <div key={idx} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-black/40 border border-white/10 shrink-0">
-                  {nft.base_image_url ? (
-                    <Image src={nft.base_image_url} alt={nft.name} fill className="object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-4 h-4" /></div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm truncate">{nft.name}</div>
-                  <div className="text-[10px] text-muted-foreground">Base: {parseInt(nft.base_value) / 1000000000} SUI</div>
-                </div>
-                <div className="flex flex-col items-end text-[10px] gap-1">
-                  <Badge variant="outline" className="text-[9px] py-0 border-white/10">HP: {nft.min_hp}-{nft.max_hp}</Badge>
-                  <Badge variant="outline" className="text-[9px] py-0 border-white/10">ATK: {nft.min_atk}-{nft.max_atk}</Badge>
+        {isEmpty ? (
+          <div className="py-4 text-[10px] text-center text-red-400/50 bg-red-400/5 rounded-lg border border-red-400/10 border-dashed">
+            No characters registered in this tier
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {configs.map((nft, idx) => (
+              <div key={idx} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-black/40 border border-white/10 shrink-0">
+                    {nft.base_image_url ? (
+                      <Image src={nft.base_image_url} alt={nft.name} fill className="object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground"><ImageIcon className="w-4 h-4" /></div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm truncate">{nft.name}</div>
+                    <div className="text-[10px] text-muted-foreground">Base: {parseInt(nft.base_value) / 1000000000} SUI</div>
+                  </div>
+                  <div className="flex flex-col items-end text-[10px] gap-1">
+                    <Badge variant="outline" className="text-[9px] py-0 border-white/10">HP: {nft.min_hp}-{nft.max_hp}</Badge>
+                    <Badge variant="outline" className="text-[9px] py-0 border-white/10">ATK: {nft.min_atk}-{nft.max_atk}</Badge>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -660,6 +688,10 @@ export default function AdminPage() {
                             <Label>NFT Name</Label>
                             <Input value={nftName} onChange={(e) => setNftName(e.target.value)} />
                           </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Image URL</Label>
+                          <Input value={nftImage} onChange={(e) => setNftImage(e.target.value)} placeholder="IPFS or HTTPS link" />
                         </div>
                         <Button variant="outline" className="w-full" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
                           Register NFT Type

@@ -3,9 +3,9 @@
 
 import { Navigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";
-import { Store, Shield, Sparkles, AlertCircle, Loader2, RefreshCw, Zap, TrendingUp, Info, Coins } from "lucide-react";
+import { Store, Sparkles, Loader2, RefreshCw, Zap, Info, Coins } from "lucide-react";
 import Image from "next/image";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect, useCallback } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
@@ -13,7 +13,6 @@ import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 interface LootboxData {
@@ -26,6 +25,13 @@ interface LootboxData {
   pity_enabled: boolean;
   multi_open_enabled: boolean;
   multi_open_size: string;
+  // Character counts to prevent instruction 14
+  common_count: number;
+  rare_count: number;
+  super_rare_count: number;
+  ssr_count: number;
+  ultra_rare_count: number;
+  legend_rare_count: number;
 }
 
 export default function ShopPage() {
@@ -72,6 +78,12 @@ export default function ShopPage() {
           pity_enabled: fields?.pity_enabled || false,
           multi_open_enabled: fields?.multi_open_enabled || false,
           multi_open_size: fields?.multi_open_size || "10",
+          common_count: fields?.common_configs?.length || 0,
+          rare_count: fields?.rare_configs?.length || 0,
+          super_rare_count: fields?.super_rare_configs?.length || 0,
+          ssr_count: fields?.ssr_configs?.length || 0,
+          ultra_rare_count: fields?.ultra_rare_configs?.length || 0,
+          legend_rare_count: fields?.legend_rare_configs?.length || 0,
         };
       });
 
@@ -90,6 +102,13 @@ export default function ShopPage() {
   const handleSummon = async (box: LootboxData, mode: 'single' | 'multi' | 'pity' = 'single') => {
     if (!account) {
       toast({ variant: "destructive", title: "Wallet required" });
+      return;
+    }
+
+    // Protection: Verify the box isn't empty in a way that causes instruction 14
+    const totalChars = box.common_count + box.rare_count + box.super_rare_count + box.ssr_count + box.ultra_rare_count + box.legend_rare_count;
+    if (totalChars === 0) {
+      toast({ variant: "destructive", title: "Empty Protocol", description: "This lootbox has no character types registered yet." });
       return;
     }
 
@@ -112,7 +131,7 @@ export default function ShopPage() {
       const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
       const kioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // 2. Find PlayerStats for Achievement recording
+      // 2. Find PlayerStats
       const statsObjects = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` }
@@ -176,21 +195,24 @@ export default function ShopPage() {
         progressId = progress.data!.objectId;
       }
 
-      // 6. Execute Move Call
-      // Logic branches based on Move signature: SUI takes pool, GYATE takes treasury_cap
-      const baseArgs = [txb.object(box.id), txb.object(LOOTBOX_REGISTRY)];
-      const authArg = paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(TREASURY_CAP);
-      
+      // 6. Final Call Construction - ENSURE PRECISE ARGUMENT ORDER
       const callArgs = [
-        ...baseArgs,
-        authArg,
-        ...(progressId ? [txb.object(progressId)] : []),
-        paymentCoin,
-        txb.object(statsId!),
-        txb.object(RANDOM_STATE),
-        txb.object(kioskId),
-        txb.object(kioskCapId!),
+        txb.object(box.id),
+        txb.object(LOOTBOX_REGISTRY),
+        paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(TREASURY_CAP),
       ];
+
+      // Insert progress object for pity functions (it's the 4th argument in Move)
+      if (mode === 'pity' && progressId) {
+        callArgs.push(txb.object(progressId));
+      }
+
+      // Remaining arguments
+      callArgs.push(paymentCoin);
+      callArgs.push(txb.object(statsId!));
+      callArgs.push(txb.object(RANDOM_STATE));
+      callArgs.push(txb.object(kioskId));
+      callArgs.push(txb.object(kioskCapId!));
 
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`,
@@ -204,7 +226,7 @@ export default function ShopPage() {
           setIsPending(false);
         },
         onError: (err) => {
-          toast({ variant: "destructive", title: "Transaction failed", description: err.message });
+          toast({ variant: "destructive", title: "Summon Failed", description: err.message });
           setIsPending(false);
         }
       });
@@ -249,16 +271,6 @@ export default function ShopPage() {
                 >
                   $GYATE MODE
                 </Button>
-              </div>
-              <div className="flex gap-4">
-                <Card className="glass-card border-accent/20 px-4 py-2">
-                   <div className="text-[9px] uppercase font-bold text-muted-foreground">Pity System</div>
-                   <div className="text-sm font-headline font-bold text-accent">ACTIVE</div>
-                </Card>
-                <Card className="glass-card border-primary/20 px-4 py-2">
-                   <div className="text-[9px] uppercase font-bold text-muted-foreground">Max Batch</div>
-                   <div className="text-sm font-headline font-bold text-primary">10x SUMMON</div>
-                </Card>
               </div>
             </div>
           </div>
