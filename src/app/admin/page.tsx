@@ -103,6 +103,8 @@ const REQ_LABELS: Record<number, string> = {
   4: "Admin Granted",
 };
 
+const U64_MAX = "18446744073709551615";
+
 export default function AdminPage() {
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
@@ -306,7 +308,7 @@ export default function AdminPage() {
   // Synchronize variant box data for Variant Lab
   useEffect(() => {
     fetchFullBoxData(variantBoxId, setVariantBoxData);
-    setSelectedNftForVariant(""); // Reset selection when box changes to prevent Instruction 94 mismatch
+    setSelectedNftForVariant(""); 
   }, [variantBoxId, fetchFullBoxData]);
 
   const variantNftOptions = useMemo(() => {
@@ -333,15 +335,15 @@ export default function AdminPage() {
         txb.pure.u64(BigInt(parseFloat(newBoxPrice) * 1_000_000_000)),
         txb.pure.u64(BigInt(newGyatePrice)),
         txb.pure.bool(pityEnabled),
-        txb.pure.u64(BigInt(pityThresholds.common)),
-        txb.pure.u64(BigInt(pityThresholds.rare)),
-        txb.pure.u64(BigInt(pityThresholds.sr)),
-        txb.pure.u64(BigInt(pityThresholds.ssr)),
-        txb.pure.u64(BigInt(pityThresholds.ur)),
-        txb.pure.u64(BigInt(pityThresholds.lr)),
+        txb.pure.u64(BigInt(pityThresholds.common || "0")),
+        txb.pure.u64(BigInt(pityThresholds.rare || "0")),
+        txb.pure.u64(BigInt(pityThresholds.sr || "0")),
+        txb.pure.u64(BigInt(pityThresholds.ssr || "0")),
+        txb.pure.u64(BigInt(pityThresholds.ur || "0")),
+        txb.pure.u64(BigInt(pityThresholds.lr || "0")),
         txb.pure.bool(multiOpenEnabled),
-        txb.pure.u64(BigInt(multiOpenSize)),
-        txb.pure.u8(parseInt(guaranteeRarity)),
+        txb.pure.u64(BigInt(multiOpenSize || "0")),
+        txb.pure.u8(parseInt(guaranteeRarity || "0")),
       ],
     });
 
@@ -369,11 +371,11 @@ export default function AdminPage() {
         txb.object(targetBoxId),
         txb.pure.u8(parseInt(nftRarity)),
         txb.pure.string(nftName),
-        txb.pure.u64(BigInt(nftValue)),
+        txb.pure.u64(BigInt(nftValue || "0")),
         txb.pure.string(nftImage),
-        txb.pure.u64(BigInt(stats.minHp)), txb.pure.u64(BigInt(stats.maxHp)),
-        txb.pure.u64(BigInt(stats.minAtk)), txb.pure.u64(BigInt(stats.maxAtk)),
-        txb.pure.u64(BigInt(stats.minSpd)), txb.pure.u64(BigInt(stats.maxSpd)),
+        txb.pure.u64(BigInt(stats.minHp || "0")), txb.pure.u64(BigInt(stats.maxHp || "0")),
+        txb.pure.u64(BigInt(stats.minAtk || "0")), txb.pure.u64(BigInt(stats.maxAtk || "0")),
+        txb.pure.u64(BigInt(stats.minSpd || "0")), txb.pure.u64(BigInt(stats.maxSpd || "0")),
       ],
     });
 
@@ -394,7 +396,6 @@ export default function AdminPage() {
   const handleAddVariant = async () => {
     if (!variantBoxId || !selectedNftForVariant || !variantName) return;
     
-    // Use robust delimiter to avoid issues with names containing spaces
     const [name, rarity] = selectedNftForVariant.split(":::");
     if (!name || isNaN(parseInt(rarity))) {
       toast({ variant: "destructive", title: "Selection Error", description: "Invalid character selection format." });
@@ -404,6 +405,11 @@ export default function AdminPage() {
     setIsPending(true);
     const txb = new Transaction();
     
+    // Fix instruction 94: If limits are disabled, send a high until value to ensure logic 'until > from' passes
+    const fromVal = useLimits ? (availFrom || "0") : "0";
+    const untilVal = useLimits ? (availUntil || "0") : U64_MAX; 
+    const mintLimitVal = useLimits ? (maxMints || "0") : "0";
+
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_VARIANT}`,
       arguments: [
@@ -411,13 +417,13 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(Math.floor(parseFloat(variantDropRate) * 100))), 
-        txb.pure.u64(BigInt(Math.floor(parseFloat(variantMultiplier) * 100))), 
+        txb.pure.u64(BigInt(Math.floor(parseFloat(variantDropRate || "0") * 100))), 
+        txb.pure.u64(BigInt(Math.floor(parseFloat(variantMultiplier || "0") * 100))), 
         txb.pure.string(variantImage),
         txb.pure.bool(hasSeqId), 
-        txb.pure.u64(BigInt(useLimits ? availFrom : "0")), 
-        txb.pure.u64(BigInt(useLimits ? availUntil : "0")), 
-        txb.pure.u64(BigInt(useLimits ? maxMints : "0")), 
+        txb.pure.u64(BigInt(fromVal)), 
+        txb.pure.u64(BigInt(untilVal)), 
+        txb.pure.u64(BigInt(mintLimitVal)), 
       ],
     });
 
@@ -429,7 +435,7 @@ export default function AdminPage() {
         fetchFullBoxData(variantBoxId, setVariantBoxData);
       },
       onError: (err) => { 
-        toast({ variant: "destructive", title: "Failed", description: "Base character not found in draft. Ensure you have selected a character from the correct Lootbox." }); 
+        toast({ variant: "destructive", title: "Failed", description: err.message }); 
         setIsPending(false); 
       },
     });
@@ -494,10 +500,10 @@ export default function AdminPage() {
         txb.pure.string(newAch.name),
         txb.pure.string(newAch.description),
         txb.pure.string(newAch.imageUrl),
-        txb.pure.u64(BigInt(parseFloat(newAch.reward) * 1_000_000_000)),
-        txb.pure.u8(parseInt(newAch.reqType)),
-        txb.pure.u64(BigInt(newAch.reqValue)),
-        txb.pure.u8(parseInt(newAch.reqRarity)),
+        txb.pure.u64(BigInt(parseFloat(newAch.reward || "0") * 1_000_000_000)),
+        txb.pure.u8(parseInt(newAch.reqType || "0")),
+        txb.pure.u64(BigInt(newAch.reqValue || "0")),
+        txb.pure.u8(parseInt(newAch.reqRarity || "0")),
       ],
     });
 
