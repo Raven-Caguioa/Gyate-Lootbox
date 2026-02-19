@@ -3,7 +3,7 @@
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
 import { Button } from "@/components/ui/button";
-import { Search, RefreshCw, Info, Loader2, PackageSearch, Filter, SlidersHorizontal } from "lucide-react";
+import { Search, RefreshCw, Info, Loader2, PackageSearch, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -15,9 +15,7 @@ import { Transaction } from "@mysten/sui/transactions";
 import { NFT, RARITY_LABELS } from "@/lib/mock-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 export default function MarketplacePage() {
@@ -281,48 +279,72 @@ export default function MarketplacePage() {
 
                 <Separator className="bg-white/5" />
 
-                {/* Stat Sliders */}
-                <div className="space-y-8">
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">HP Range</Label>
-                      <span className="text-[10px] font-mono text-accent">{hpRange[0]}-{hpRange[1]}</span>
+                {/* Stat Inputs */}
+                <div className="space-y-6">
+                  {/* HP Range */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">HP Range</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Min"
+                        value={hpRange[0]}
+                        onChange={(e) => setHpRange([parseInt(e.target.value) || 0, hpRange[1]])}
+                        className="bg-white/5 border-white/10 text-xs h-8"
+                      />
+                      <span className="text-muted-foreground">-</span>
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        value={hpRange[1]}
+                        onChange={(e) => setHpRange([hpRange[0], parseInt(e.target.value) || 0])}
+                        className="bg-white/5 border-white/10 text-xs h-8"
+                      />
                     </div>
-                    <Slider 
-                      value={hpRange} 
-                      onValueChange={setHpRange} 
-                      max={2500} 
-                      step={10} 
-                      className="py-4"
-                    />
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ATK Range</Label>
-                      <span className="text-[10px] font-mono text-accent">{atkRange[0]}-{atkRange[1]}</span>
+                  {/* ATK Range */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ATK Range</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Min"
+                        value={atkRange[0]}
+                        onChange={(e) => setAtkRange([parseInt(e.target.value) || 0, atkRange[1]])}
+                        className="bg-white/5 border-white/10 text-xs h-8"
+                      />
+                      <span className="text-muted-foreground">-</span>
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        value={atkRange[1]}
+                        onChange={(e) => setAtkRange([atkRange[0], parseInt(e.target.value) || 0])}
+                        className="bg-white/5 border-white/10 text-xs h-8"
+                      />
                     </div>
-                    <Slider 
-                      value={atkRange} 
-                      onValueChange={setAtkRange} 
-                      max={600} 
-                      step={5} 
-                      className="py-4"
-                    />
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">SPD Range</Label>
-                      <span className="text-[10px] font-mono text-accent">{spdRange[0]}-{spdRange[1]}</span>
+                  {/* SPD Range */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">SPD Range</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Min"
+                        value={spdRange[0]}
+                        onChange={(e) => setSpdRange([parseInt(e.target.value) || 0, spdRange[1]])}
+                        className="bg-white/5 border-white/10 text-xs h-8"
+                      />
+                      <span className="text-muted-foreground">-</span>
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        value={spdRange[1]}
+                        onChange={(e) => setSpdRange([spdRange[0], parseInt(e.target.value) || 0])}
+                        className="bg-white/5 border-white/10 text-xs h-8"
+                      />
                     </div>
-                    <Slider 
-                      value={spdRange} 
-                      onValueChange={setSpdRange} 
-                      max={400} 
-                      step={5} 
-                      className="py-4"
-                    />
                   </div>
                 </div>
               </CardContent>
