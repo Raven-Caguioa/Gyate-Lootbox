@@ -126,16 +126,17 @@ export default function ShopPage() {
 
       let targetFunction = FUNCTIONS.OPEN_LOOTBOX;
       let paymentAmount = BigInt(box.price);
+      let progressId: string | null = null;
 
       if (mode === 'multi') {
         targetFunction = FUNCTIONS.MULTI_OPEN_LOOTBOX;
         paymentAmount = BigInt(box.price) * BigInt(box.multi_open_size);
       } else if (mode === 'pity') {
         targetFunction = FUNCTIONS.OPEN_LOOTBOX_WITH_PITY;
-        // Need to find UserProgress object for this box
         const progressObjects = await suiClient.getOwnedObjects({
           owner: account.address,
-          filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::UserProgress` }
+          filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::UserProgress` },
+          options: { showContent: true }
         });
         const progress = progressObjects.data.find((p: any) => p.data?.content?.fields?.lootbox_id === box.id);
         if (!progress) {
@@ -143,7 +144,7 @@ export default function ShopPage() {
           setIsPending(false);
           return;
         }
-        txb.object(progress.data!.objectId);
+        progressId = progress.data!.objectId;
       }
 
       const [paymentCoin] = txb.splitCoins(txb.gas, [paymentAmount]);
@@ -154,7 +155,7 @@ export default function ShopPage() {
           txb.object(box.id),
           txb.object(LOOTBOX_REGISTRY),
           txb.object(TREASURY_POOL),
-          ...(mode === 'pity' ? [txb.object(txb.inputs[0])] : []), // UserProgress if pity
+          ...(mode === 'pity' && progressId ? [txb.object(progressId)] : []),
           paymentCoin,
           txb.object(statsId!),
           txb.object(RANDOM_STATE),
