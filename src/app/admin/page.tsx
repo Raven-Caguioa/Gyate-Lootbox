@@ -35,7 +35,7 @@ interface VariantData {
   value_multiplier: string;
   custom_image_url: string;
   enabled: boolean;
-  has_sequential_id: bool;
+  has_sequential_id: boolean;
   sequential_id_counter: string;
   available_from: string;
   available_until: string;
@@ -394,8 +394,8 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(variantDropRate * 100)), 
-        txb.pure.u64(BigInt(variantMultiplier * 100)), 
+        txb.pure.u64(BigInt(parseInt(variantDropRate.toString()) * 100)), 
+        txb.pure.u64(BigInt(parseInt(variantMultiplier.toString()) * 100)), 
         txb.pure.string(variantImage),
         txb.pure.bool(hasSeqId), 
         txb.pure.u64(BigInt(useLimits ? availFrom : "0")), 
@@ -628,6 +628,36 @@ export default function AdminPage() {
       </div>
     );
   };
+
+  const ProtocolInspector = () => (
+    <Card className="glass-card border-white/10 flex flex-col h-[800px]">
+      <CardHeader className="border-b border-white/5">
+        <CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2">
+          <Eye className="w-4 h-4" /> Protocol Inspector
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0 flex-1 overflow-hidden">
+        <ScrollArea className="h-full p-4">
+          {isFetchingFullData ? (
+            <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
+              <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading...
+            </div>
+          ) : selectedBoxFullData ? (
+            <div className="space-y-6">
+              {renderRarityTier("Legend Rare", selectedBoxFullData.legend_rare_configs)}
+              {renderRarityTier("Ultra Rare", selectedBoxFullData.ultra_rare_configs)}
+              {renderRarityTier("SSR", selectedBoxFullData.ssr_configs)}
+              {renderRarityTier("Super Rare", selectedBoxFullData.super_rare_configs)}
+              {renderRarityTier("Rare", selectedBoxFullData.rare_configs)}
+              {renderRarityTier("Common", selectedBoxFullData.common_configs)}
+            </div>
+          ) : (
+            <div className="text-center py-20 text-xs text-muted-foreground">Select a draft to inspect</div>
+          )}
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="min-h-screen gradient-bg pb-20">
@@ -895,33 +925,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <Card className="glass-card border-white/10 flex flex-col h-[800px]">
-                  <CardHeader className="border-b border-white/5">
-                    <CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2">
-                      <Eye className="w-4 h-4" /> Protocol Inspector
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-0 flex-1 overflow-hidden">
-                    <ScrollArea className="h-full p-4">
-                      {isFetchingFullData ? (
-                        <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-                          <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading...
-                        </div>
-                      ) : selectedBoxFullData ? (
-                        <div className="space-y-6">
-                          {renderRarityTier("Legend Rare", selectedBoxFullData.legend_rare_configs)}
-                          {renderRarityTier("Ultra Rare", selectedBoxFullData.ultra_rare_configs)}
-                          {renderRarityTier("SSR", selectedBoxFullData.ssr_configs)}
-                          {renderRarityTier("Super Rare", selectedBoxFullData.super_rare_configs)}
-                          {renderRarityTier("Rare", selectedBoxFullData.rare_configs)}
-                          {renderRarityTier("Common", selectedBoxFullData.common_configs)}
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-xs text-muted-foreground">Select a draft to inspect</div>
-                      )}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
+                <ProtocolInspector />
               </div>
             </TabsContent>
 
@@ -1087,7 +1091,8 @@ export default function AdminPage() {
             </TabsContent>
 
             <TabsContent value="variants" className="space-y-8">
-               <Card className="glass-card border-primary/20 max-w-2xl mx-auto">
+              <div className="grid md:grid-cols-[1fr_350px] gap-8">
+                <Card className="glass-card border-primary/20">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-accent" /> Variant Lab
@@ -1191,7 +1196,10 @@ export default function AdminPage() {
                       Deploy Variant to Blockchain
                     </Button>
                   </CardContent>
-               </Card>
+                </Card>
+
+                <ProtocolInspector />
+              </div>
             </TabsContent>
           </Tabs>
         </div>
