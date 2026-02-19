@@ -3,23 +3,34 @@
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
 import { Button } from "@/components/ui/button";
-import { Search, RefreshCw, Info, Loader2, PackageSearch } from "lucide-react";
+import { Search, RefreshCw, Info, Loader2, PackageSearch, Filter, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Transaction } from "@mysten/sui/transactions";
-import { NFT } from "@/lib/mock-data";
+import { NFT, RARITY_LABELS } from "@/lib/mock-data";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function MarketplacePage() {
   const [selectedNft, setSelectedNft] = useState<any>(null);
   const [isPending, setIsPending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [listings, setListings] = useState<NFT[]>([]);
+  
+  // Filtering State
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRarities, setSelectedRarities] = useState<number[]>([]);
+  const [hpRange, setHpRange] = useState([0, 2500]);
+  const [atkRange, setAtkRange] = useState([0, 600]);
+  const [spdRange, setSpdRange] = useState([0, 400]);
 
   const suiClient = useSuiClient();
   const account = useCurrentAccount();
@@ -32,22 +43,18 @@ export default function MarketplacePage() {
   const fetchListings = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Query all ItemListed events for our NFT type
       const listedEvents = await suiClient.queryEvents({
         query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` },
       });
 
-      // 2. Query all Purchased events
       const purchasedEvents = await suiClient.queryEvents({
         query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` },
       });
 
-      // 3. Query all Delisted events
       const delistedEvents = await suiClient.queryEvents({
         query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` },
       });
 
-      // 4. Reconcile events to find active listings
       const soldIds = new Set(purchasedEvents.data.map((e: any) => e.parsedJson.id));
       const delistedIds = new Set(delistedEvents.data.map((e: any) => e.parsedJson.id));
       
@@ -65,13 +72,11 @@ export default function MarketplacePage() {
         return;
       }
 
-      // 5. Fetch full NFT data for active listings
       const nftObjects = await suiClient.multiGetObjects({
         ids: activeListingsMetadata.map(l => l.id),
         options: { showContent: true }
       });
 
-      // 6. Map to UI model
       const mappedListings: NFT[] = nftObjects.map((obj: any, idx) => {
         const fields = obj.data?.content?.fields;
         if (!fields) return null;
@@ -118,7 +123,6 @@ export default function MarketplacePage() {
 
     setIsPending(true);
     try {
-      // 1. Find buyer's kiosk
       const ownedCaps = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
@@ -134,7 +138,6 @@ export default function MarketplacePage() {
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // 2. Discover TransferPolicy
       const policyResponse = await suiClient.getOwnedObjects({
         owner: ADMIN_ADDRESS,
         filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
@@ -148,7 +151,6 @@ export default function MarketplacePage() {
         return;
       }
 
-      // 3. Build Transaction
       const txb = new Transaction();
       const [paymentCoin] = txb.splitCoins(txb.gas, [BigInt((item.price || 1) * 1_000_000_000)]);
 
@@ -182,10 +184,31 @@ export default function MarketplacePage() {
     }
   };
 
-  const filteredListings = listings.filter(l => 
-    l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    l.id.includes(searchTerm)
-  );
+  const filteredListings = useMemo(() => {
+    return listings.filter(l => {
+      const matchesSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase()) || l.id.includes(searchTerm);
+      const matchesRarity = selectedRarities.length === 0 || selectedRarities.includes(l.rarity);
+      const matchesHp = l.hp >= hpRange[0] && l.hp <= hpRange[1];
+      const matchesAtk = l.atk >= atkRange[0] && l.atk <= atkRange[1];
+      const matchesSpd = l.spd >= spdRange[0] && l.spd <= spdRange[1];
+      
+      return matchesSearch && matchesRarity && matchesHp && matchesAtk && matchesSpd;
+    });
+  }, [listings, searchTerm, selectedRarities, hpRange, atkRange, spdRange]);
+
+  const toggleRarity = (rarity: number) => {
+    setSelectedRarities(prev => 
+      prev.includes(rarity) ? prev.filter(r => r !== rarity) : [...prev, rarity]
+    );
+  };
+
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedRarities([]);
+    setHpRange([0, 2500]);
+    setAtkRange([0, 600]);
+    setSpdRange([0, 400]);
+  };
 
   return (
     <div className="min-h-screen gradient-bg">
@@ -196,32 +219,111 @@ export default function MarketplacePage() {
           <div className="flex-1">
             <h1 className="font-headline text-5xl font-bold mb-4">Marketplace</h1>
             <p className="text-muted-foreground text-lg">
-              Pure on-chain event discovery. Verified by Sui RPC.
+              Pure on-chain event discovery. Filter by rarity and specialized combat stats.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={fetchListings} disabled={isLoading} className="bg-white/5 border-white/10">
+            <Button variant="outline" onClick={fetchListings} disabled={isLoading} className="bg-white/5 border-white/10 h-11 px-6">
               <RefreshCw className={`w-4 h-4 mr-2 ${isLoading && 'animate-spin'}`} />
-              Refresh Events
+              Refresh Data
             </Button>
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[300px_1fr] gap-12">
+        <div className="grid lg:grid-cols-[320px_1fr] gap-12">
           <aside className="space-y-6">
-            <Card className="glass-card border-primary/20">
-              <CardContent className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <h3 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
-                    <Search className="w-4 h-4 text-accent" /> Filter Listings
-                  </h3>
+            <Card className="glass-card border-primary/20 sticky top-24">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm uppercase tracking-widest flex items-center justify-between">
+                  <span className="flex items-center gap-2"><SlidersHorizontal className="w-4 h-4 text-accent" /> Filter Station</span>
+                  <Button variant="ghost" size="sm" onClick={resetFilters} className="h-7 text-[10px] font-bold text-muted-foreground hover:text-accent">RESET</Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                {/* Search */}
+                <div className="space-y-3">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input 
+                      placeholder="Name or ID..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="bg-white/5 border-white/10 pl-9 text-xs"
+                    />
+                  </div>
                 </div>
-                <Input 
-                  placeholder="Filter by name or ID..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-white/5 border-white/10"
-                />
+
+                <Separator className="bg-white/5" />
+
+                {/* Rarity Checkboxes */}
+                <div className="space-y-4">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Rarity Tier</Label>
+                  <div className="grid gap-3">
+                    {[0, 1, 2, 3, 4, 5].map((r) => (
+                      <div key={r} className="flex items-center space-x-3 group cursor-pointer" onClick={() => toggleRarity(r)}>
+                        <Checkbox 
+                          checked={selectedRarities.includes(r)}
+                          onCheckedChange={() => toggleRarity(r)}
+                          className="border-white/20 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                        />
+                        <span className={cn(
+                          "text-xs font-medium transition-colors",
+                          selectedRarities.includes(r) ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                        )}>
+                          {RARITY_LABELS[r as keyof typeof RARITY_LABELS]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator className="bg-white/5" />
+
+                {/* Stat Sliders */}
+                <div className="space-y-8">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">HP Range</Label>
+                      <span className="text-[10px] font-mono text-accent">{hpRange[0]}-{hpRange[1]}</span>
+                    </div>
+                    <Slider 
+                      value={hpRange} 
+                      onValueChange={setHpRange} 
+                      max={2500} 
+                      step={10} 
+                      className="py-4"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ATK Range</Label>
+                      <span className="text-[10px] font-mono text-accent">{atkRange[0]}-{atkRange[1]}</span>
+                    </div>
+                    <Slider 
+                      value={atkRange} 
+                      onValueChange={setAtkRange} 
+                      max={600} 
+                      step={5} 
+                      className="py-4"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">SPD Range</Label>
+                      <span className="text-[10px] font-mono text-accent">{spdRange[0]}-{spdRange[1]}</span>
+                    </div>
+                    <Slider 
+                      value={spdRange} 
+                      onValueChange={setSpdRange} 
+                      max={400} 
+                      step={5} 
+                      className="py-4"
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -229,7 +331,7 @@ export default function MarketplacePage() {
               <div className="flex gap-3 items-start">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Discovery works by scanning Move events. It may take a few seconds for new listings to propagate through the RPC nodes.
+                  Refining filters helps you find specific stat spreads for competitive play.
                 </p>
               </div>
             </div>
@@ -239,16 +341,16 @@ export default function MarketplacePage() {
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-32 space-y-4">
                 <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">Querying Blockchain Events...</p>
+                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">Accessing Blockchain Registry...</p>
               </div>
             ) : filteredListings.length > 0 ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredListings.map((item) => (
-                  <div key={item.id} className="space-y-4">
+                  <div key={item.id} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <NFTCard nft={item} onClick={() => setSelectedNft(item)} showPrice />
                     <Button className="w-full h-12 glow-purple font-bold" onClick={() => handleBuyNft(item)} disabled={isPending}>
                       {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      Buy Now
+                      Acquire Character
                     </Button>
                   </div>
                 ))}
@@ -256,13 +358,14 @@ export default function MarketplacePage() {
             ) : (
               <div className="flex flex-col items-center justify-center py-32 glass-card rounded-3xl space-y-6 text-center px-12">
                 <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center">
-                  <PackageSearch className="w-10 h-10 text-muted-foreground opacity-50" />
+                  <PackageSearch className="w-10 h-10 text-muted-foreground opacity-30" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-bold">No Active Listings</h3>
+                  <h3 className="text-2xl font-bold">No Matches Found</h3>
                   <p className="text-muted-foreground max-w-sm mx-auto">
-                    Be the first to list a hero! Go to your inventory to put your characters on the market.
+                    Try adjusting your stat ranges or selecting different rarity tiers to broaden your search.
                   </p>
+                  <Button variant="link" onClick={resetFilters} className="text-accent font-bold mt-4">Clear All Filters</Button>
                 </div>
               </div>
             )}
