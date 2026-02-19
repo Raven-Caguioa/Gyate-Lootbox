@@ -14,6 +14,7 @@ import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_CAP } from "@/lib/sui-con
 import { useToast } from "@/hooks/use-toast";
 import { NFT } from "@/lib/mock-data";
 import { Transaction } from "@mysten/sui/transactions";
+import { cn } from "@/lib/utils";
 
 export default function InventoryPage() {
   const account = useCurrentAccount();
