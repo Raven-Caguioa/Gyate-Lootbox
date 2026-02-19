@@ -9,7 +9,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info } from "lucide-react";
+import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info, Wallet } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -66,6 +66,13 @@ interface LootboxFullData {
   legend_rare_configs: NFTTypeData[];
 }
 
+interface TreasuryStats {
+  balance: string;
+  totalFromLootboxes: string;
+  totalFromMarketplace: string;
+  totalWithdrawn: string;
+}
+
 export default function AdminPage() {
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
@@ -77,6 +84,11 @@ export default function AdminPage() {
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
   const [selectedBoxFullData, setSelectedBoxFullData] = useState<LootboxFullData | null>(null);
   const [isFetchingFullData, setIsFetchingFullData] = useState(false);
+
+  // --- Treasury State ---
+  const [treasuryStats, setTreasuryStats] = useState<TreasuryStats | null>(null);
+  const [isFetchingTreasury, setIsFetchingTreasury] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
 
   // --- Step 1: Draft State ---
   const [newBoxName, setNewBoxName] = useState("");
@@ -99,14 +111,34 @@ export default function AdminPage() {
   });
 
   // --- Step 3: Variants State ---
-  const [selectedNftForVariant, setSelectedNftForVariant] = useState<string>(""); // Format: "name|rarity"
+  const [selectedNftForVariant, setSelectedNftForVariant] = useState<string>(""); 
   const [variantName, setVariantName] = useState("");
   const [variantDropRate, setVariantDropRate] = useState("5"); // 5%
-  const [variantMultiplier, setVariantMultiplier] = useState("150"); // 1.5x (150 * 100 = 15000 BPS)
+  const [variantMultiplier, setVariantMultiplier] = useState("150"); // 1.5x
   const [variantImage, setVariantImage] = useState("");
 
-  // --- Treasury State ---
-  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const fetchTreasuryData = useCallback(async () => {
+    setIsFetchingTreasury(true);
+    try {
+      const obj = await suiClient.getObject({
+        id: TREASURY_POOL,
+        options: { showContent: true }
+      });
+      const fields = (obj.data?.content as any)?.fields;
+      if (fields) {
+        setTreasuryStats({
+          balance: fields.balance,
+          totalFromLootboxes: fields.total_from_lootboxes,
+          totalFromMarketplace: fields.total_from_marketplace,
+          totalWithdrawn: fields.total_withdrawn,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch treasury pool:", err);
+    } finally {
+      setIsFetchingTreasury(false);
+    }
+  }, [suiClient]);
 
   const fetchLootboxes = useCallback(async () => {
     setIsLoadingBoxes(true);
@@ -181,7 +213,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchLootboxes();
-  }, [fetchLootboxes]);
+    fetchTreasuryData();
+  }, [fetchLootboxes, fetchTreasuryData]);
 
   useEffect(() => {
     if (targetBoxId) {
@@ -272,7 +305,6 @@ export default function AdminPage() {
     setIsPending(true);
     const txb = new Transaction();
     
-    // Move function signature: (lootbox, nft_name, rarity, variant_name, drop_rate_pct, value_multiplier_pct, image_url, has_seq, from, until, max)
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_VARIANT}`,
       arguments: [
@@ -280,13 +312,13 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(variantDropRate)), // Passed as percentage (e.g. 5 for 5%)
-        txb.pure.u64(BigInt(variantMultiplier)), // Passed as percentage (e.g. 150 for 1.5x)
+        txb.pure.u64(BigInt(variantDropRate)), 
+        txb.pure.u64(BigInt(variantMultiplier)), 
         txb.pure.string(variantImage),
-        txb.pure.bool(true), // has_sequential_id
-        txb.pure.u64(BigInt(0)), // available_from
-        txb.pure.u64(BigInt(0)), // available_until
-        txb.pure.u64(BigInt(0)), // max_mints
+        txb.pure.bool(true), 
+        txb.pure.u64(BigInt(0)), 
+        txb.pure.u64(BigInt(0)), 
+        txb.pure.u64(BigInt(0)), 
       ],
     });
 
@@ -298,11 +330,10 @@ export default function AdminPage() {
         fetchFullBoxData(targetBoxId);
       },
       onError: (err) => { 
-        console.error("Add Variant Error:", err);
         toast({ 
           variant: "destructive", 
           title: "Failed to Add Variant", 
-          description: "Ensure the drop rate doesn't exceed 100% and you are the box admin." 
+          description: "Check if drop rate exceeds 100% or admin rights." 
         }); 
         setIsPending(false); 
       },
@@ -336,6 +367,7 @@ export default function AdminPage() {
 
   const handleWithdraw = () => {
     if (!withdrawAmount) return;
+    setIsPending(true);
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::${FUNCTIONS.WITHDRAW}`,
@@ -345,8 +377,16 @@ export default function AdminPage() {
       ],
     });
     signAndExecute({ transaction: txb }, {
-      onSuccess: () => toast({ title: "Success", description: "Funds withdrawn to admin wallet." }),
-      onError: (err) => toast({ variant: "destructive", title: "Failed", description: err.message }),
+      onSuccess: () => {
+        toast({ title: "Success", description: "Funds withdrawn to admin wallet." });
+        setIsPending(false);
+        setWithdrawAmount("");
+        setTimeout(fetchTreasuryData, 3000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Failed", description: err.message });
+        setIsPending(false);
+      },
     });
   };
 
@@ -415,12 +455,12 @@ export default function AdminPage() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={fetchLootboxes} 
-                disabled={isLoadingBoxes}
+                onClick={() => { fetchLootboxes(); fetchTreasuryData(); }} 
+                disabled={isLoadingBoxes || isFetchingTreasury}
                 className="bg-white/5 border-white/10"
               >
-                <RefreshCw className={cn("w-4 h-4 mr-2", isLoadingBoxes && "animate-spin")} />
-                Sync Drafts
+                <RefreshCw className={cn("w-4 h-4 mr-2", (isLoadingBoxes || isFetchingTreasury) && "animate-spin")} />
+                Sync Protocol
               </Button>
               <Badge className="bg-red-500/20 text-red-400 border-red-500/30 px-4 py-2 text-sm">
                 <Lock className="w-4 h-4 mr-2" /> Admin Session Active
@@ -618,46 +658,118 @@ export default function AdminPage() {
             </TabsContent>
 
             <TabsContent value="treasury" className="space-y-8">
-              <div className="grid md:grid-cols-2 gap-8">
-                <Card className="glass-card border-primary/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Coins className="w-5 h-5 text-accent" /> Treasury Pool
-                    </CardTitle>
-                    <CardDescription>Claim SUI from sales & fees</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                      <Label>Withdraw Amount (SUI)</Label>
-                      <Input type="number" placeholder="0.0" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} />
-                    </div>
-                    <Button className="w-full glow-purple font-bold" onClick={handleWithdraw}>
-                      Withdraw to Admin <ArrowUpRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </CardContent>
-                </Card>
+              <div className="grid md:grid-cols-[1fr_400px] gap-8">
+                <div className="space-y-8">
+                  <Card className="glass-card border-primary/20">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Coins className="w-5 h-5 text-accent" /> Treasury Withdrawal
+                      </CardTitle>
+                      <CardDescription>Claim SUI revenue collected by the platform</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <Label>Withdraw Amount (SUI)</Label>
+                        <div className="relative">
+                          <Input 
+                            type="number" 
+                            placeholder="0.0" 
+                            value={withdrawAmount} 
+                            onChange={(e) => setWithdrawAmount(e.target.value)} 
+                            className="pr-16"
+                          />
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground uppercase">SUI</div>
+                        </div>
+                        {treasuryStats && (
+                          <p className="text-[10px] text-muted-foreground px-1">
+                            Max available: <span className="text-foreground font-bold">{(parseInt(treasuryStats.balance) / 1000000000).toFixed(2)} SUI</span>
+                          </p>
+                        )}
+                      </div>
+                      <Button className="w-full h-12 glow-purple font-bold text-lg" onClick={handleWithdraw} disabled={isPending}>
+                        {isPending ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <ArrowUpRight className="w-5 h-5 mr-2" />}
+                        Execute Withdrawal
+                      </Button>
+                    </CardContent>
+                  </Card>
 
-                <Card className="glass-card border-primary/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Sparkles className="w-5 h-5 text-blue-400" /> $GYATE Distribution
-                    </CardTitle>
-                    <CardDescription>Mint tokens for giveaways/rewards</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Recipient Address</Label>
-                      <Input placeholder="0x..." />
+                  <Card className="glass-card border-primary/20">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Sparkles className="w-5 h-5 text-blue-400" /> $GYATE Distribution
+                      </CardTitle>
+                      <CardDescription>Mint tokens for giveaways or community rewards</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Recipient Address</Label>
+                        <Input placeholder="0x..." />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Amount (GYATE)</Label>
+                        <Input type="number" placeholder="1000" />
+                      </div>
+                      <Button className="w-full bg-blue-600 hover:bg-blue-500 font-bold h-12">
+                        Mint $GYATE Tokens
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Treasury Stats View */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-accent" /> On-Chain Balances
+                  </h3>
+                  <div className="grid gap-4">
+                    <Card className="bg-white/5 border-white/10 p-4">
+                      <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-1">Available to Claim</div>
+                      <div className="text-3xl font-bold font-headline flex items-baseline gap-2">
+                        {isFetchingTreasury ? "..." : treasuryStats ? (parseInt(treasuryStats.balance) / 1000000000).toFixed(2) : "0.00"}
+                        <span className="text-sm font-bold text-accent">SUI</span>
+                      </div>
+                    </Card>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <Card className="bg-white/5 border-white/10 p-4 space-y-1">
+                        <div className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Box Sales</div>
+                        <div className="text-lg font-bold">
+                          {isFetchingTreasury ? "..." : treasuryStats ? (parseInt(treasuryStats.totalFromLootboxes) / 1000000000).toFixed(2) : "0.00"}
+                        </div>
+                      </Card>
+                      <Card className="bg-white/5 border-white/10 p-4 space-y-1">
+                        <div className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Market Fees</div>
+                        <div className="text-lg font-bold">
+                          {isFetchingTreasury ? "..." : treasuryStats ? (parseInt(treasuryStats.totalFromMarketplace) / 1000000000).toFixed(2) : "0.00"}
+                        </div>
+                      </Card>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Amount (GYATE)</Label>
-                      <Input type="number" />
+
+                    <Card className="bg-white/5 border-white/10 p-4 space-y-2">
+                      <div className="flex justify-between items-center text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                        <span>Total Lifetime Volume</span>
+                        <span className="text-foreground">
+                          {treasuryStats ? ((parseInt(treasuryStats.totalFromLootboxes) + parseInt(treasuryStats.totalFromMarketplace)) / 1000000000).toFixed(2) : "0.00"} SUI
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                        <span>Total Claimed</span>
+                        <span className="text-foreground">
+                          {treasuryStats ? (parseInt(treasuryStats.totalWithdrawn) / 1000000000).toFixed(2) : "0.00"} SUI
+                        </span>
+                      </div>
+                    </Card>
+
+                    <div className="p-4 rounded-xl border border-white/5 bg-accent/5">
+                      <div className="flex gap-3 items-start">
+                        <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Treasury funds are strictly controlled by the pool administrator. All deposits from box sales and secondary marketplace fees are automatically routed here.
+                        </p>
+                      </div>
                     </div>
-                    <Button className="w-full bg-blue-600 hover:bg-blue-500 font-bold">
-                      Mint $GYATE Tokens
-                    </Button>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </div>
             </TabsContent>
 
@@ -723,11 +835,11 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <Button 
-                      className="w-full bg-pink-600 hover:bg-pink-500 font-bold"
+                      className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12"
                       onClick={handleAddVariant}
                       disabled={isPending || !targetBoxId || !selectedNftForVariant}
                     >
-                      {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                      {isPending ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <Sparkles className="w-5 h-5 mr-2" />}
                       Deploy Special Variant
                     </Button>
                   </CardContent>
