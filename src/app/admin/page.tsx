@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Image from "next/image";
 import { RARITY_LABELS } from "@/lib/mock-data";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface LootboxOption {
   id: string;
@@ -36,7 +35,7 @@ interface VariantData {
   value_multiplier: string;
   custom_image_url: string;
   enabled: boolean;
-  has_sequential_id: boolean;
+  has_sequential_id: bool;
   sequential_id_counter: string;
   available_from: string;
   available_until: string;
@@ -395,8 +394,8 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(variantDropRate)), 
-        txb.pure.u64(BigInt(variantMultiplier)), 
+        txb.pure.u64(BigInt(variantDropRate * 100)), 
+        txb.pure.u64(BigInt(variantMultiplier * 100)), 
         txb.pure.string(variantImage),
         txb.pure.bool(hasSeqId), 
         txb.pure.u64(BigInt(useLimits ? availFrom : "0")), 
@@ -517,7 +516,7 @@ export default function AdminPage() {
 
       const txb = new Transaction();
       txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::CLAIM_ACHIEVEMENT`, 
+        target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::admin_grant_achievement`, 
         arguments: [
            txb.object(ACHIEVEMENT_REGISTRY),
            txb.object(statsObjects.data[0].data!.objectId),
@@ -682,7 +681,7 @@ export default function AdminPage() {
                         </CardTitle>
                         <CardDescription>Setup core economic parameters</CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-4">
+                      <CardContent className="space-y-6">
                         <div className="space-y-2">
                           <Label>Box Name</Label>
                           <Input value={newBoxName} onChange={(e) => setNewBoxName(e.target.value)} placeholder="Genesis Crate" />
@@ -698,68 +697,66 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        <Accordion type="single" collapsible className="w-full">
-                          <AccordionItem value="pity" className="border-white/5">
-                            <AccordionTrigger className="text-xs uppercase font-bold tracking-widest text-muted-foreground hover:no-underline py-4">
-                              Advanced Pity Settings
-                            </AccordionTrigger>
-                            <AccordionContent className="space-y-4 pt-2">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-xs">Enable Pity Tracking</Label>
-                                <Switch checked={pityEnabled} onCheckedChange={setPityEnabled} />
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Rare @</Label>
-                                  <Input type="number" className="h-8 text-xs" value={pityThresholds.rare} onChange={(e) => setPityThresholds({...pityThresholds, rare: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Super Rare @</Label>
-                                  <Input type="number" className="h-8 text-xs" value={pityThresholds.sr} onChange={(e) => setPityThresholds({...pityThresholds, sr: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">SSR @</Label>
-                                  <Input type="number" className="h-8 text-xs" value={pityThresholds.ssr} onChange={(e) => setPityThresholds({...pityThresholds, ssr: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Ultra Rare @</Label>
-                                  <Input type="number" className="h-8 text-xs" value={pityThresholds.ur} onChange={(e) => setPityThresholds({...pityThresholds, ur: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Legend Rare @</Label>
-                                  <Input type="number" className="h-8 text-xs" value={pityThresholds.lr} onChange={(e) => setPityThresholds({...pityThresholds, lr: e.target.value})} />
-                                </div>
-                              </div>
-                            </AccordionContent>
-                          </AccordionItem>
+                        <div className="space-y-6 pt-2">
+                          <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                            <div className="space-y-0.5">
+                              <Label>Enable Pity Tracking</Label>
+                              <p className="text-[10px] text-muted-foreground">Guarantee rare drops after X failed pulls</p>
+                            </div>
+                            <Switch checked={pityEnabled} onCheckedChange={setPityEnabled} />
+                          </div>
 
-                          <AccordionItem value="multi" className="border-white/5">
-                            <AccordionTrigger className="text-xs uppercase font-bold tracking-widest text-muted-foreground hover:no-underline py-4">
-                              Multi-Open Settings
-                            </AccordionTrigger>
-                            <AccordionContent className="space-y-4 pt-2">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-xs">Enable Multi-Open</Label>
-                                <Switch checked={multiOpenEnabled} onCheckedChange={setMultiOpenEnabled} />
+                          {pityEnabled && (
+                            <div className="grid grid-cols-2 gap-3 p-4 bg-white/5 rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px]">Rare @</Label>
+                                <Input type="number" className="h-8 text-xs" value={pityThresholds.rare} onChange={(e) => setPityThresholds({...pityThresholds, rare: e.target.value})} />
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Batch Size</Label>
-                                  <Input type="number" className="h-8 text-xs" value={multiOpenSize} onChange={(e) => setMultiOpenSize(e.target.value)} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Guaranteed Rarity</Label>
-                                  <Select value={guaranteeRarity} onValueChange={setGuaranteeRarity}>
-                                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      {[0,1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{RARITY_LABELS[r as keyof typeof RARITY_LABELS]}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px]">Super Rare @</Label>
+                                <Input type="number" className="h-8 text-xs" value={pityThresholds.sr} onChange={(e) => setPityThresholds({...pityThresholds, sr: e.target.value})} />
                               </div>
-                            </AccordionContent>
-                          </AccordionItem>
-                        </Accordion>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px]">SSR @</Label>
+                                <Input type="number" className="h-8 text-xs" value={pityThresholds.ssr} onChange={(e) => setPityThresholds({...pityThresholds, ssr: e.target.value})} />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px]">Ultra Rare @</Label>
+                                <Input type="number" className="h-8 text-xs" value={pityThresholds.ur} onChange={(e) => setPityThresholds({...pityThresholds, ur: e.target.value})} />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px]">Legend Rare @</Label>
+                                <Input type="number" className="h-8 text-xs" value={pityThresholds.lr} onChange={(e) => setPityThresholds({...pityThresholds, lr: e.target.value})} />
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                            <div className="space-y-0.5">
+                              <Label>Enable Multi-Open</Label>
+                              <p className="text-[10px] text-muted-foreground">Allow summoning batches with guaranteed drop</p>
+                            </div>
+                            <Switch checked={multiOpenEnabled} onCheckedChange={setMultiOpenEnabled} />
+                          </div>
+
+                          {multiOpenEnabled && (
+                            <div className="grid grid-cols-2 gap-3 p-4 bg-white/5 rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px]">Batch Size</Label>
+                                <Input type="number" className="h-8 text-xs" value={multiOpenSize} onChange={(e) => setMultiOpenSize(e.target.value)} />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px]">Guaranteed Rarity</Label>
+                                <Select value={guaranteeRarity} onValueChange={setGuaranteeRarity}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {[0,1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{RARITY_LABELS[r as keyof typeof RARITY_LABELS]}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
                         <Button className="w-full glow-purple font-bold h-12" onClick={handleCreateDraft} disabled={isPending}>
                           Deploy Protocol Draft
@@ -814,41 +811,35 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        <Accordion type="single" collapsible className="w-full">
-                          <AccordionItem value="stats" className="border-white/5">
-                            <AccordionTrigger className="text-xs uppercase font-bold tracking-widest text-muted-foreground hover:no-underline py-4">
-                              Stat RNG Ranges
-                            </AccordionTrigger>
-                            <AccordionContent className="space-y-4 pt-2">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Min HP</Label>
-                                  <Input type="number" className="h-8 text-xs" value={stats.minHp} onChange={(e) => setStats({...stats, minHp: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Max HP</Label>
-                                  <Input type="number" className="h-8 text-xs" value={stats.maxHp} onChange={(e) => setStats({...stats, maxHp: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Min ATK</Label>
-                                  <Input type="number" className="h-8 text-xs" value={stats.minAtk} onChange={(e) => setStats({...stats, minAtk: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Max ATK</Label>
-                                  <Input type="number" className="h-8 text-xs" value={stats.maxAtk} onChange={(e) => setStats({...stats, maxAtk: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Min SPD</Label>
-                                  <Input type="number" className="h-8 text-xs" value={stats.minSpd} onChange={(e) => setStats({...stats, minSpd: e.target.value})} />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-[10px]">Max SPD</Label>
-                                  <Input type="number" className="h-8 text-xs" value={stats.maxSpd} onChange={(e) => setStats({...stats, maxSpd: e.target.value})} />
-                                </div>
-                              </div>
-                            </AccordionContent>
-                          </AccordionItem>
-                        </Accordion>
+                        <div className="space-y-4 pt-2 border-t border-white/5">
+                          <Label className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Stat RNG Ranges</Label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px]">Min HP</Label>
+                              <Input type="number" className="h-8 text-xs" value={stats.minHp} onChange={(e) => setStats({...stats, minHp: e.target.value})} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px]">Max HP</Label>
+                              <Input type="number" className="h-8 text-xs" value={stats.maxHp} onChange={(e) => setStats({...stats, maxHp: e.target.value})} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px]">Min ATK</Label>
+                              <Input type="number" className="h-8 text-xs" value={stats.minAtk} onChange={(e) => setStats({...stats, minAtk: e.target.value})} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px]">Max ATK</Label>
+                              <Input type="number" className="h-8 text-xs" value={stats.maxAtk} onChange={(e) => setStats({...stats, maxAtk: e.target.value})} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px]">Min SPD</Label>
+                              <Input type="number" className="h-8 text-xs" value={stats.minSpd} onChange={(e) => setStats({...stats, minSpd: e.target.value})} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px]">Max SPD</Label>
+                              <Input type="number" className="h-8 text-xs" value={stats.maxSpd} onChange={(e) => setStats({...stats, maxSpd: e.target.value})} />
+                            </div>
+                          </div>
+                        </div>
 
                         <Button variant="outline" className="w-full h-12" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
                           Register NFT Type
@@ -1011,7 +1002,7 @@ export default function AdminPage() {
                          <Select value={selectedGrantAch} onValueChange={setSelectedGrantAch}>
                            <SelectTrigger className="bg-white/5"><SelectValue placeholder="Choose achievement..." /></SelectTrigger>
                            <SelectContent>
-                             {achievements.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                             {achievements.map(a => <SelectItem key={a.id} value={a.id.toString()}>{a.name}</SelectItem>)}
                            </SelectContent>
                          </Select>
                        </div>
