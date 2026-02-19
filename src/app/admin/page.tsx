@@ -331,8 +331,8 @@ export default function AdminPage() {
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.CREATE_DRAFT}`,
       arguments: [
         txb.object(LOOTBOX_REGISTRY),
-        txb.pure.string(newBoxName),
-        txb.pure.u64(BigInt(parseFloat(newBoxPrice) * 1_000_000_000)),
+        txb.pure.string(newBoxName.trim()),
+        txb.pure.u64(BigInt(Math.floor(parseFloat(newBoxPrice) * 1_000_000_000))),
         txb.pure.u64(BigInt(newGyatePrice)),
         txb.pure.bool(pityEnabled),
         txb.pure.u64(BigInt(pityThresholds.common || "0")),
@@ -370,9 +370,9 @@ export default function AdminPage() {
       arguments: [
         txb.object(targetBoxId),
         txb.pure.u8(parseInt(nftRarity)),
-        txb.pure.string(nftName),
+        txb.pure.string(nftName.trim()),
         txb.pure.u64(BigInt(nftValue || "0")),
-        txb.pure.string(nftImage),
+        txb.pure.string(nftImage.trim()),
         txb.pure.u64(BigInt(stats.minHp || "0")), txb.pure.u64(BigInt(stats.maxHp || "0")),
         txb.pure.u64(BigInt(stats.minAtk || "0")), txb.pure.u64(BigInt(stats.maxAtk || "0")),
         txb.pure.u64(BigInt(stats.minSpd || "0")), txb.pure.u64(BigInt(stats.maxSpd || "0")),
@@ -396,7 +396,10 @@ export default function AdminPage() {
   const handleAddVariant = async () => {
     if (!variantBoxId || !selectedNftForVariant || !variantName) return;
     
-    const [name, rarity] = selectedNftForVariant.split(":::");
+    const parts = selectedNftForVariant.split(":::");
+    const name = parts[0];
+    const rarity = parts[1];
+
     if (!name || isNaN(parseInt(rarity))) {
       toast({ variant: "destructive", title: "Selection Error", description: "Invalid character selection format." });
       return;
@@ -414,12 +417,12 @@ export default function AdminPage() {
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_VARIANT}`,
       arguments: [
         txb.object(variantBoxId),
-        txb.pure.string(name),
+        txb.pure.string(name.trim()),
         txb.pure.u8(parseInt(rarity)),
-        txb.pure.string(variantName),
+        txb.pure.string(variantName.trim()),
         txb.pure.u64(BigInt(Math.floor(parseFloat(variantDropRate || "0") * 100))), 
         txb.pure.u64(BigInt(Math.floor(parseFloat(variantMultiplier || "0") * 100))), 
-        txb.pure.string(variantImage),
+        txb.pure.string(variantImage.trim()),
         txb.pure.bool(hasSeqId), 
         txb.pure.u64(BigInt(fromVal)), 
         txb.pure.u64(BigInt(untilVal)), 
@@ -497,10 +500,10 @@ export default function AdminPage() {
       target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::${FUNCTIONS.CREATE_ACHIEVEMENT}`,
       arguments: [
         txb.object(ACHIEVEMENT_REGISTRY),
-        txb.pure.string(newAch.name),
-        txb.pure.string(newAch.description),
-        txb.pure.string(newAch.imageUrl),
-        txb.pure.u64(BigInt(parseFloat(newAch.reward || "0") * 1_000_000_000)),
+        txb.pure.string(newAch.name.trim()),
+        txb.pure.string(newAch.description.trim()),
+        txb.pure.string(newAch.imageUrl.trim()),
+        txb.pure.u64(BigInt(Math.floor(parseFloat(newAch.reward || "0") * 1_000_000_000))),
         txb.pure.u8(parseInt(newAch.reqType || "0")),
         txb.pure.u64(BigInt(newAch.reqValue || "0")),
         txb.pure.u8(parseInt(newAch.reqRarity || "0")),
@@ -1139,7 +1142,7 @@ export default function AdminPage() {
                         target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::withdraw_gyate`,
                         arguments: [
                           txb.object(TREASURY_CAP),
-                          txb.pure.u64(BigInt(parseFloat(withdrawAmount) * 1_000_000_000)),
+                          txb.pure.u64(BigInt(Math.floor(parseFloat(withdrawAmount) * 1_000_000_000))),
                         ],
                       });
 
