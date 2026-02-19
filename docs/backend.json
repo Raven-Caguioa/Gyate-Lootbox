@@ -1,75 +1,92 @@
+
 {
   "entities": {
     "GyateNFT": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "GyateNFT",
       "type": "object",
-      "description": "Represents a single GyateGyate NFT, defining its identity, characteristics, stats, and economic properties. NFTs are designed to be managed through Kiosks.",
+      "description": "Represents a single GyateGyate NFT, defining its identity, characteristics, stats, and economic properties. Includes marketplace listing metadata.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the GyateNFT entity."
+          "description": "Unique identifier (Sui Object ID) for the NFT."
         },
         "name": {
           "type": "string",
-          "description": "The display name of the NFT type (e.g., 'GyateGyate Classic')."
+          "description": "The display name of the NFT type."
         },
         "rarity": {
           "type": "number",
-          "description": "The rarity tier of the NFT (0=Common, 1=Rare, 2=Super Rare, 3=SSR, 4=Ultra Rare, 5=Legend Rare)."
+          "description": "The rarity tier (0-5)."
         },
         "lootboxSource": {
           "type": "string",
-          "description": "The name of the lootbox from which this NFT was minted."
+          "description": "The source lootbox name."
         },
         "variantType": {
           "type": "string",
-          "description": "The specific variant type of the NFT (e.g., 'Normal', 'Shiny', 'Holographic')."
+          "description": "The specific variant (e.g., 'Normal', 'Shiny')."
         },
         "variantMultiplier": {
           "type": "number",
-          "description": "A multiplier (in Basis Points, 10000 = 1x) applied to the base value to determine actual value."
+          "description": "BPS multiplier for value."
         },
         "imageUrl": {
           "type": "string",
-          "description": "The URL to the NFT's image, which can be a custom variant image or the base NFT type image.",
+          "description": "The URL to the NFT's image.",
           "format": "uri"
         },
         "globalSequentialId": {
           "type": "number",
-          "description": "The Nth overall mint of this specific NFT type."
+          "description": "The Nth overall mint."
         },
         "variantSequentialId": {
           "type": "number",
-          "description": "The Nth mint of this specific variant. 0 if the variant does not track sequential IDs."
+          "description": "The Nth mint of this specific variant."
         },
         "variantHasId": {
           "type": "boolean",
-          "description": "Indicates whether this specific variant tracks sequential IDs."
+          "description": "Whether this variant tracks sequential IDs."
         },
         "baseValue": {
           "type": "number",
-          "description": "The base value of the NFT in MIST."
+          "description": "The base value in MIST."
         },
         "actualValue": {
           "type": "number",
-          "description": "The calculated actual value of the NFT, derived from base value and variant multiplier."
+          "description": "The calculated actual value in MIST."
         },
         "hp": {
           "type": "number",
-          "description": "The Hit Points (HP) stat of the NFT, rolled randomly at mint time."
+          "description": "Health Points."
         },
         "atk": {
           "type": "number",
-          "description": "The Attack (ATK) stat of the NFT, rolled randomly at mint time."
+          "description": "Attack stat."
         },
         "spd": {
           "type": "number",
-          "description": "The Speed (SPD) stat of the NFT, rolled randomly at mint time."
+          "description": "Speed stat."
         },
         "upgradeLevel": {
           "type": "number",
-          "description": "The current upgrade level of the NFT, for future game mechanics."
+          "description": "Current upgrade level."
+        },
+        "isListed": {
+          "type": "boolean",
+          "description": "Whether the item is currently listed on the marketplace."
+        },
+        "price": {
+          "type": "number",
+          "description": "The listing price in SUI."
+        },
+        "seller": {
+          "type": "string",
+          "description": "The Sui address of the seller."
+        },
+        "kioskId": {
+          "type": "string",
+          "description": "The Kiosk ID where the item is listed."
         }
       },
       "required": [
@@ -95,637 +112,57 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "LootboxConfig",
       "type": "object",
-      "description": "Configuration for a specific lootbox, including its content, pricing, and operational status. It is a shared object.",
+      "description": "Configuration for a specific lootbox.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the LootboxConfig entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The display name of the lootbox."
-        },
-        "price": {
-          "type": "number",
-          "description": "The SUI token price to open one lootbox."
-        },
-        "admin": {
-          "type": "string",
-          "description": "The address of the admin wallet that created and manages this lootbox."
-        },
-        "commonConfigs": {
-          "type": "array",
-          "description": "A list of NFT type configurations for the 'Common' rarity tier.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "rareConfigs": {
-          "type": "array",
-          "description": "A list of NFT type configurations for the 'Rare' rarity tier.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "superRareConfigs": {
-          "type": "array",
-          "description": "A list of NFT type configurations for the 'Super Rare' rarity tier.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "ssrConfigs": {
-          "type": "array",
-          "description": "A list of NFT type configurations for the 'SSR' rarity tier.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "ultraRareConfigs": {
-          "type": "array",
-          "description": "A list of NFT type configurations for the 'Ultra Rare' rarity tier.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "legendRareConfigs": {
-          "type": "array",
-          "description": "A list of NFT type configurations for the 'Legend Rare' rarity tier.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "totalOpened": {
-          "type": "number",
-          "description": "The total number of times this specific lootbox has been opened."
-        },
-        "isActive": {
-          "type": "boolean",
-          "description": "Indicates if the lootbox is currently active and can be opened."
-        },
-        "isSetupMode": {
-          "type": "boolean",
-          "description": "Indicates if the lootbox is currently in setup mode, allowing configuration changes."
-        },
-        "updateLogs": {
-          "type": "array",
-          "description": "A historical log of updates and administrative actions performed on this lootbox.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "pityEnabled": {
-          "type": "boolean",
-          "description": "Indicates if the pity system is enabled for this lootbox."
-        },
-        "pityRareThreshold": {
-          "type": "number",
-          "description": "The number of opens required to guarantee a 'Rare' NFT if pity is enabled."
-        },
-        "pitySuperRareThreshold": {
-          "type": "number",
-          "description": "The number of opens required to guarantee a 'Super Rare' NFT if pity is enabled."
-        },
-        "pityUltraRareThreshold": {
-          "type": "number",
-          "description": "The number of opens required to guarantee an 'Ultra Rare' NFT if pity is enabled."
-        }
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "admin": { "type": "string" },
+        "commonConfigs": { "type": "array", "items": { "type": "string" } },
+        "rareConfigs": { "type": "array", "items": { "type": "string" } },
+        "superRareConfigs": { "type": "array", "items": { "type": "string" } },
+        "ssrConfigs": { "type": "array", "items": { "type": "string" } },
+        "ultra_rare_configs": { "type": "array", "items": { "type": "string" } },
+        "legend_rare_configs": { "type": "array", "items": { "type": "string" } },
+        "totalOpened": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "isSetupMode": { "type": "boolean" },
+        "updateLogs": { "type": "array", "items": { "type": "string" } },
+        "pityEnabled": { "type": "boolean" },
+        "pityRareThreshold": { "type": "number" },
+        "pitySuperRareThreshold": { "type": "number" },
+        "pityUltraRareThreshold": { "type": "number" }
       },
-      "required": [
-        "id",
-        "name",
-        "price",
-        "admin",
-        "commonConfigs",
-        "rareConfigs",
-        "superRareConfigs",
-        "ssrConfigs",
-        "ultraRareConfigs",
-        "legendRareConfigs",
-        "totalOpened",
-        "isActive",
-        "isSetupMode",
-        "updateLogs",
-        "pityEnabled",
-        "pityRareThreshold",
-        "pitySuperRareThreshold",
-        "pityUltraRareThreshold"
-      ]
-    },
-    "NFTTypeConfig": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "NFTTypeConfig",
-      "type": "object",
-      "description": "Configuration for a specific NFT type within a rarity tier, including its base properties, variant settings, and stat ranges. These are embedded within a LootboxConfig.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the NFTTypeConfig entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the NFT type."
-        },
-        "baseValue": {
-          "type": "number",
-          "description": "The base value of NFTs of this type in MIST."
-        },
-        "baseImageUrl": {
-          "type": "string",
-          "description": "The base image URL for NFTs of this type.",
-          "format": "uri"
-        },
-        "globalMintCounter": {
-          "type": "number",
-          "description": "A counter for the total number of NFTs minted for this specific type across all variants."
-        },
-        "variantsEnabled": {
-          "type": "boolean",
-          "description": "Indicates if special variants are enabled for this NFT type (true if more than just 'Normal' variant exists)."
-        },
-        "variantConfigs": {
-          "type": "array",
-          "description": "A list of variant configurations available for this NFT type.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "minHp": {
-          "type": "number",
-          "description": "The minimum possible HP stat for NFTs of this type."
-        },
-        "maxHp": {
-          "type": "number",
-          "description": "The maximum possible HP stat for NFTs of this type."
-        },
-        "minAtk": {
-          "type": "number",
-          "description": "The minimum possible Attack stat for NFTs of this type."
-        },
-        "maxAtk": {
-          "type": "number",
-          "description": "The maximum possible Attack stat for NFTs of this type."
-        },
-        "minSpd": {
-          "type": "number",
-          "description": "The minimum possible Speed stat for NFTs of this type."
-        },
-        "maxSpd": {
-          "type": "number",
-          "description": "The maximum possible Speed stat for NFTs of this type."
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "baseValue",
-        "baseImageUrl",
-        "globalMintCounter",
-        "variantsEnabled",
-        "variantConfigs",
-        "minHp",
-        "maxHp",
-        "minAtk",
-        "maxAtk",
-        "minSpd",
-        "maxSpd"
-      ]
-    },
-    "VariantConfig": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "VariantConfig",
-      "type": "object",
-      "description": "Configuration for a specific variant of an NFT type, including drop rates, multipliers, and availability. These are embedded within an NFTTypeConfig.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the VariantConfig entity."
-        },
-        "variantName": {
-          "type": "string",
-          "description": "The display name of the variant (e.g., 'Normal', 'Shiny')."
-        },
-        "dropRate": {
-          "type": "number",
-          "description": "The drop rate of this variant within its NFT type's variant pool, in Basis Points (10000 = 100%)."
-        },
-        "valueMultiplier": {
-          "type": "number",
-          "description": "A multiplier (in Basis Points, 10000 = 1x) applied to the NFT's base value."
-        },
-        "customImageUrl": {
-          "type": "string",
-          "description": "A custom image URL for this variant. If empty, the NFT type's base image URL is used.",
-          "format": "uri"
-        },
-        "hasSequentialId": {
-          "type": "boolean",
-          "description": "Indicates if this variant tracks sequential IDs for each mint."
-        },
-        "sequentialIdCounter": {
-          "type": "number",
-          "description": "A counter for the sequential ID of this specific variant."
-        },
-        "enabled": {
-          "type": "boolean",
-          "description": "Indicates if this variant is currently enabled for dropping."
-        },
-        "availableFrom": {
-          "type": "number",
-          "description": "The epoch timestamp from which this variant becomes available (0 = always available)."
-        },
-        "availableUntil": {
-          "type": "number",
-          "description": "The epoch timestamp until which this variant is available (0 = never expires)."
-        },
-        "maxMints": {
-          "type": "number",
-          "description": "The maximum number of times this variant can be minted (0 = unlimited)."
-        },
-        "mintedCount": {
-          "type": "number",
-          "description": "The current count of how many NFTs of this variant have been minted."
-        }
-      },
-      "required": [
-        "id",
-        "variantName",
-        "dropRate",
-        "valueMultiplier",
-        "customImageUrl",
-        "hasSequentialId",
-        "sequentialIdCounter",
-        "enabled",
-        "availableFrom",
-        "availableUntil",
-        "maxMints",
-        "mintedCount"
-      ]
-    },
-    "UpdateLog": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "UpdateLog",
-      "type": "object",
-      "description": "An entry in the audit log for lootbox configuration changes. These are embedded within a LootboxConfig.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the UpdateLog entity."
-        },
-        "timestamp": {
-          "type": "number",
-          "description": "The epoch timestamp when the update occurred."
-        },
-        "admin": {
-          "type": "string",
-          "description": "The address of the admin who performed the update."
-        },
-        "description": {
-          "type": "string",
-          "description": "A description of the update."
-        },
-        "logType": {
-          "type": "string",
-          "description": "The type of log entry (e.g., 'VARIANT_ADDED', 'PRICE_CHANGE')."
-        }
-      },
-      "required": [
-        "id",
-        "timestamp",
-        "admin",
-        "description",
-        "logType"
-      ]
+      "required": ["id", "name", "price", "admin", "isActive", "isSetupMode"]
     },
     "LootboxRegistry": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "LootboxRegistry",
       "type": "object",
-      "description": "A global shared object that serves as a central registry for all created lootboxes, tracking their metadata and overall platform statistics.",
+      "description": "A global shared object that serves as a central registry for all created lootboxes.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the LootboxRegistry entity."
-        },
-        "lootboxes": {
-          "type": "array",
-          "description": "A collection of LootboxMeta objects, indexed by their ID. (Relationship: LootboxRegistry 1:N LootboxMeta)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "lootboxesByCreator": {
-          "type": "array",
-          "description": "A collection mapping creator addresses to a list of LootboxConfig IDs they created. (Relationship: Creator 1:N LootboxConfig)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "activeIds": {
-          "type": "array",
-          "description": "A list of IDs for currently active lootboxes. (Relationship: LootboxRegistry N:N LootboxConfig)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "allIds": {
-          "type": "array",
-          "description": "A comprehensive list of all LootboxConfig IDs ever created. (Relationship: LootboxRegistry N:N LootboxConfig)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "stats": {
-          "type": "string",
-          "description": "Aggregated global statistics for the entire platform."
-        }
+        "id": { "type": "string" },
+        "lootboxes": { "type": "array", "items": { "type": "string" } },
+        "activeIds": { "type": "array", "items": { "type": "string" } },
+        "allIds": { "type": "array", "items": { "type": "string" } },
+        "stats": { "type": "string" }
       },
-      "required": [
-        "id",
-        "lootboxes",
-        "lootboxesByCreator",
-        "activeIds",
-        "allIds",
-        "stats"
-      ]
-    },
-    "LootboxMeta": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "LootboxMeta",
-      "type": "object",
-      "description": "Metadata for a lootbox, stored within the LootboxRegistry, providing summary information without the full configuration details. These are embedded within a LootboxRegistry.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the LootboxMeta entity."
-        },
-        "lootboxId": {
-          "type": "string",
-          "description": "Reference to LootboxConfig. (Relationship: LootboxConfig 1:1 LootboxMeta)"
-        },
-        "name": {
-          "type": "string",
-          "description": "The display name of the lootbox."
-        },
-        "creator": {
-          "type": "string",
-          "description": "The address of the creator of this lootbox."
-        },
-        "price": {
-          "type": "number",
-          "description": "The SUI token price to open one lootbox."
-        },
-        "totalOpened": {
-          "type": "number",
-          "description": "The total number of times this specific lootbox has been opened."
-        },
-        "isActive": {
-          "type": "boolean",
-          "description": "Indicates if the lootbox is currently active."
-        },
-        "createdAt": {
-          "type": "number",
-          "description": "The epoch timestamp when the lootbox was created."
-        }
-      },
-      "required": [
-        "id",
-        "lootboxId",
-        "name",
-        "creator",
-        "price",
-        "totalOpened",
-        "isActive",
-        "createdAt"
-      ]
-    },
-    "GlobalStats": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "GlobalStats",
-      "type": "object",
-      "description": "Aggregated global statistics for the entire platform. These are embedded within a LootboxRegistry.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the GlobalStats entity."
-        },
-        "totalCreated": {
-          "type": "number",
-          "description": "The total number of lootboxes ever created."
-        },
-        "totalOpened": {
-          "type": "number",
-          "description": "The total number of lootboxes opened across all configurations."
-        },
-        "totalNftsMinted": {
-          "type": "number",
-          "description": "The total number of NFTs minted across all lootboxes."
-        },
-        "commonMinted": {
-          "type": "number",
-          "description": "The total number of 'Common' rarity NFTs minted."
-        },
-        "rareMinted": {
-          "type": "number",
-          "description": "The total number of 'Rare' rarity NFTs minted."
-        },
-        "superRareMinted": {
-          "type": "number",
-          "description": "The total number of 'Super Rare' rarity NFTs minted."
-        },
-        "ssrMinted": {
-          "type": "number",
-          "description": "The total number of 'SSR' rarity NFTs minted."
-        },
-        "ultraRareMinted": {
-          "type": "number",
-          "description": "The total number of 'Ultra Rare' rarity NFTs minted."
-        },
-        "legendRareMinted": {
-          "type": "number",
-          "description": "The total number of 'Legend Rare' rarity NFTs minted."
-        },
-        "totalRevenue": {
-          "type": "number",
-          "description": "The total revenue collected from lootbox sales and marketplace fees."
-        },
-        "mostOpenedId": {
-          "type": "string",
-          "description": "The ID of the LootboxConfig that has been opened the most times. (Relationship: LootboxConfig 1:1 GlobalStats)"
-        },
-        "mostOpenedCount": {
-          "type": "number",
-          "description": "The count of opens for the most opened lootbox."
-        }
-      },
-      "required": [
-        "id",
-        "totalCreated",
-        "totalOpened",
-        "totalNftsMinted",
-        "commonMinted",
-        "rareMinted",
-        "superRareMinted",
-        "ssrMinted",
-        "ultraRareMinted",
-        "legendRareMinted",
-        "totalRevenue",
-        "mostOpenedId",
-        "mostOpenedCount"
-      ]
+      "required": ["id", "lootboxes", "activeIds", "allIds", "stats"]
     },
     "UserProgress": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "UserProgress",
       "type": "object",
-      "description": "Tracks a user's progress towards pity guarantees for a specific lootbox. This object is non-transferable and owned by the user.",
+      "description": "Tracks a user's progress towards pity guarantees.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the UserProgress entity."
-        },
-        "user": {
-          "type": "string",
-          "description": "The address of the user who owns this progress tracker."
-        },
-        "lootboxId": {
-          "type": "string",
-          "description": "Reference to LootboxConfig. (Relationship: LootboxConfig 1:N UserProgress)"
-        },
-        "opensSinceRare": {
-          "type": "number",
-          "description": "The number of lootboxes opened since the last 'Rare' (or higher) NFT drop for this user and lootbox."
-        },
-        "opensSinceSuperRare": {
-          "type": "number",
-          "description": "The number of lootboxes opened since the last 'Super Rare' (or higher) NFT drop for this user and lootbox."
-        },
-        "opensSinceUltraRare": {
-          "type": "number",
-          "description": "The number of lootboxes opened since the last 'Ultra Rare' (or higher) NFT drop for this user and lootbox."
-        }
+        "id": { "type": "string" },
+        "user": { "type": "string" },
+        "lootboxId": { "type": "string" },
+        "opensSinceRare": { "type": "number" },
+        "opensSinceSuperRare": { "type": "number" },
+        "opensSinceUltraRare": { "type": "number" }
       },
-      "required": [
-        "id",
-        "user",
-        "lootboxId",
-        "opensSinceRare",
-        "opensSinceSuperRare",
-        "opensSinceUltraRare"
-      ]
-    },
-    "KioskRegistry": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "KioskRegistry",
-      "type": "object",
-      "description": "A global shared object that tracks which wallet addresses have created a Kiosk through the GyateGyate package, enforcing a one-Kiosk-per-user policy.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the KioskRegistry entity."
-        },
-        "kiosks": {
-          "type": "array",
-          "description": "A collection mapping user addresses to their respective Kiosk IDs. (Relationship: KioskRegistry 1:N UserKiosk)",
-          "items": {
-            "type": "string"
-          }
-        },
-        "totalKiosks": {
-          "type": "number",
-          "description": "The total number of Kiosks registered through the GyateGyate platform."
-        }
-      },
-      "required": [
-        "id",
-        "kiosks",
-        "totalKiosks"
-      ]
-    },
-    "KioskEntry": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "KioskEntry",
-      "type": "object",
-      "description": "A mapping of a user's address to their Kiosk ID, embedded within the KioskRegistry.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the KioskEntry entity."
-        },
-        "ownerAddress": {
-          "type": "string",
-          "description": "The address of the Kiosk owner."
-        },
-        "kioskId": {
-          "type": "string",
-          "description": "The ID of the Kiosk associated with the owner's address. (Relationship: KioskRegistry 1:1 Kiosk)"
-        }
-      },
-      "required": [
-        "id",
-        "ownerAddress",
-        "kioskId"
-      ]
-    },
-    "PolicyAdmin": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PolicyAdmin",
-      "type": "object",
-      "description": "A shared marker object holding the admin address for the TransferPolicy, primarily for administrative reference.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the PolicyAdmin entity."
-        },
-        "admin": {
-          "type": "string",
-          "description": "The address designated as the administrator for the TransferPolicy."
-        }
-      },
-      "required": [
-        "id",
-        "admin"
-      ]
-    },
-    "TreasuryPool": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TreasuryPool",
-      "type": "object",
-      "description": "A shared treasury object that collects SUI from lootbox sales and marketplace fees, managed by an admin for operational purposes.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the TreasuryPool entity."
-        },
-        "balance": {
-          "type": "number",
-          "description": "The current balance of SUI tokens held in the treasury pool. This represents the total value of the underlying SUI Balance object."
-        },
-        "admin": {
-          "type": "string",
-          "description": "The address of the admin authorized to manage the treasury pool."
-        },
-        "totalFromLootboxes": {
-          "type": "number",
-          "description": "The cumulative total SUI collected from lootbox sales."
-        },
-        "totalFromMarketplace": {
-          "type": "number",
-          "description": "The cumulative total SUI collected from marketplace fees."
-        },
-        "totalWithdrawn": {
-          "type": "number",
-          "description": "The cumulative total SUI withdrawn by the admin from the pool."
-        }
-      },
-      "required": [
-        "id",
-        "balance",
-        "admin",
-        "totalFromLootboxes",
-        "totalFromMarketplace",
-        "totalWithdrawn"
-      ]
+      "required": ["id", "user", "lootboxId", "opensSinceRare", "opensSinceSuperRare", "opensSinceUltraRare"]
     }
   },
   "auth": {
@@ -737,166 +174,22 @@
   "firestore": {
     "structure": [
       {
-        "path": "/platformAdmins/{adminId}",
-        "definition": {
-          "entityName": "platformAdmin",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Collection to define platform-level administrators. A document's existence at this path for a given UID grants administrative privileges over global shared objects. No specific schema, typically a marker document. Primarily for DBAC authorization.",
-          "params": [
-            {
-              "name": "adminId",
-              "description": "The unique ID (Firebase UID) of the platform administrator."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/lootboxRegistry/main",
-        "definition": {
-          "entityName": "LootboxRegistry",
-          "schema": {
-            "$ref": "#/backend/entities/LootboxRegistry"
-          },
-          "description": "The single, global Lootbox Registry document. Contains aggregated platform statistics and lists of active/all lootbox IDs. Publicly readable, writeable only by platform administrators. Includes embedded 'GlobalStats' object.",
-          "params": []
-        }
-      },
-      {
-        "path": "/lootboxRegistry/main/lootboxMetas/{lootboxId}",
-        "definition": {
-          "entityName": "LootboxMeta",
-          "schema": {
-            "$ref": "#/backend/entities/LootboxMeta"
-          },
-          "description": "Metadata for a specific lootbox, indexed under the global registry for easy lookup. Publicly readable for all players. Includes denormalized 'creator', 'price', 'total_opened', and 'isActive' for efficient queries and QAPs.",
-          "params": [
-            {
-              "name": "lootboxId",
-              "description": "The unique ID of the LootboxConfig."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/lootboxes/{lootboxId}",
-        "definition": {
-          "entityName": "LootboxConfig",
-          "schema": {
-            "$ref": "#/backend/entities/LootboxConfig"
-          },
-          "description": "Individual lootbox configuration document. Contains embedded 'NFTTypeConfig', 'VariantConfig', and 'UpdateLog' arrays. Readable by all when 'isActive' is true. Writeable only by the 'admin' field specified in the document (Authorization Independence). 'isSetupMode' is a critical state field for rule logic and admin capabilities.",
-          "params": [
-            {
-              "name": "lootboxId",
-              "description": "The unique ID of the lootbox."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/userProgress/{lootboxId}",
-        "definition": {
-          "entityName": "UserProgress",
-          "schema": {
-            "$ref": "#/backend/entities/UserProgress"
-          },
-          "description": "Tracks a user's pity progress for a specific lootbox. Owned by the user specified in '{userId}' (Path-Based Ownership). Read/writeable only by the owner (request.auth.uid == userId). Includes denormalized 'lootboxId' for clarity and query efficiency.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique ID of the user."
-            },
-            {
-              "name": "lootboxId",
-              "description": "The unique ID of the LootboxConfig this progress tracker is for."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/kioskRegistry/main",
-        "definition": {
-          "entityName": "KioskRegistry",
-          "schema": {
-            "$ref": "#/backend/entities/KioskRegistry"
-          },
-          "description": "The single, global Kiosk Registry document. Tracks the total number of Kiosks created on the platform. Publicly readable, writeable only by platform administrators.",
-          "params": []
-        }
-      },
-      {
-        "path": "/kioskRegistry/main/kioskEntries/{ownerAddress}",
-        "definition": {
-          "entityName": "KioskEntry",
-          "schema": {
-            "$ref": "#/backend/entities/KioskEntry"
-          },
-          "description": "Maps a user's blockchain address to their Kiosk ID. The document ID is the 'ownerAddress'. Publicly readable to check if a user has a Kiosk, writeable only by the 'ownerAddress' (request.auth.uid matching the ownerAddress in the document).",
-          "params": [
-            {
-              "name": "ownerAddress",
-              "description": "The blockchain address of the Kiosk owner."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/policyAdmin/main",
-        "definition": {
-          "entityName": "PolicyAdmin",
-          "schema": {
-            "$ref": "#/backend/entities/PolicyAdmin"
-          },
-          "description": "The single Policy Admin document. Stores the admin address for the TransferPolicy. Publicly readable, writeable only by the 'admin' field specified in the document.",
-          "params": []
-        }
-      },
-      {
-        "path": "/treasuryPool/main",
-        "definition": {
-          "entityName": "TreasuryPool",
-          "schema": {
-            "$ref": "#/backend/entities/TreasuryPool"
-          },
-          "description": "The single Treasury Pool document. Collects SUI from lootbox sales and marketplace fees. Publicly readable (balance), writeable only by the 'admin' field specified in the document.",
-          "params": []
-        }
-      },
-      {
         "path": "/nfts/{nftId}",
         "definition": {
           "entityName": "GyateNFT",
           "schema": {
             "$ref": "#/backend/entities/GyateNFT"
           },
-          "description": "Read-only mirror of GyateNFT data from the blockchain. Used for display, search, and the AI name suggestion feature. Not the canonical ownership record. Publicly readable, writeable only by Cloud Functions triggered by blockchain events.",
+          "description": "Marketplace index mirror for GyateNFTs.",
           "params": [
             {
               "name": "nftId",
-              "description": "The unique blockchain ID of the GyateNFT."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/creatorLootboxMappings/{creatorAddress}",
-        "definition": {
-          "entityName": "LootboxConfig",
-          "schema": {
-            "$ref": "#/backend/entities/LootboxConfig"
-          },
-          "description": "Maps a creator's blockchain address to a list of LootboxConfig IDs they have created. Document ID is the 'creatorAddress', and the document contains an array of 'lootboxIds'. Readable by all, writeable only by the creator (via Cloud Function) and platform administrators.",
-          "params": [
-            {
-              "name": "creatorAddress",
-              "description": "The blockchain address of the lootbox creator."
+              "description": "The Sui Object ID of the NFT."
             }
           ]
         }
       }
     ],
-    "reasoning": "The Firestore data structure is designed with a strong emphasis on Authorization Independence, Structural Segregation, and Query Accessibility (QAPs) to ensure a secure, scalable, and debuggable system. \n\n**Authorization Independence via Denormalization:**\n- LootboxConfig documents (/lootboxes/{lootboxId}) explicitly include an admin field. Since NFTTypeConfig, VariantConfig, and UpdateLog are modeled as embedded arrays within the LootboxConfig document (as per the provided JSON schema's vector interpretation), their access control is directly managed by the parent LootboxConfig document's admin field. This eliminates the need for get() calls in security rules to check parent ownership for nested configurations, greatly simplifying rule logic and enabling atomic updates.\n- UserProgress documents (/users/{userId}/userProgress/{lootboxId}) store the user ID directly in their path, ensuring path-based ownership. They also contain lootboxId, linking them to the specific lootbox without needing to query a parent. This allows for direct request.auth.uid == userId checks.\n- TreasuryPool and PolicyAdmin are single global documents (/treasuryPool/main, /policyAdmin/main) and each includes an admin field, centralizing their ownership and enabling direct request.auth.uid == resource.data.admin authorization checks.\n- KioskEntry documents (/kioskRegistry/main/kioskEntries/{ownerAddress}) use the ownerAddress as their document ID and include it as a field, allowing users to write to their own entry directly.\n\n**QAPs (Query Accessibility Patterns) & Structural Segregation:**\n- **Global Shared Objects:** LootboxRegistry (/lootboxRegistry/main), TreasuryPool (/treasuryPool/main), KioskRegistry (/kioskRegistry/main), and PolicyAdmin (/policyAdmin/main) are stored as single documents. These are designed to be publicly readable (for display, stats) and writeable only by designated administrators (identified by a dedicated /platformAdmins/{uid} collection or by the admin field within the document).\n- **Publicly Listable Data:** LootboxConfig documents (/lootboxes/{lootboxId}) are designed to be publicly readable when isActive for all players to view available lootboxes. The lootboxMetas subcollection under /lootboxRegistry/main provides an index of all lootboxes for discovery.\n- **User-Specific Data:** UserProgress is segregated into /users/{userId}/userProgress/{lootboxId}, ensuring each user's data is isolated and easily queryable by their own UID. This path-based ownership simplifies rules for private user data. KioskEntry in /kioskRegistry/main/kioskEntries/{ownerAddress} allows users to manage their own kiosk mapping.\n- **Indexing and Display:** /nfts/{nftId} serves as a read-only index for all minted GyateNFTs, facilitating display, search, and the AI name suggestion feature. This collection mirrors on-chain data and is designed for public read access, with writes strictly controlled by backend services (e.g., Cloud Functions reacting to blockchain events). It explicitly does not manage ownership for security, relying on the on-chain Kiosk system for canonical ownership.\n- **Admin-Controlled Mappings:** /creatorLootboxMappings/{creatorAddress} provides an efficient way to list lootboxes created by a specific address, adhering to QAPs by providing a direct lookup for creator-specific content.\n\n**Debuggability and Consistency:**\n- Semantic naming for paths and parameters ({userId}, {lootboxId}).\n- Clear segregation of data by security posture (public, user-owned, admin-only).\n- Use of embedded arrays for nested configurations (NFTTypeConfig, VariantConfig, UpdateLog) within LootboxConfig documents ensures all relevant data for a single lootbox configuration resides in one document, making it easier to reason about and debug its state and access rules."
+    "reasoning": "Using Firestore as a real-time indexing layer for the Sui Marketplace to enable efficient discovery of listed items across multiple Kiosks."
   }
 }

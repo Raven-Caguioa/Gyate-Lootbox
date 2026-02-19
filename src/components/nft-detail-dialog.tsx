@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -21,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
+import { useFirestore } from "@/firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 interface NFTDetailDialogProps {
   nft: NFT | null;
@@ -40,6 +43,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
   const { toast } = useToast();
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
+  const db = useFirestore();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
   if (!nft) return null;
@@ -84,7 +88,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
   };
 
   const handleListForSale = async () => {
-    if (!account || !listPrice) return;
+    if (!account || !listPrice || !db) return;
     setIsPending(true);
 
     try {
@@ -116,7 +120,29 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
       });
 
       signAndExecute({ transaction: txb }, {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // Update Firestore Marketplace Index
+          const nftRef = doc(db, "nfts", nft.id);
+          await setDoc(nftRef, {
+            id: nft.id,
+            name: nft.name,
+            rarity: nft.rarity,
+            lootboxSource: nft.lootboxSource,
+            variantType: nft.variantType,
+            imageUrl: nft.image,
+            globalSequentialId: nft.globalId,
+            hp: nft.hp,
+            atk: nft.atk,
+            spd: nft.spd,
+            baseValue: nft.baseValue,
+            actualValue: nft.actualValue,
+            upgradeLevel: 0,
+            isListed: true,
+            price: parseFloat(listPrice),
+            seller: account.address,
+            kioskId: kioskId
+          }, { merge: true });
+
           toast({ title: "Listed Successfully", description: `${nft.name} is now on the marketplace for ${listPrice} SUI.` });
           setIsPending(false);
           onOpenChange(false);
@@ -259,7 +285,8 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
                 Battle Mode
               </Button>
               {!isInventory && (
-                <Button className="flex-1 font-bold h-12 bg-accent hover:bg-accent/80">
+                <Button className="flex-1 font-bold h-12 bg-accent hover:bg-accent/80" disabled={isPending}>
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Buy Character
                 </Button>
               )}
