@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 interface GlobalStats {
   totalMinted: string;
   totalRevenue: string;
+  totalOpened: string;
   activeCount: number;
 }
 
@@ -29,7 +31,12 @@ interface ActiveBox {
 
 export default function Home() {
   const suiClient = useSuiClient();
-  const [stats, setStats] = useState<GlobalStats>({ totalMinted: "0", totalRevenue: "0", activeCount: 0 });
+  const [stats, setStats] = useState<GlobalStats>({ 
+    totalMinted: "0", 
+    totalRevenue: "0", 
+    totalOpened: "0",
+    activeCount: 0 
+  });
   const [boxes, setBoxes] = useState<ActiveBox[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -48,6 +55,7 @@ export default function Home() {
         setStats({
           totalMinted: s?.total_nfts_minted || "0",
           totalRevenue: s?.total_revenue || "0",
+          totalOpened: s?.total_opened || "0",
           activeCount: fields.active_ids?.length || 0,
         });
 
@@ -140,9 +148,9 @@ export default function Home() {
               </div>
               <div>
                 <div className="text-2xl font-bold font-headline">
-                   {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : stats.activeCount * 12 + 42}
+                   {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : stats.totalOpened}
                 </div>
-                <div className="text-xs text-muted-foreground uppercase font-bold tracking-widest">Active Players</div>
+                <div className="text-xs text-muted-foreground uppercase font-bold tracking-widest">Total Summons</div>
               </div>
               <div>
                 <div className="text-2xl font-bold font-headline">
