@@ -330,7 +330,7 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(variantDropRate)), // This is PCT in your contract now
+        txb.pure.u64(BigInt(variantDropRate)), 
         txb.pure.u64(BigInt(variantMultiplier)), 
         txb.pure.string(variantImage),
         txb.pure.bool(true), 
@@ -491,7 +491,7 @@ export default function AdminPage() {
                           </div>
                           <div className="space-y-2">
                             <Label>$GYATE Price</Label>
-                            <Input type="number" value={newGyateGyatePrice} onChange={(e) => setNewGyatePrice(e.target.value)} />
+                            <Input type="number" value={newGyatePrice} onChange={(e) => setNewGyatePrice(e.target.value)} />
                           </div>
                         </div>
 
