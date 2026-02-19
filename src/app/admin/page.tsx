@@ -10,7 +10,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Users, FileText, Gift, AlertCircle, Pause, Play, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Gift, AlertCircle, Pause, Play, ChevronRight } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -143,7 +143,7 @@ export default function AdminPage() {
   const [pityThresholds, setPityThresholds] = useState({
     common: "0", rare: "10", sr: "50", ssr: "75", ur: "150", lr: "500"
   });
-  const [multiOpenEnabled, setMultiOpenEnabled] = useState(true);
+  const [multiOpenEnabled, setMultiOpenEnabled] = useState(false);
   const [multiOpenSize, setMultiOpenSize] = useState("10");
   const [guaranteeRarity, setGuaranteeRarity] = useState("1");
 
@@ -160,6 +160,7 @@ export default function AdminPage() {
   });
 
   // --- Step 3: Variants State ---
+  const [variantBoxId, setVariantBoxId] = useState("");
   const [selectedNftForVariant, setSelectedNftForVariant] = useState<string>(""); 
   const [variantName, setVariantName] = useState("");
   const [variantDropRate, setVariantDropRate] = useState("5"); 
@@ -292,12 +293,13 @@ export default function AdminPage() {
   }, [fetchLootboxes, fetchTreasuryData, fetchAchievements]);
 
   useEffect(() => {
-    if (targetBoxId) {
-      fetchFullBoxData(targetBoxId);
+    const id = targetBoxId || variantBoxId;
+    if (id) {
+      fetchFullBoxData(id);
     } else {
       setSelectedBoxFullData(null);
     }
-  }, [targetBoxId, fetchFullBoxData]);
+  }, [targetBoxId, variantBoxId, fetchFullBoxData]);
 
   const allAvailableNfts = useMemo(() => {
     if (!selectedBoxFullData) return [];
@@ -382,7 +384,7 @@ export default function AdminPage() {
   };
 
   const handleAddVariant = async () => {
-    if (!targetBoxId || !selectedNftForVariant || !variantName) return;
+    if (!variantBoxId || !selectedNftForVariant || !variantName) return;
     const [name, rarity] = selectedNftForVariant.split("|");
     setIsPending(true);
     const txb = new Transaction();
@@ -390,7 +392,7 @@ export default function AdminPage() {
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_VARIANT}`,
       arguments: [
-        txb.object(targetBoxId),
+        txb.object(variantBoxId),
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
@@ -409,10 +411,10 @@ export default function AdminPage() {
         toast({ title: "Variant Added", description: `${variantName} variant deployed.` });
         setIsPending(false);
         setVariantName("");
-        fetchFullBoxData(targetBoxId);
+        fetchFullBoxData(variantBoxId);
       },
       onError: (err) => { 
-        toast({ variant: "destructive", title: "Failed", description: "Check variant parameters. Ensure base NFT exists in the draft." }); 
+        toast({ variant: "destructive", title: "Failed", description: "Base character not found in draft or box is already active." }); 
         setIsPending(false); 
       },
     });
@@ -991,7 +993,7 @@ export default function AdminPage() {
 
                   <Card className="glass-card border-accent/20">
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
+                      <CardTitle className="flex items-center gap-2 text-lg">
                         <Gift className="w-5 h-5 text-accent" /> Manual Grant
                       </CardTitle>
                       <CardDescription>Award a badge directly to a player wallet</CardDescription>
@@ -1019,7 +1021,7 @@ export default function AdminPage() {
 
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                    <FileText className="w-4 h-4" /> Registry Index
+                    <ImageIcon className="w-4 h-4" /> Registry Index
                   </h3>
                   <ScrollArea className="h-[800px] pr-4">
                     <div className="grid gap-4">
@@ -1102,17 +1104,21 @@ export default function AdminPage() {
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Target Box</Label>
-                        <Select value={targetBoxId} onValueChange={setTargetBoxId}>
-                          <SelectTrigger className="bg-white/5"><SelectValue placeholder="Select box..." /></SelectTrigger>
+                        <Label>Target Box (Drafts Only)</Label>
+                        <Select value={variantBoxId} onValueChange={setVariantBoxId}>
+                          <SelectTrigger className="bg-white/5">
+                            <SelectValue placeholder="Select box..." />
+                          </SelectTrigger>
                           <SelectContent>
-                            {myLootboxes.map(box => <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>)}
+                            {myLootboxes.filter(b => b.isSetup).map(box => (
+                              <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>NFT Selection</Label>
-                        <Select value={selectedNftForVariant} onValueChange={setSelectedNftForVariant} disabled={!targetBoxId}>
+                        <Label>Character Selection</Label>
+                        <Select value={selectedNftForVariant} onValueChange={setSelectedNftForVariant} disabled={!variantBoxId}>
                           <SelectTrigger className="bg-white/5">
                             <SelectValue placeholder="Select character..." />
                           </SelectTrigger>
@@ -1191,7 +1197,7 @@ export default function AdminPage() {
                       )}
                     </div>
 
-                    <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12 glow-violet" onClick={handleAddVariant} disabled={isPending || !targetBoxId || !selectedNftForVariant}>
+                    <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12 glow-violet" onClick={handleAddVariant} disabled={isPending || !variantBoxId || !selectedNftForVariant}>
                       {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
                       Deploy Variant to Blockchain
                     </Button>
