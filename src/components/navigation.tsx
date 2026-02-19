@@ -1,8 +1,9 @@
+
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wallet, Store, ShoppingBag, LayoutDashboard, Coins, ShieldAlert } from "lucide-react";
+import { Wallet, Store, ShoppingBag, LayoutDashboard, Coins, ShieldAlert, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
@@ -16,9 +17,10 @@ export function Navigation() {
     { href: "/shop", label: "Shop", icon: Store },
     { href: "/inventory", label: "Inventory", icon: ShoppingBag },
     { href: "/marketplace", label: "Market", icon: Coins },
+    { href: "/profile", label: "Account", icon: User },
   ];
 
-  // Updated to match the admin address from your Move.toml
+  // Admin address from Move configuration
   const isAdmin = account?.address === "0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a"; 
 
   return (
