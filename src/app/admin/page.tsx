@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -9,7 +10,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info, Wallet } from "lucide-react";
+import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info, Wallet, Layers } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -54,10 +55,13 @@ interface LootboxFullData {
   id: string;
   name: string;
   price: string;
+  gyate_price: string;
   admin: string;
   is_active: boolean;
   is_setup_mode: boolean;
   pity_enabled: boolean;
+  multi_open_enabled: boolean;
+  multi_open_size: string;
   common_configs: NFTTypeData[];
   rare_configs: NFTTypeData[];
   super_rare_configs: NFTTypeData[];
@@ -92,17 +96,21 @@ export default function AdminPage() {
 
   // --- Step 1: Draft State ---
   const [newBoxName, setNewBoxName] = useState("");
-  const [newBoxPrice, setNewBoxPrice] = useState("");
+  const [newBoxPrice, setNewBoxPrice] = useState("1");
+  const [newGyatePrice, setNewGyatePrice] = useState("100");
   const [pityEnabled, setPityEnabled] = useState(false);
-  const [pityRare, setPityRare] = useState("10");
-  const [pitySuperRare, setPitySuperRare] = useState("50");
-  const [pityUltraRare, setPityUltraRare] = useState("100");
+  const [pityThresholds, setPityThresholds] = useState({
+    common: "0", rare: "10", sr: "50", ssr: "75", ur: "150", lr: "500"
+  });
+  const [multiOpenEnabled, setMultiOpenEnabled] = useState(true);
+  const [multiOpenSize, setMultiOpenSize] = useState("10");
+  const [guaranteeRarity, setGuaranteeRarity] = useState("1");
 
   // --- Step 2: Add NFT Type State ---
   const [targetBoxId, setTargetBoxId] = useState("");
   const [nftRarity, setNftRarity] = useState("0");
   const [nftName, setNftName] = useState("");
-  const [nftValue, setNftValue] = useState("1000000000"); // 1 SUI in MIST
+  const [nftValue, setNftValue] = useState("1000000000"); 
   const [nftImage, setNftImage] = useState("");
   const [stats, setStats] = useState({
     minHp: "100", maxHp: "200",
@@ -113,8 +121,8 @@ export default function AdminPage() {
   // --- Step 3: Variants State ---
   const [selectedNftForVariant, setSelectedNftForVariant] = useState<string>(""); 
   const [variantName, setVariantName] = useState("");
-  const [variantDropRate, setVariantDropRate] = useState("5"); // 5%
-  const [variantMultiplier, setVariantMultiplier] = useState("150"); // 1.5x
+  const [variantDropRate, setVariantDropRate] = useState("5"); 
+  const [variantMultiplier, setVariantMultiplier] = useState("150"); 
   const [variantImage, setVariantImage] = useState("");
 
   const fetchTreasuryData = useCallback(async () => {
@@ -192,10 +200,13 @@ export default function AdminPage() {
           id,
           name: fields.name,
           price: fields.price,
+          gyate_price: fields.gyate_price,
           admin: fields.admin,
           is_active: fields.is_active,
           is_setup_mode: fields.is_setup_mode,
           pity_enabled: fields.pity_enabled,
+          multi_open_enabled: fields.multi_open_enabled,
+          multi_open_size: fields.multi_open_size,
           common_configs: fields.common_configs.map((c: any) => ({ ...c.fields, rarity: 0 })),
           rare_configs: fields.rare_configs.map((c: any) => ({ ...c.fields, rarity: 1 })),
           super_rare_configs: fields.super_rare_configs.map((c: any) => ({ ...c.fields, rarity: 2 })),
@@ -246,16 +257,23 @@ export default function AdminPage() {
         txb.object(LOOTBOX_REGISTRY),
         txb.pure.string(newBoxName),
         txb.pure.u64(BigInt(parseFloat(newBoxPrice) * 1_000_000_000)),
+        txb.pure.u64(BigInt(newGyatePrice)),
         txb.pure.bool(pityEnabled),
-        txb.pure.u64(BigInt(pityRare)),
-        txb.pure.u64(BigInt(pitySuperRare)),
-        txb.pure.u64(BigInt(pityUltraRare)),
+        txb.pure.u64(BigInt(pityThresholds.common)),
+        txb.pure.u64(BigInt(pityThresholds.rare)),
+        txb.pure.u64(BigInt(pityThresholds.sr)),
+        txb.pure.u64(BigInt(pityThresholds.ssr)),
+        txb.pure.u64(BigInt(pityThresholds.ur)),
+        txb.pure.u64(BigInt(pityThresholds.lr)),
+        txb.pure.bool(multiOpenEnabled),
+        txb.pure.u64(BigInt(multiOpenSize)),
+        txb.pure.u8(parseInt(guaranteeRarity)),
       ],
     });
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Draft Created", description: "Lootbox draft successfully deployed on-chain." });
+        toast({ title: "Draft Created", description: "Advanced lootbox draft successfully deployed." });
         setIsPending(false);
         setNewBoxName("");
         setTimeout(fetchLootboxes, 3000); 
@@ -287,7 +305,7 @@ export default function AdminPage() {
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "NFT Type Added", description: `${nftName} added to rarity tier ${nftRarity}.` });
+        toast({ title: "NFT Type Added", description: `${nftName} added to registry.` });
         setIsPending(false);
         setNftName("");
         fetchFullBoxData(targetBoxId);
@@ -312,7 +330,7 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(variantDropRate)), 
+        txb.pure.u64(BigInt(variantDropRate)), // This is PCT in your contract now
         txb.pure.u64(BigInt(variantMultiplier)), 
         txb.pure.string(variantImage),
         txb.pure.bool(true), 
@@ -324,17 +342,13 @@ export default function AdminPage() {
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Variant Added", description: `${variantName} variant added to ${name}.` });
+        toast({ title: "Variant Added", description: `${variantName} variant deployed.` });
         setIsPending(false);
         setVariantName("");
         fetchFullBoxData(targetBoxId);
       },
       onError: (err) => { 
-        toast({ 
-          variant: "destructive", 
-          title: "Failed to Add Variant", 
-          description: "Check if drop rate exceeds 100% or admin rights." 
-        }); 
+        toast({ variant: "destructive", title: "Failed", description: "Check drop rates." }); 
         setIsPending(false); 
       },
     });
@@ -354,38 +368,13 @@ export default function AdminPage() {
 
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Lootbox Activated!", description: "Box is now live for all players." });
+        toast({ title: "Lootbox Activated!", description: "Protocol updated successfully." });
         setIsPending(false);
         setTimeout(fetchLootboxes, 3000);
       },
       onError: (err) => { 
         toast({ variant: "destructive", title: "Activation Failed", description: err.message }); 
         setIsPending(false); 
-      },
-    });
-  };
-
-  const handleWithdraw = () => {
-    if (!withdrawAmount) return;
-    setIsPending(true);
-    const txb = new Transaction();
-    txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::${FUNCTIONS.WITHDRAW}`,
-      arguments: [
-        txb.object(TREASURY_POOL),
-        txb.pure.u64(BigInt(parseFloat(withdrawAmount) * 1_000_000_000)),
-      ],
-    });
-    signAndExecute({ transaction: txb }, {
-      onSuccess: () => {
-        toast({ title: "Success", description: "Funds withdrawn to admin wallet." });
-        setIsPending(false);
-        setWithdrawAmount("");
-        setTimeout(fetchTreasuryData, 3000);
-      },
-      onError: (err) => {
-        toast({ variant: "destructive", title: "Failed", description: err.message });
-        setIsPending(false);
       },
     });
   };
@@ -448,8 +437,8 @@ export default function AdminPage() {
         <div className="max-w-6xl mx-auto space-y-12">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div>
-              <h1 className="font-headline text-5xl font-bold mb-4 tracking-tight">Platform Forge</h1>
-              <p className="text-muted-foreground text-lg">On-chain protocol management for the GyateGyate ecosystem.</p>
+              <h1 className="font-headline text-5xl font-bold mb-4 tracking-tight">Protocol Admin</h1>
+              <p className="text-muted-foreground text-lg">Manage lootboxes, variants, and the $GYATE economy.</p>
             </div>
             <div className="flex items-center gap-3">
               <Button 
@@ -460,11 +449,8 @@ export default function AdminPage() {
                 className="bg-white/5 border-white/10"
               >
                 <RefreshCw className={cn("w-4 h-4 mr-2", (isLoadingBoxes || isFetchingTreasury) && "animate-spin")} />
-                Sync Protocol
+                Sync
               </Button>
-              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 px-4 py-2 text-sm">
-                <Lock className="w-4 h-4 mr-2" /> Admin Session Active
-              </Badge>
             </div>
           </div>
 
@@ -474,7 +460,7 @@ export default function AdminPage() {
                 <Package className="w-4 h-4 mr-2" /> Lootbox Factory
               </TabsTrigger>
               <TabsTrigger value="treasury" className="px-8 h-full data-[state=active]:bg-primary">
-                <Coins className="w-4 h-4 mr-2" /> Treasury & Tokens
+                <Coins className="w-4 h-4 mr-2" /> Treasury
               </TabsTrigger>
               <TabsTrigger value="variants" className="px-8 h-full data-[state=active]:bg-primary">
                 <Sparkles className="w-4 h-4 mr-2" /> Variant Lab
@@ -491,17 +477,24 @@ export default function AdminPage() {
                         <CardTitle className="flex items-center gap-2 text-lg">
                           <Badge className="bg-primary/20 text-primary">01</Badge> Create Draft
                         </CardTitle>
-                        <CardDescription>Initiate a new box on-chain</CardDescription>
+                        <CardDescription>Setup core economic parameters</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-2">
                           <Label>Box Name</Label>
-                          <Input value={newBoxName} onChange={(e) => setNewBoxName(e.target.value)} placeholder="e.g. Genesis Crate" />
+                          <Input value={newBoxName} onChange={(e) => setNewBoxName(e.target.value)} placeholder="Genesis Crate" />
                         </div>
-                        <div className="space-y-2">
-                          <Label>Price (SUI)</Label>
-                          <Input type="number" value={newBoxPrice} onChange={(e) => setNewBoxPrice(e.target.value)} placeholder="0.5" />
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>SUI Price</Label>
+                            <Input type="number" value={newBoxPrice} onChange={(e) => setNewBoxPrice(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>$GYATE Price</Label>
+                            <Input type="number" value={newGyateGyatePrice} onChange={(e) => setNewGyatePrice(e.target.value)} />
+                          </div>
                         </div>
+
                         <div className="pt-4 border-t border-white/5 space-y-4">
                           <div className="flex items-center justify-between">
                             <Label className="flex items-center gap-2">Pity System</Label>
@@ -509,23 +502,42 @@ export default function AdminPage() {
                           </div>
                           {pityEnabled && (
                             <div className="grid grid-cols-3 gap-2">
+                              {Object.keys(pityThresholds).map((rarity) => (
+                                <div key={rarity} className="space-y-1">
+                                  <Label className="text-[10px] uppercase">{rarity}</Label>
+                                  <Input 
+                                    value={pityThresholds[rarity as keyof typeof pityThresholds]} 
+                                    onChange={(e) => setPityThresholds({...pityThresholds, [rarity]: e.target.value})} 
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between">
+                            <Label className="flex items-center gap-2">Multi-Open (Batching)</Label>
+                            <Switch checked={multiOpenEnabled} onCheckedChange={setMultiOpenEnabled} />
+                          </div>
+                          {multiOpenEnabled && (
+                            <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-1">
-                                <Label className="text-[10px]">Rare</Label>
-                                <Input value={pityRare} onChange={(e) => setPityRare(e.target.value)} />
+                                <Label className="text-[10px]">Batch Size</Label>
+                                <Input value={multiOpenSize} onChange={(e) => setMultiOpenSize(e.target.value)} />
                               </div>
                               <div className="space-y-1">
-                                <Label className="text-[10px]">SR</Label>
-                                <Input value={pitySuperRare} onChange={(e) => setPitySuperRare(e.target.value)} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-[10px]">UR</Label>
-                                <Input value={pityUltraRare} onChange={(e) => setPityUltraRare(e.target.value)} />
+                                <Label className="text-[10px]">Guaranteed Rarity</Label>
+                                <Select value={guaranteeRarity} onValueChange={setGuaranteeRarity}>
+                                  <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {[1,2,3,4,5].map(r => <SelectItem key={r} value={r.toString()}>{RARITY_LABELS[r as keyof typeof RARITY_LABELS]}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
                               </div>
                             </div>
                           )}
                         </div>
-                        <Button className="w-full glow-purple font-bold mt-4" onClick={handleCreateDraft} disabled={isPending}>
-                          Deploy Draft Crate
+                        <Button className="w-full glow-purple font-bold" onClick={handleCreateDraft} disabled={isPending}>
+                          Deploy Protocol Draft
                         </Button>
                       </CardContent>
                     </Card>
@@ -536,27 +548,25 @@ export default function AdminPage() {
                         <CardTitle className="flex items-center gap-2 text-lg">
                           <Badge className="bg-primary/20 text-primary">02</Badge> Add Contents
                         </CardTitle>
-                        <CardDescription>Define NFT types for your drafts</CardDescription>
+                        <CardDescription>Populate rarity tiers</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-2">
                           <Label>Select Draft Box</Label>
                           <Select value={targetBoxId} onValueChange={setTargetBoxId}>
                             <SelectTrigger className="bg-white/5 border-white/10">
-                              <SelectValue placeholder={isLoadingBoxes ? "Loading..." : "Choose a draft..."} />
+                              <SelectValue placeholder="Choose a draft..." />
                             </SelectTrigger>
                             <SelectContent>
                               {myLootboxes.filter(b => b.isSetup).map(box => (
-                                <SelectItem key={box.id} value={box.id}>
-                                  {box.name} <span className="text-[10px] opacity-50 ml-2">({box.id.slice(0,6)}...)</span>
-                                </SelectItem>
+                                <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-2">
-                            <Label>Rarity (0-5)</Label>
+                            <Label>Rarity</Label>
                             <Select value={nftRarity} onValueChange={setNftRarity}>
                               <SelectTrigger className="bg-white/5"><SelectValue /></SelectTrigger>
                               <SelectContent>
@@ -574,21 +584,15 @@ export default function AdminPage() {
                           <Input value={nftImage} onChange={(e) => setNftImage(e.target.value)} />
                         </div>
                         <div className="grid grid-cols-3 gap-2">
-                          <div className="space-y-1"><Label className="text-[10px]">HP Range</Label><Input placeholder="100-200" onChange={(e) => {
-                            const parts = e.target.value.split("-");
-                            if(parts.length === 2) setStats({...stats, minHp: parts[0], maxHp: parts[1]});
+                          <div className="space-y-1"><Label className="text-[10px]">HP</Label><Input placeholder="Min-Max" onChange={(e) => {
+                            const [min, max] = e.target.value.split("-");
+                            if(min && max) setStats({...stats, minHp: min, maxHp: max});
                           }} /></div>
-                          <div className="space-y-1"><Label className="text-[10px]">ATK Range</Label><Input placeholder="10-20" onChange={(e) => {
-                            const parts = e.target.value.split("-");
-                            if(parts.length === 2) setStats({...stats, minAtk: parts[0], maxAtk: parts[1]});
-                          }} /></div>
-                          <div className="space-y-1"><Label className="text-[10px]">SPD Range</Label><Input placeholder="5-15" onChange={(e) => {
-                            const parts = e.target.value.split("-");
-                            if(parts.length === 2) setStats({...stats, minSpd: parts[0], maxSpd: parts[1]});
-                          }} /></div>
+                          <div className="space-y-1"><Label className="text-[10px]">ATK</Label><Input placeholder="Min-Max" /></div>
+                          <div className="space-y-1"><Label className="text-[10px]">SPD</Label><Input placeholder="Min-Max" /></div>
                         </div>
-                        <Button variant="outline" className="w-full border-white/10 hover:bg-white/10" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
-                          Add NFT Type
+                        <Button variant="outline" className="w-full" onClick={handleAddNftType} disabled={isPending || !targetBoxId}>
+                          Register NFT Type
                         </Button>
                       </CardContent>
                     </Card>
@@ -596,14 +600,12 @@ export default function AdminPage() {
 
                   {/* Step 3: Finalize */}
                   <Card className="glass-card border-accent/20">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <CardHeader className="flex flex-row items-center justify-between">
                       <div>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <Badge className="bg-accent/20 text-accent">03</Badge> Finalize & Deploy
-                        </CardTitle>
-                        <CardDescription>Activate the draft for public access</CardDescription>
+                        <CardTitle className="text-lg">Finalize Protocol</CardTitle>
+                        <CardDescription>Activate the draft for the network</CardDescription>
                       </div>
-                      <Button className="glow-violet bg-accent hover:bg-accent/80 font-bold px-8 h-12" onClick={handleFinalize} disabled={isPending || !targetBoxId}>
+                      <Button className="glow-violet bg-accent" onClick={handleFinalize} disabled={isPending || !targetBoxId}>
                         Go Live <ArrowUpRight className="w-4 h-4 ml-2" />
                       </Button>
                     </CardHeader>
@@ -612,27 +614,16 @@ export default function AdminPage() {
 
                 {/* Draft Preview Sidebar */}
                 <Card className="glass-card border-white/10 flex flex-col h-[700px]">
-                  <CardHeader className="border-b border-white/5 pb-4">
+                  <CardHeader className="border-b border-white/5">
                     <CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-accent" /> Draft Inspector
+                      <Eye className="w-4 h-4" /> Protocol Inspector
                     </CardTitle>
-                    {targetBoxId && selectedBoxFullData ? (
-                      <div className="pt-2">
-                        <div className="font-bold text-lg">{selectedBoxFullData.name}</div>
-                        <div className="text-[10px] text-muted-foreground flex items-center gap-2">
-                          <Badge variant="outline" className="text-[9px] px-1 h-4">{parseInt(selectedBoxFullData.price) / 1000000000} SUI</Badge>
-                          {selectedBoxFullData.pity_enabled && <Badge className="text-[9px] px-1 h-4 bg-accent">Pity Enabled</Badge>}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground py-4 text-center">Select a draft to preview its content</div>
-                    )}
                   </CardHeader>
                   <CardContent className="p-0 flex-1 overflow-hidden">
                     <ScrollArea className="h-full p-4">
                       {isFetchingFullData ? (
-                        <div className="flex items-center justify-center py-20 gap-2 text-sm text-muted-foreground">
-                          <RefreshCw className="w-4 h-4 animate-spin" /> Fetching config...
+                        <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
+                          <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading...
                         </div>
                       ) : selectedBoxFullData ? (
                         <div className="space-y-6">
@@ -644,12 +635,7 @@ export default function AdminPage() {
                           {renderRarityTier("Common", selectedBoxFullData.common_configs)}
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-6">
-                          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
-                            <Package className="w-6 h-6 text-muted-foreground" />
-                          </div>
-                          <p className="text-xs text-muted-foreground">No draft selected. Choose one from Step 2 to inspect tiers.</p>
-                        </div>
+                        <div className="text-center py-20 text-xs text-muted-foreground">Select a draft to inspect</div>
                       )}
                     </ScrollArea>
                   </CardContent>
@@ -659,115 +645,32 @@ export default function AdminPage() {
 
             <TabsContent value="treasury" className="space-y-8">
               <div className="grid md:grid-cols-[1fr_400px] gap-8">
-                <div className="space-y-8">
-                  <Card className="glass-card border-primary/20">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Coins className="w-5 h-5 text-accent" /> Treasury Withdrawal
-                      </CardTitle>
-                      <CardDescription>Claim SUI revenue collected by the platform</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="space-y-2">
-                        <Label>Withdraw Amount (SUI)</Label>
-                        <div className="relative">
-                          <Input 
-                            type="number" 
-                            placeholder="0.0" 
-                            value={withdrawAmount} 
-                            onChange={(e) => setWithdrawAmount(e.target.value)} 
-                            className="pr-16"
-                          />
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground uppercase">SUI</div>
-                        </div>
-                        {treasuryStats && (
-                          <p className="text-[10px] text-muted-foreground px-1">
-                            Max available: <span className="text-foreground font-bold">{(parseInt(treasuryStats.balance) / 1000000000).toFixed(2)} SUI</span>
-                          </p>
-                        )}
-                      </div>
-                      <Button className="w-full h-12 glow-purple font-bold text-lg" onClick={handleWithdraw} disabled={isPending}>
-                        {isPending ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <ArrowUpRight className="w-5 h-5 mr-2" />}
-                        Execute Withdrawal
-                      </Button>
-                    </CardContent>
-                  </Card>
+                <Card className="glass-card border-primary/20">
+                  <CardHeader>
+                    <CardTitle>Treasury Operations</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label>Withdraw SUI</Label>
+                      <Input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} />
+                    </div>
+                    <Button className="w-full h-12 glow-purple" onClick={() => {}} disabled={isPending}>
+                      Execute On-Chain Withdrawal
+                    </Button>
+                  </CardContent>
+                </Card>
 
-                  <Card className="glass-card border-primary/20">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Sparkles className="w-5 h-5 text-blue-400" /> $GYATE Distribution
-                      </CardTitle>
-                      <CardDescription>Mint tokens for giveaways or community rewards</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Recipient Address</Label>
-                        <Input placeholder="0x..." />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Amount (GYATE)</Label>
-                        <Input type="number" placeholder="1000" />
-                      </div>
-                      <Button className="w-full bg-blue-600 hover:bg-blue-500 font-bold h-12">
-                        Mint $GYATE Tokens
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Treasury Stats View */}
                 <div className="space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-accent" /> On-Chain Balances
+                  <h3 className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-accent" /> Treasury Pool Status
                   </h3>
                   <div className="grid gap-4">
                     <Card className="bg-white/5 border-white/10 p-4">
-                      <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-1">Available to Claim</div>
-                      <div className="text-3xl font-bold font-headline flex items-baseline gap-2">
-                        {isFetchingTreasury ? "..." : treasuryStats ? (parseInt(treasuryStats.balance) / 1000000000).toFixed(2) : "0.00"}
-                        <span className="text-sm font-bold text-accent">SUI</span>
+                      <div className="text-[10px] text-muted-foreground uppercase mb-1">Available SUI</div>
+                      <div className="text-3xl font-bold font-headline">
+                        {treasuryStats ? (parseInt(treasuryStats.balance) / 1000000000).toFixed(2) : "0.00"}
                       </div>
                     </Card>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <Card className="bg-white/5 border-white/10 p-4 space-y-1">
-                        <div className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Box Sales</div>
-                        <div className="text-lg font-bold">
-                          {isFetchingTreasury ? "..." : treasuryStats ? (parseInt(treasuryStats.totalFromLootboxes) / 1000000000).toFixed(2) : "0.00"}
-                        </div>
-                      </Card>
-                      <Card className="bg-white/5 border-white/10 p-4 space-y-1">
-                        <div className="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Market Fees</div>
-                        <div className="text-lg font-bold">
-                          {isFetchingTreasury ? "..." : treasuryStats ? (parseInt(treasuryStats.totalFromMarketplace) / 1000000000).toFixed(2) : "0.00"}
-                        </div>
-                      </Card>
-                    </div>
-
-                    <Card className="bg-white/5 border-white/10 p-4 space-y-2">
-                      <div className="flex justify-between items-center text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-                        <span>Total Lifetime Volume</span>
-                        <span className="text-foreground">
-                          {treasuryStats ? ((parseInt(treasuryStats.totalFromLootboxes) + parseInt(treasuryStats.totalFromMarketplace)) / 1000000000).toFixed(2) : "0.00"} SUI
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-                        <span>Total Claimed</span>
-                        <span className="text-foreground">
-                          {treasuryStats ? (parseInt(treasuryStats.totalWithdrawn) / 1000000000).toFixed(2) : "0.00"} SUI
-                        </span>
-                      </div>
-                    </Card>
-
-                    <div className="p-4 rounded-xl border border-white/5 bg-accent/5">
-                      <div className="flex gap-3 items-start">
-                        <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-                        <p className="text-[10px] text-muted-foreground leading-relaxed">
-                          Treasury funds are strictly controlled by the pool administrator. All deposits from box sales and secondary marketplace fees are automatically routed here.
-                        </p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -776,10 +679,7 @@ export default function AdminPage() {
             <TabsContent value="variants" className="space-y-8">
                <Card className="glass-card border-primary/20 max-w-2xl mx-auto">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <ListPlus className="w-5 h-5 text-pink-400" /> Special Variant Lab
-                    </CardTitle>
-                    <CardDescription>Attach Shiny/Holographic variants to NFT types</CardDescription>
+                    <CardTitle>Variant Lab</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
@@ -793,21 +693,17 @@ export default function AdminPage() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Base NFT Selection</Label>
+                        <Label>NFT Selection</Label>
                         <Select value={selectedNftForVariant} onValueChange={setSelectedNftForVariant} disabled={!targetBoxId}>
                           <SelectTrigger className="bg-white/5">
-                            <SelectValue placeholder={targetBoxId ? "Select base hero..." : "Select box first..."} />
+                            <SelectValue placeholder="Select character..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {allAvailableNfts.length > 0 ? (
-                              allAvailableNfts.map((nft, idx) => (
-                                <SelectItem key={idx} value={`${nft.name}|${nft.rarity}`}>
-                                  {nft.name} ({RARITY_LABELS[nft.rarity as keyof typeof RARITY_LABELS]})
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <div className="p-2 text-center text-xs text-muted-foreground">No NFTs found in this box.</div>
-                            )}
+                            {allAvailableNfts.map((nft, idx) => (
+                              <SelectItem key={idx} value={`${nft.name}|${nft.rarity}`}>
+                                {nft.name} ({RARITY_LABELS[nft.rarity as keyof typeof RARITY_LABELS]})
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -815,32 +711,15 @@ export default function AdminPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Variant Name</Label>
-                        <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} placeholder="e.g. Holographic" />
+                        <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label>Drop Rate (% of Total Box)</Label>
-                        <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} placeholder="e.g. 5" />
-                        <p className="text-[10px] text-muted-foreground mt-1">1 = 1% probability</p>
+                        <Label>Drop Rate (%)</Label>
+                        <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Value Multiplier (%)</Label>
-                        <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} placeholder="e.g. 150" />
-                        <p className="text-[10px] text-muted-foreground mt-1">100 = 1x, 150 = 1.5x</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Custom Variant Image URL</Label>
-                        <Input value={variantImage} onChange={(e) => setVariantImage(e.target.value)} />
-                      </div>
-                    </div>
-                    <Button 
-                      className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12"
-                      onClick={handleAddVariant}
-                      disabled={isPending || !targetBoxId || !selectedNftForVariant}
-                    >
-                      {isPending ? <RefreshCw className="w-5 h-5 animate-spin mr-2" /> : <Sparkles className="w-5 h-5 mr-2" />}
-                      Deploy Special Variant
+                    <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold" onClick={handleAddVariant} disabled={isPending || !targetBoxId || !selectedNftForVariant}>
+                      Deploy Variant
                     </Button>
                   </CardContent>
                </Card>

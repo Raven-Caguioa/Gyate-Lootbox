@@ -1,24 +1,30 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";
-import { Store, Shield, Sparkles, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { Store, Shield, Sparkles, AlertCircle, Loader2, RefreshCw, Zap, TrendingUp, Info } from "lucide-react";
 import Image from "next/image";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useState, useEffect, useCallback } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE } from "@/lib/sui-constants";
+import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, ACHIEVEMENT_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 interface LootboxData {
   id: string;
   name: string;
   price: string;
+  gyate_price: string;
   description: string;
   image: string;
+  pity_enabled: boolean;
+  multi_open_enabled: boolean;
+  multi_open_size: string;
 }
 
 export default function ShopPage() {
@@ -58,14 +64,18 @@ export default function ShopPage() {
           id: obj.data?.objectId,
           name: fields?.name || "Premium Crate",
           price: fields?.price || "0",
+          gyate_price: fields?.gyate_price || "100",
           description: "Verified on-chain random hero summon.",
           image: "https://images.unsplash.com/photo-1632809199725-72a4245e846b?q=80&w=600",
+          pity_enabled: fields?.pity_enabled || false,
+          multi_open_enabled: fields?.multi_open_enabled || false,
+          multi_open_size: fields?.multi_open_size || "10",
         };
       });
 
       setActiveBoxes(boxes);
     } catch (err) {
-      console.error("Failed to fetch active boxes:", err);
+      console.error("Discovery error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -75,27 +85,22 @@ export default function ShopPage() {
     fetchActiveLootboxes();
   }, [fetchActiveLootboxes]);
 
-  const handleBuyLootbox = async (box: LootboxData) => {
+  const handleSummon = async (box: LootboxData, mode: 'single' | 'multi' | 'pity' = 'single') => {
     if (!account) {
-      toast({ variant: "destructive", title: "Wallet not connected", description: "Please connect your Sui wallet to purchase lootboxes." });
+      toast({ variant: "destructive", title: "Wallet required" });
       return;
     }
 
     setIsPending(true);
     
     try {
-      // 1. Find user's KioskOwnerCap
       const ownedCaps = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
       });
 
       if (ownedCaps.data.length === 0) {
-        toast({ 
-          variant: "destructive", 
-          title: "Kiosk Required", 
-          description: "You need a Gyate Kiosk to receive NFTs. Please visit the marketplace (coming soon) to create one." 
-        });
+        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to receive characters." });
         setIsPending(false);
         return;
       }
@@ -104,41 +109,73 @@ export default function ShopPage() {
       const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
       const kioskId = (capObject.data?.content as any)?.fields?.for;
 
+      // Find PlayerStats for Achievement recording
+      const statsObjects = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` }
+      });
+
+      if (statsObjects.data.length === 0) {
+        toast({ variant: "destructive", title: "Achievement Setup Required", description: "Initialize your stats in the account section." });
+        setIsPending(false);
+        return;
+      }
+
+      const statsId = statsObjects.data[0].data?.objectId;
       const txb = new Transaction();
 
-      // Split SUI for payment
-      const [paymentCoin] = txb.splitCoins(txb.gas, [BigInt(box.price)]);
+      let targetFunction = FUNCTIONS.OPEN_LOOTBOX;
+      let paymentAmount = BigInt(box.price);
+
+      if (mode === 'multi') {
+        targetFunction = FUNCTIONS.MULTI_OPEN_LOOTBOX;
+        paymentAmount = BigInt(box.price) * BigInt(box.multi_open_size);
+      } else if (mode === 'pity') {
+        targetFunction = FUNCTIONS.OPEN_LOOTBOX_WITH_PITY;
+        // Need to find UserProgress object for this box
+        const progressObjects = await suiClient.getOwnedObjects({
+          owner: account.address,
+          filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::UserProgress` }
+        });
+        const progress = progressObjects.data.find((p: any) => p.data?.content?.fields?.lootbox_id === box.id);
+        if (!progress) {
+          toast({ variant: "destructive", title: "Pity Tracking Disabled", description: "Initialize pity for this box first." });
+          setIsPending(false);
+          return;
+        }
+        txb.object(progress.data!.objectId);
+      }
+
+      const [paymentCoin] = txb.splitCoins(txb.gas, [paymentAmount]);
 
       txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.OPEN_LOOTBOX}`,
+        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`,
         arguments: [
           txb.object(box.id),
           txb.object(LOOTBOX_REGISTRY),
           txb.object(TREASURY_POOL),
+          ...(mode === 'pity' ? [txb.object(txb.inputs[0])] : []), // UserProgress if pity
           paymentCoin,
+          txb.object(statsId!),
           txb.object(RANDOM_STATE),
           txb.object(kioskId),
           txb.object(kioskCapId!),
         ],
       });
 
-      signAndExecute(
-        { transaction: txb },
-        {
-          onSuccess: (result) => {
-            toast({ title: "Summon Successful", description: "Your hero is being minted on-chain!" });
-            setOpeningBox(box);
-            setIsPending(false);
-          },
-          onError: (err) => {
-            console.error(err);
-            toast({ variant: "destructive", title: "Transaction Failed", description: err.message });
-            setIsPending(false);
-          },
+      signAndExecute({ transaction: txb }, {
+        onSuccess: () => {
+          toast({ title: "Summon Successful", description: "Minting character on-chain..." });
+          setOpeningBox(box);
+          setIsPending(false);
+        },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Transaction failed", description: err.message });
+          setIsPending(false);
         }
-      );
+      });
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Setup Error", description: err.message });
+      toast({ variant: "destructive", title: "Setup error", description: err.message });
       setIsPending(false);
     }
   };
@@ -148,94 +185,96 @@ export default function ShopPage() {
       <Navigation />
       
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-start gap-8 mb-12">
+        <div className="max-w-6xl mx-auto space-y-12">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-8">
             <div className="flex-1">
               <h1 className="font-headline text-5xl font-bold mb-4 flex items-center gap-4">
-                Lootbox Emporium
+                Summoning Altar
                 <Sparkles className="w-8 h-8 text-accent animate-pulse" />
               </h1>
               <p className="text-muted-foreground text-lg">
-                Verified on-chain randomness. Transparent drop rates.
+                On-chain randomness with bad-luck protection and $GYATE rewards.
               </p>
             </div>
-
-            <Card className="glass-card border-accent/20 w-full md:w-80">
-              <CardContent className="p-4 space-y-4">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Network Info</span>
-                  <Badge variant="outline" className="border-accent/50 text-[10px]">Testnet</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[10px] text-accent/80 font-bold uppercase">
-                    <AlertCircle className="w-3 h-3" />
-                    Kiosk system active
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={fetchActiveLootboxes} className="h-6 w-6">
-                    <RefreshCw className={`w-3 h-3 ${isLoading && 'animate-spin'}`} />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="glass-card border-accent/20 p-4">
+                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Pity Enabled</div>
+                 <div className="text-xl font-headline font-bold text-accent">ACTIVE</div>
+              </Card>
+              <Card className="glass-card border-primary/20 p-4">
+                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Batch Summon</div>
+                 <div className="text-xl font-headline font-bold text-primary">UP TO 10x</div>
+              </Card>
+            </div>
           </div>
 
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <RefreshCw className="w-10 h-10 text-primary animate-spin" />
-              <p className="text-muted-foreground font-headline uppercase tracking-widest text-sm">Consulting Registry...</p>
+            <div className="flex flex-col items-center justify-center py-32 gap-4">
+              <RefreshCw className="w-12 h-12 text-primary animate-spin" />
+              <p className="font-headline tracking-widest text-muted-foreground uppercase text-sm">Consulting Registry...</p>
             </div>
           ) : activeBoxes.length === 0 ? (
-            <div className="text-center py-20 glass-card rounded-3xl">
-              <Store className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-bold">No Active Lootboxes</h3>
-              <p className="text-muted-foreground">Check back soon or visit the admin panel if you are a creator.</p>
+            <div className="text-center py-32 glass-card rounded-3xl">
+              <Store className="w-16 h-16 text-muted-foreground mx-auto mb-6" />
+              <h3 className="text-2xl font-bold">Registry Empty</h3>
+              <p className="text-muted-foreground max-w-sm mx-auto">No lootboxes are currently active on the protocol.</p>
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               {activeBoxes.map((box) => (
-                <Card key={box.id} className="glass-card overflow-hidden group border-white/5 hover:border-primary/40 transition-all flex flex-col h-full">
+                <Card key={box.id} className="glass-card overflow-hidden group border-white/5 hover:border-primary/40 transition-all flex flex-col">
                   <div className="relative aspect-[4/3]">
-                    <Image
-                      src={box.image}
-                      alt={box.name}
-                      fill
-                      className="object-cover transition-transform group-hover:scale-105"
-                    />
+                    <Image src={box.image} alt={box.name} fill className="object-cover group-hover:scale-105 transition-transform" />
                     <div className="absolute inset-0 bg-black/40" />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="p-4 rounded-3xl bg-primary/20 backdrop-blur-xl border border-primary/30 glow-purple">
-                        <Store className="w-16 h-16 text-white" />
+                        <Store className="w-12 h-12 text-white" />
                       </div>
                     </div>
                   </div>
-                  <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
+                  <CardContent className="p-6 space-y-6 flex-1 flex flex-col">
                     <div>
                       <h3 className="font-headline font-bold text-2xl mb-2">{box.name}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        {box.description}
-                      </p>
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {box.pity_enabled && <Badge variant="outline" className="text-[10px] border-accent/30 text-accent">Pity Tracking</Badge>}
+                        {box.multi_open_enabled && <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">{box.multi_open_size}x Batching</Badge>}
+                      </div>
                     </div>
 
-                    <div className="pt-4 mt-auto border-t border-white/5 space-y-4">
-                      <div className="flex justify-between items-center">
+                    <div className="space-y-4 mt-auto">
+                      <div className="flex justify-between items-end border-b border-white/5 pb-4">
                         <div className="flex flex-col">
                           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Cost</span>
-                          <span className="text-2xl font-bold flex items-center gap-2">
-                            {Number(box.price) / 1_000_000_000} <span className="text-accent text-sm font-headline uppercase">SUI</span>
+                          <span className="text-2xl font-bold flex items-center gap-1">
+                            {Number(box.price) / 1_000_000_000} <span className="text-accent text-sm font-headline">SUI</span>
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-white/5 px-2 py-1 rounded border border-white/5 uppercase font-bold tracking-widest">
-                          <Shield className="w-3 h-3" /> Verifiable
+                        <div className="text-right">
+                           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Alt Price</span>
+                           <div className="text-sm font-bold text-primary">{box.gyate_price} $GYATE</div>
                         </div>
                       </div>
-                      <Button 
-                        className="w-full h-12 font-bold text-lg glow-purple"
-                        disabled={isPending}
-                        onClick={() => handleBuyLootbox(box)}
-                      >
-                        {isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-                        {isPending ? "Confirming..." : "Summon Now"}
-                      </Button>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <Button 
+                          className="h-12 font-bold glow-purple bg-primary"
+                          disabled={isPending}
+                          onClick={() => handleSummon(box, 'single')}
+                        >
+                          Single Pull
+                        </Button>
+                        {box.multi_open_enabled && (
+                          <Button 
+                            variant="secondary"
+                            className="h-12 font-bold bg-accent/20 hover:bg-accent/40 text-accent"
+                            disabled={isPending}
+                            onClick={() => handleSummon(box, 'multi')}
+                          >
+                            {box.multi_open_size}x Batch
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

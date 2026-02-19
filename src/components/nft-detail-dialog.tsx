@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Loader2 } from "lucide-react";
+import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Loader2, Flame, Coins } from "lucide-react";
 import { suggestNftName } from "@/ai/flows/suggest-nft-name";
 import { generateNftLore } from "@/ai/flows/generate-nft-lore";
 import { Progress } from "@/components/ui/progress";
@@ -27,15 +27,17 @@ interface NFTDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isInventory?: boolean;
+  onBurn?: () => void;
+  isBurning?: boolean;
 }
 
-export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDetailDialogProps) {
+export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, isBurning }: NFTDetailDialogProps) {
   const [isGeneratingName, setIsGeneratingName] = useState(false);
   const [isGeneratingLore, setIsGeneratingLore] = useState(false);
   const [suggestedName, setSuggestedName] = useState<string | null>(null);
   const [suggestedLore, setSuggestedLore] = useState<string | null>(null);
   const [listPrice, setListPrice] = useState("");
-  const [isPending, setIsPending] = useState(false);
+  const [isListing, setIsListing] = useState(false);
 
   const { toast } = useToast();
   const account = useCurrentAccount();
@@ -54,9 +56,8 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
         nftImageUrl: nft.image,
       });
       setSuggestedName(result);
-      toast({ title: "Name Suggested!", description: "AI has generated a unique name." });
     } catch (error) {
-      toast({ variant: "destructive", title: "Generation failed" });
+      toast({ variant: "destructive", title: "AI Generation failed" });
     } finally {
       setIsGeneratingName(false);
     }
@@ -75,40 +76,24 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
         image_url: nft.image,
       });
       setSuggestedLore(result.lore);
-      toast({ title: "Lore Created!", description: "AI has woven a story." });
     } catch (error) {
-      toast({ variant: "destructive", title: "Lore generation failed" });
+      toast({ variant: "destructive", title: "AI Generation failed" });
     } finally {
       setIsGeneratingLore(false);
     }
   };
 
   const handleListForSale = async () => {
-    if (!account || !listPrice) return;
-    setIsPending(true);
+    if (!account || !listPrice || !nft.kioskId || !nft.kioskCapId) return;
+    setIsListing(true);
 
     try {
-      const ownedCaps = await suiClient.getOwnedObjects({
-        owner: account.address,
-        filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
-      });
-
-      if (ownedCaps.data.length === 0) {
-        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to list items." });
-        setIsPending(false);
-        return;
-      }
-
-      const kioskCapId = ownedCaps.data[0].data?.objectId;
-      const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
-      const kioskId = (capObject.data?.content as any)?.fields?.for;
-
       const txb = new Transaction();
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.LIST_NFT}`,
         arguments: [
-          txb.object(kioskId),
-          txb.object(kioskCapId!),
+          txb.object(nft.kioskId),
+          txb.object(nft.kioskCapId),
           txb.pure.id(nft.id),
           txb.pure.u64(BigInt(parseFloat(listPrice) * 1_000_000_000)),
         ],
@@ -116,18 +101,18 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
 
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
-          toast({ title: "Listed Successfully", description: "The item is now available in your on-chain Kiosk." });
-          setIsPending(false);
+          toast({ title: "Listed Successfully", description: "Your hero is now on the marketplace." });
+          setIsListing(false);
           onOpenChange(false);
         },
         onError: (err) => {
           toast({ variant: "destructive", title: "Listing Failed", description: err.message });
-          setIsPending(false);
+          setIsListing(false);
         }
       });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
-      setIsPending(false);
+      setIsListing(false);
     }
   };
 
@@ -136,24 +121,22 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-background border-white/10 glass-card">
         <div className="grid md:grid-cols-2">
           <div className="relative aspect-[4/5] md:aspect-auto">
-            <Image
-              src={nft.image}
-              alt={nft.name}
-              fill
-              className="object-cover"
-            />
+            <Image src={nft.image} alt={nft.name} fill className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
           </div>
 
           <div className="p-8 flex flex-col gap-6">
             <DialogHeader className="p-0">
+              <div className="flex items-center justify-between mb-2">
+                <Badge className="bg-primary/20 text-primary border-primary/30 uppercase tracking-widest text-[10px]">#{nft.globalId}</Badge>
+                {nft.variantType !== "Normal" && <Badge className="bg-accent">{nft.variantType}</Badge>}
+              </div>
               <DialogTitle className="font-headline text-4xl font-bold flex items-center gap-3">
                 {suggestedName || nft.name}
-                {suggestedName && <Sparkles className="w-5 h-5 text-accent animate-pulse" />}
               </DialogTitle>
             </DialogHeader>
 
-            <ScrollArea className="max-h-[400px] pr-4">
+            <ScrollArea className="max-h-[500px] pr-4">
               <div className="space-y-8">
                 <div className="grid grid-cols-3 gap-4">
                   <StatItem icon={Shield} label="HP" value={nft.hp} max={2500} color="blue" />
@@ -162,36 +145,42 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDet
                 </div>
 
                 <div className="space-y-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                  <h3 className="text-xs uppercase font-bold tracking-widest text-accent">AI Lab</h3>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={handleSuggestName} disabled={isGeneratingName}>
-                      Suggest Name
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={handleGenerateLore} disabled={isGeneratingLore}>
-                      Generate Lore
-                    </Button>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs uppercase font-bold tracking-widest text-accent">AI Lab</h3>
+                    <div className="flex gap-2">
+                       <Button size="sm" variant="ghost" onClick={handleSuggestName} disabled={isGeneratingName} className="h-7 text-[10px]"><Sparkles className="w-3 h-3 mr-1" /> Rename</Button>
+                       <Button size="sm" variant="ghost" onClick={handleGenerateLore} disabled={isGeneratingLore} className="h-7 text-[10px]"><Wand2 className="w-3 h-3 mr-1" /> Lore</Button>
+                    </div>
                   </div>
                   {suggestedLore && (
-                    <div className="mt-4 p-4 rounded-lg bg-black/40 text-sm italic text-muted-foreground">
+                    <div className="mt-4 p-4 rounded-lg bg-black/40 text-[11px] leading-relaxed italic text-muted-foreground border-l-2 border-accent">
                       "{suggestedLore}"
                     </div>
                   )}
                 </div>
 
                 {isInventory && (
-                  <div className="pt-4 border-t border-white/10 space-y-4">
-                    <h3 className="text-xs uppercase font-bold tracking-widest text-primary">On-Chain Listing</h3>
-                    <div className="flex gap-3">
-                      <Input 
-                        placeholder="Price SUI" 
-                        type="number" 
-                        value={listPrice} 
-                        onChange={(e) => setListPrice(e.target.value)}
-                        className="bg-white/5"
-                      />
-                      <Button onClick={handleListForSale} disabled={isPending || !listPrice}>
-                        {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "List Now"}
-                      </Button>
+                  <div className="space-y-6 pt-4 border-t border-white/10">
+                    <div className="space-y-3">
+                      <Label className="text-xs uppercase tracking-widest text-primary font-bold">List for Sale</Label>
+                      <div className="flex gap-2">
+                        <Input placeholder="Price SUI" type="number" value={listPrice} onChange={(e) => setListPrice(e.target.value)} className="bg-white/5" />
+                        <Button onClick={handleListForSale} disabled={isListing || !listPrice} className="glow-purple">
+                          {isListing ? <Loader2 className="w-4 h-4 animate-spin" /> : "List"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 space-y-3">
+                       <div className="flex items-center justify-between">
+                         <h3 className="text-xs uppercase font-bold tracking-widest text-red-400">Burn Station</h3>
+                         <Coins className="w-4 h-4 text-red-400" />
+                       </div>
+                       <p className="text-[10px] text-muted-foreground">Sacrifice this hero to the void to receive $GYATE tokens based on rarity.</p>
+                       <Button variant="destructive" className="w-full h-10 gap-2" onClick={onBurn} disabled={isBurning}>
+                         {isBurning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}
+                         Burn for $GYATE
+                       </Button>
                     </div>
                   </div>
                 )}
@@ -210,11 +199,11 @@ function StatItem({ icon: Icon, label, value, max, color }: any) {
     <div className="space-y-2">
       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
         <span className="flex items-center gap-1">
-          <Icon className={`w-3 h-3 text-${color}-400`} /> {label}
+          <Icon className={cn("w-3 h-3", color === "blue" ? "text-blue-400" : color === "red" ? "text-red-400" : "text-yellow-400")} /> {label}
         </span>
         <span>{value}</span>
       </div>
-      <Progress value={percentage} className={`h-1 bg-white/5`} />
+      <Progress value={percentage} className="h-1 bg-white/5" />
     </div>
   );
 }
