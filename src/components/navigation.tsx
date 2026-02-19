@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -25,17 +26,17 @@ export function Navigation() {
     setIsFetching(true);
     try {
       const gyateType = `${PACKAGE_ID}::${MODULE_NAMES.GYATE_COIN}::GYATE_COIN`;
-      const coins = await suiClient.getCoins({ 
+      const balance = await suiClient.getBalance({ 
         owner: account.address, 
         coinType: gyateType 
       });
       
-      const total = coins.data.reduce((acc, coin) => acc + BigInt(coin.balance), BigInt(0));
-      // Display as whole tokens (assuming 9 decimals like SUI, but $GYATE often used as units)
-      // If $GYATE is units (0 decimals in contract), keep as is. Usually it's 9.
-      setGyateBalance((Number(total) / 1_000_000_000).toFixed(0));
+      const total = BigInt(balance.totalBalance);
+      // We assume $GYATE uses 9 decimals like SUI for standard coin scaling
+      setGyateBalance((Number(total) / 1_000_000_000).toLocaleString());
     } catch (err) {
       console.error("Failed to fetch $GYATE balance:", err);
+      setGyateBalance("0");
     } finally {
       setIsFetching(false);
     }
@@ -43,7 +44,7 @@ export function Navigation() {
 
   useEffect(() => {
     fetchGyateBalance();
-    const interval = setInterval(fetchGyateBalance, 30000); // Poll every 30s
+    const interval = setInterval(fetchGyateBalance, 15000); // Poll every 15s for better UX
     return () => clearInterval(interval);
   }, [fetchGyateBalance]);
 
@@ -55,7 +56,6 @@ export function Navigation() {
     { href: "/profile", label: "Account", icon: User },
   ];
 
-  // Admin address from Move configuration
   const isAdmin = account?.address === "0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a"; 
 
   return (
@@ -107,15 +107,22 @@ export function Navigation() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden lg:flex flex-col items-end mr-2">
-            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Balance</span>
-            <div className="flex items-center gap-2">
-               <span className="text-sm font-bold flex items-center gap-1 text-primary">
-                {isFetching && !gyateBalance ? <RefreshCw className="w-3 h-3 animate-spin" /> : (gyateBalance || "0")} <span className="text-[10px]">$GYATE</span>
-              </span>
+          {account && (
+            <div className="hidden lg:flex flex-col items-end mr-4">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest leading-none mb-1">Your Tokens</span>
+              <div className="flex items-center gap-1.5 text-primary">
+                {isFetching && !gyateBalance ? (
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                ) : (
+                  <>
+                    <span className="text-sm font-bold">{gyateBalance || "0"}</span>
+                    <span className="text-[10px] font-black tracking-tighter">$GYATE</span>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="sui-connect-wrapper">
+          )}
+          <div className="sui-connect-wrapper scale-90 md:scale-100">
              <ConnectButton />
           </div>
         </div>

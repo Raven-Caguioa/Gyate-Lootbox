@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -75,7 +76,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
     }
   };
 
-  const burnReward = BURN_REWARDS[nft.rarity];
+  const burnReward = BURN_REWARDS[nft.rarity] || 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
