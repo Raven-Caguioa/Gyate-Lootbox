@@ -107,10 +107,10 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
                 </div>
 
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                  <h3 className="text-xs uppercase font-bold tracking-widest text-muted-foreground">About Character</h3>
+                  <h3 className="text-xs uppercase font-bold tracking-widest text-muted-foreground">Protocol Metadata</h3>
                   <div className="text-[11px] leading-relaxed text-muted-foreground">
-                    This is a {RARITY_LABELS[nft.rarity]} {nft.variantType} hero summoned from the on-chain protocol. 
-                    Each attribute is cryptographically rolled using verifiable randomness.
+                    Summoned from {nft.lootboxSource}. Each attribute is cryptographically rolled using verifiable randomness. 
+                    Current value: <span className="text-accent font-bold">{(nft.actualValue / 1_000_000_000).toFixed(2)} SUI</span>
                   </div>
                 </div>
 
@@ -134,7 +134,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
                          </div>
                        </div>
                        <p className="text-[10px] text-muted-foreground">
-                         Sacrifice this hero to receive <span className="text-red-400 font-bold">{burnReward} $GYATE</span> tokens based on its {RARITY_LABELS[nft.rarity]} rarity.
+                         Sacrifice this hero to receive <span className="text-red-400 font-bold">{burnReward} $GYATE</span> tokens. These tokens are integer units used in the summon shop.
                        </p>
                        <Button variant="destructive" className="w-full h-10 gap-2 font-bold" onClick={onBurn} disabled={isBurning}>
                          {isBurning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}

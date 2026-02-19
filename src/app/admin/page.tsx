@@ -113,12 +113,10 @@ export default function AdminPage() {
   const [myLootboxes, setMyLootboxes] = useState<LootboxOption[]>([]);
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
 
-  // --- Segregated Data States ---
   const [contentBoxData, setContentBoxData] = useState<LootboxFullData | null>(null);
   const [variantBoxData, setVariantBoxData] = useState<LootboxFullData | null>(null);
   const [isFetchingFullData, setIsFetchingFullData] = useState(false);
 
-  // --- Achievement State ---
   const [achievements, setAchievements] = useState<AchievementDef[]>([]);
   const [isLoadingAchievements, setIsLoadingAchievements] = useState(false);
   const [newAch, setNewAch] = useState({
@@ -133,12 +131,10 @@ export default function AdminPage() {
   const [grantTarget, setGrantTarget] = useState("");
   const [selectedGrantAch, setSelectedGrantAch] = useState("");
 
-  // --- Treasury State ---
   const [treasuryStats, setTreasuryStats] = useState<TreasuryStats | null>(null);
   const [isFetchingTreasury, setIsFetchingTreasury] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
 
-  // --- Step 1: Draft State ---
   const [newBoxName, setNewBoxName] = useState("");
   const [newBoxPrice, setNewBoxPrice] = useState("1");
   const [newGyatePrice, setNewGyatePrice] = useState("100");
@@ -150,7 +146,6 @@ export default function AdminPage() {
   const [multiOpenSize, setMultiOpenSize] = useState("10");
   const [guaranteeRarity, setGuaranteeRarity] = useState("1");
 
-  // --- Step 2: Add NFT Type State ---
   const [targetBoxId, setTargetBoxId] = useState("");
   const [nftRarity, setNftRarity] = useState("0");
   const [nftName, setNftName] = useState("");
@@ -162,7 +157,6 @@ export default function AdminPage() {
     minSpd: "5", maxSpd: "15"
   });
 
-  // --- Step 3: Variants State ---
   const [variantBoxId, setVariantBoxId] = useState("");
   const [selectedNftForVariant, setSelectedNftForVariant] = useState<string>(""); 
   const [variantName, setVariantName] = useState("");
@@ -498,7 +492,8 @@ export default function AdminPage() {
         txb.pure.string(newAch.name.trim()),
         txb.pure.string(newAch.description.trim()),
         txb.pure.string(newAch.imageUrl.trim()),
-        txb.pure.u64(BigInt(Math.floor(parseFloat(newAch.reward || "0") * 1_000_000_000))),
+        // GYATE Reward is raw integer units
+        txb.pure.u64(BigInt(Math.floor(parseFloat(newAch.reward || "0")))),
         txb.pure.u8(parseInt(newAch.reqType || "0")),
         txb.pure.u64(BigInt(newAch.reqValue || "0")),
         txb.pure.u8(parseInt(newAch.reqRarity || "0")),
@@ -643,7 +638,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Variants Display Restoration */}
                 {nft.variant_configs && nft.variant_configs.length > 0 && (
                   <div className="pl-4 space-y-2 border-l border-white/5 ml-6">
                     {nft.variant_configs.map((v, vIdx) => {
@@ -936,40 +930,6 @@ export default function AdminPage() {
                       </div>
                     </CardContent>
                   </Card>
-
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                      <Play className="w-4 h-4" /> Live Protocols ({myLootboxes.filter(b => !b.isSetup).length})
-                    </h3>
-                    <div className="grid gap-4">
-                      {myLootboxes.filter(b => !b.isSetup).map((box) => (
-                        <Card key={box.id} className="bg-white/5 border-white/5 p-4 flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className={cn("w-2 h-2 rounded-full", box.isActive ? "bg-green-500 animate-pulse" : "bg-red-500")} />
-                            <div>
-                              <div className="font-bold text-sm">{box.name}</div>
-                              <div className="text-[10px] text-muted-foreground font-mono">{box.id.slice(0, 12)}...</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-right mr-4">
-                              <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Price</div>
-                              <div className="text-xs font-bold">{parseInt(box.price) / 1_000_000_000} SUI</div>
-                            </div>
-                            {box.isActive ? (
-                              <Button variant="outline" size="sm" onClick={() => handlePause(box.id)} disabled={isPending} className="h-8 border-red-500/20 text-red-400 hover:bg-red-500/10">
-                                <Pause className="w-3 h-3 mr-1" /> Pause
-                              </Button>
-                            ) : (
-                              <Button variant="outline" size="sm" onClick={() => handleUnpause(box.id)} disabled={isPending} className="h-8 border-green-500/20 text-green-400 hover:bg-green-500/10">
-                                <Play className="w-3 h-3 mr-1" /> Restore
-                              </Button>
-                            )}
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 <ProtocolInspector data={contentBoxData} />
@@ -1088,7 +1048,7 @@ export default function AdminPage() {
                                  <div className="text-[10px] text-muted-foreground">{REQ_LABELS[a.requirement_type]}: {a.requirement_value}</div>
                                </div>
                                <div className="text-right">
-                                 <div className="text-xs font-bold text-primary">+{parseInt(a.gyate_reward) / 1000000000} G</div>
+                                 <div className="text-xs font-bold text-primary">+{parseInt(a.gyate_reward)} G</div>
                                  <div className="text-[9px] text-muted-foreground">Claimed: {a.total_claimed}</div>
                                </div>
                             </div>
@@ -1163,7 +1123,7 @@ export default function AdminPage() {
                         target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::withdraw_gyate`,
                         arguments: [
                           txb.object(TREASURY_CAP),
-                          txb.pure.u64(BigInt(Math.floor(parseFloat(withdrawAmount) * 1_000_000_000))),
+                          txb.pure.u64(BigInt(Math.floor(parseFloat(withdrawAmount)))),
                         ],
                       });
 

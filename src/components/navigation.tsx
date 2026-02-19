@@ -32,8 +32,8 @@ export function Navigation() {
       });
       
       const total = BigInt(balance.totalBalance);
-      // We assume $GYATE uses 9 decimals like SUI for standard coin scaling
-      setGyateBalance((Number(total) / 1_000_000_000).toLocaleString());
+      // GYATE tokens in this contract are treated as integer units (0 decimals)
+      setGyateBalance(Number(total).toLocaleString());
     } catch (err) {
       console.error("Failed to fetch $GYATE balance:", err);
       setGyateBalance("0");
@@ -44,7 +44,7 @@ export function Navigation() {
 
   useEffect(() => {
     fetchGyateBalance();
-    const interval = setInterval(fetchGyateBalance, 15000); // Poll every 15s for better UX
+    const interval = setInterval(fetchGyateBalance, 10000); 
     return () => clearInterval(interval);
   }, [fetchGyateBalance]);
 
@@ -109,8 +109,8 @@ export function Navigation() {
         <div className="flex items-center gap-3">
           {account && (
             <div className="hidden lg:flex flex-col items-end mr-4">
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest leading-none mb-1">Your Tokens</span>
-              <div className="flex items-center gap-1.5 text-primary">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest leading-none mb-1">Vault Balance</span>
+              <div className="flex items-center gap-1.5 text-accent animate-in fade-in slide-in-from-right-2">
                 {isFetching && !gyateBalance ? (
                   <RefreshCw className="w-3 h-3 animate-spin" />
                 ) : (
