@@ -13,9 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import Image from "next/image";
-import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Loader2, Flame, Coins } from "lucide-react";
-import { suggestNftName } from "@/ai/flows/suggest-nft-name";
-import { generateNftLore } from "@/ai/flows/generate-nft-lore";
+import { Sword, Shield, Zap, Tag, Loader2, Flame, Coins } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,10 +33,6 @@ interface NFTDetailDialogProps {
 }
 
 export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, isBurning }: NFTDetailDialogProps) {
-  const [isGeneratingName, setIsGeneratingName] = useState(false);
-  const [isGeneratingLore, setIsGeneratingLore] = useState(false);
-  const [suggestedName, setSuggestedName] = useState<string | null>(null);
-  const [suggestedLore, setSuggestedLore] = useState<string | null>(null);
   const [listPrice, setListPrice] = useState("");
   const [isListing, setIsListing] = useState(false);
 
@@ -48,43 +42,6 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
   if (!nft) return null;
-
-  const handleSuggestName = async () => {
-    setIsGeneratingName(true);
-    try {
-      const result = await suggestNftName({
-        nftBaseName: nft.name,
-        nftRarity: nft.rarity,
-        nftVariantType: nft.variantType,
-        nftImageUrl: nft.image,
-      });
-      setSuggestedName(result);
-    } catch (error) {
-      toast({ variant: "destructive", title: "AI Generation failed" });
-    } finally {
-      setIsGeneratingName(false);
-    }
-  };
-
-  const handleGenerateLore = async () => {
-    setIsGeneratingLore(true);
-    try {
-      const result = await generateNftLore({
-        name: suggestedName || nft.name,
-        rarity: RARITY_LABELS[nft.rarity],
-        variant_type: nft.variantType,
-        hp: nft.hp,
-        atk: nft.atk,
-        spd: nft.spd,
-        image_url: nft.image,
-      });
-      setSuggestedLore(result.lore);
-    } catch (error) {
-      toast({ variant: "destructive", title: "AI Generation failed" });
-    } finally {
-      setIsGeneratingLore(false);
-    }
-  };
 
   const handleListForSale = async () => {
     if (!account || !listPrice || !nft.kioskId || !nft.kioskCapId) return;
@@ -135,7 +92,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
                 {nft.variantType !== "Normal" && <Badge className="bg-accent">{nft.variantType}</Badge>}
               </div>
               <DialogTitle className="font-headline text-4xl font-bold flex items-center gap-3">
-                {suggestedName || nft.name}
+                {nft.name}
               </DialogTitle>
             </DialogHeader>
 
@@ -147,19 +104,12 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
                   <StatItem icon={Zap} label="SPD" value={nft.spd} max={400} color="yellow" />
                 </div>
 
-                <div className="space-y-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs uppercase font-bold tracking-widest text-accent">AI Lab</h3>
-                    <div className="flex gap-2">
-                       <Button size="sm" variant="ghost" onClick={handleSuggestName} disabled={isGeneratingName} className="h-7 text-[10px]"><Sparkles className="w-3 h-3 mr-1" /> Rename</Button>
-                       <Button size="sm" variant="ghost" onClick={handleGenerateLore} disabled={isGeneratingLore} className="h-7 text-[10px]"><Wand2 className="w-3 h-3 mr-1" /> Lore</Button>
-                    </div>
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                  <h3 className="text-xs uppercase font-bold tracking-widest text-muted-foreground">About Character</h3>
+                  <div className="text-[11px] leading-relaxed text-muted-foreground">
+                    This is a {RARITY_LABELS[nft.rarity]} {nft.variantType} hero summoned from the on-chain protocol. 
+                    Each attribute is cryptographically rolled using verifiable randomness.
                   </div>
-                  {suggestedLore && (
-                    <div className="mt-4 p-4 rounded-lg bg-black/40 text-[11px] leading-relaxed italic text-muted-foreground border-l-2 border-accent">
-                      "{suggestedLore}"
-                    </div>
-                  )}
                 </div>
 
                 {isInventory && (
