@@ -10,7 +10,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info, Wallet, Layers } from "lucide-react";
+import { Coins, ArrowUpRight, Lock, Package, Settings, Sparkles, CheckCircle2, ListPlus, RefreshCw, Eye, ChevronDown, ChevronRight, Image as ImageIcon, Info, Wallet, Layers, Clock, Hash } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -35,6 +35,11 @@ interface VariantData {
   value_multiplier: string;
   custom_image_url: string;
   enabled: boolean;
+  has_sequential_id: boolean;
+  sequential_id_counter: string;
+  available_from: string;
+  available_until: string;
+  max_mints: string;
 }
 
 interface NFTTypeData {
@@ -124,6 +129,10 @@ export default function AdminPage() {
   const [variantDropRate, setVariantDropRate] = useState("5"); 
   const [variantMultiplier, setVariantMultiplier] = useState("150"); 
   const [variantImage, setVariantImage] = useState("");
+  const [hasSeqId, setHasSeqId] = useState(false);
+  const [availFrom, setAvailFrom] = useState("0");
+  const [availUntil, setAvailUntil] = useState("0");
+  const [maxMints, setMaxMints] = useState("0");
 
   const fetchTreasuryData = useCallback(async () => {
     setIsFetchingTreasury(true);
@@ -333,10 +342,10 @@ export default function AdminPage() {
         txb.pure.u64(BigInt(variantDropRate)), 
         txb.pure.u64(BigInt(variantMultiplier)), 
         txb.pure.string(variantImage),
-        txb.pure.bool(true), 
-        txb.pure.u64(BigInt(0)), 
-        txb.pure.u64(BigInt(0)), 
-        txb.pure.u64(BigInt(0)), 
+        txb.pure.bool(hasSeqId), 
+        txb.pure.u64(BigInt(availFrom)), 
+        txb.pure.u64(BigInt(availUntil)), 
+        txb.pure.u64(BigInt(maxMints)), 
       ],
     });
 
@@ -348,7 +357,7 @@ export default function AdminPage() {
         fetchFullBoxData(targetBoxId);
       },
       onError: (err) => { 
-        toast({ variant: "destructive", title: "Failed", description: "Check drop rates." }); 
+        toast({ variant: "destructive", title: "Failed", description: "Check variant parameters." }); 
         setIsPending(false); 
       },
     });
@@ -679,7 +688,10 @@ export default function AdminPage() {
             <TabsContent value="variants" className="space-y-8">
                <Card className="glass-card border-primary/20 max-w-2xl mx-auto">
                   <CardHeader>
-                    <CardTitle>Variant Lab</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-accent" /> Variant Lab
+                    </CardTitle>
+                    <CardDescription>Configure special hero editions and limited drops</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
@@ -708,18 +720,62 @@ export default function AdminPage() {
                         </Select>
                       </div>
                     </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Variant Name</Label>
-                        <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} />
+                        <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} placeholder="e.g. Shiny, Holographic" />
                       </div>
                       <div className="space-y-2">
                         <Label>Drop Rate (%)</Label>
                         <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
                       </div>
                     </div>
-                    <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold" onClick={handleAddVariant} disabled={isPending || !targetBoxId || !selectedNftForVariant}>
-                      Deploy Variant
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Value Multiplier (%)</Label>
+                        <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} placeholder="150 = 1.5x" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Variant Image URL</Label>
+                        <Input value={variantImage} onChange={(e) => setVariantImage(e.target.value)} placeholder="IPFS or HTTPS link" />
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-white/5 space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="flex items-center gap-2"><Hash className="w-3 h-3" /> Sequential IDs</Label>
+                          <p className="text-[10px] text-muted-foreground">Give each mint a unique serial number (e.g. #1, #2)</p>
+                        </div>
+                        <Switch checked={hasSeqId} onCheckedChange={setHasSeqId} />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
+                            <Clock className="w-3 h-3" /> Available From (Epoch)
+                          </Label>
+                          <Input value={availFrom} onChange={(e) => setAvailFrom(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
+                            <Clock className="w-3 h-3" /> Available Until (Epoch)
+                          </Label>
+                          <Input value={availUntil} onChange={(e) => setAvailUntil(e.target.value)} />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Max Total Mints</Label>
+                        <Input value={maxMints} onChange={(e) => setMaxMints(e.target.value)} placeholder="0 for unlimited" />
+                      </div>
+                    </div>
+
+                    <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12 glow-violet" onClick={handleAddVariant} disabled={isPending || !targetBoxId || !selectedNftForVariant}>
+                      {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                      Deploy Variant to Blockchain
                     </Button>
                   </CardContent>
                </Card>
