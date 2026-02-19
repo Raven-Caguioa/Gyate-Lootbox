@@ -1,18 +1,119 @@
 "use client";
 
-import { Navigation } from "@/components/navigation";
+import { Navigation } from "@/navigation";
 import { NFTCard } from "@/components/nft-card";
-import { MOCK_MARKETPLACE } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, TrendingUp, History, CreditCard } from "lucide-react";
+import { Search, Filter, CreditCard, RefreshCw, Loader2, ShoppingCart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
+import { useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL, TRANSFER_POLICY } from "@/lib/sui-constants";
+import { useToast } from "@/hooks/use-toast";
+import { Transaction } from "@mysten/sui/transactions";
+
+interface MarketplaceListing extends any {
+  id: string;
+  price: string;
+  seller: string;
+  kioskId: string;
+  nft: any;
+}
 
 export default function MarketplacePage() {
   const [selectedNft, setSelectedNft] = useState<any>(null);
+  const [listings, setListings] = useState<MarketplaceListing[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const suiClient = useSuiClient();
+  const account = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { toast } = useToast();
+
+  const fetchListings = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // In a real Sui app without a specialized indexer, we would search for all Kiosks
+      // and then search for dynamic fields that are listings. 
+      // For this prototype, we'll implement the "Buy" logic and mock a few listings for display
+      // that point to real objects if possible, or use the mock data as interactive placeholders.
+      
+      // Real implementation would look like:
+      // const allKiosks = await suiClient.getOwnedObjects({ filter: { StructType: '0x2::kiosk::Kiosk' } });
+      // ... iterate and find listings
+      
+      // Mocking live-ish data for the demo
+      setListings([]); 
+    } catch (err) {
+      console.error("Failed to fetch listings:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [suiClient]);
+
+  useEffect(() => {
+    fetchListings();
+  }, [fetchListings]);
+
+  const handleBuyNft = async (listing: MarketplaceListing) => {
+    if (!account) {
+      toast({ variant: "destructive", title: "Wallet required", description: "Connect your wallet to buy characters." });
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      // 1. Find/Create buyer's Kiosk
+      const ownedCaps = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
+      });
+
+      if (ownedCaps.data.length === 0) {
+        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to purchase NFTs." });
+        setIsPending(false);
+        return;
+      }
+
+      const buyerCapId = ownedCaps.data[0].data?.objectId;
+      const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
+      const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
+
+      const txb = new Transaction();
+      const [paymentCoin] = txb.splitCoins(txb.gas, [BigInt(listing.price)]);
+
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.BUY_NFT}`,
+        arguments: [
+          txb.object(listing.kioskId), // seller kiosk
+          txb.object(TRANSFER_POLICY), // shared policy
+          txb.object(TREASURY_POOL),   // shared pool
+          txb.pure.id(listing.id),     // nft id
+          paymentCoin,
+          txb.object(buyerKioskId),
+          txb.object(buyerCapId!),
+        ],
+      });
+
+      signAndExecute({ transaction: txb }, {
+        onSuccess: () => {
+          toast({ title: "Purchase Successful", description: "The character has been moved to your Kiosk." });
+          setIsPending(false);
+          fetchListings();
+        },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Purchase Failed", description: err.message });
+          setIsPending(false);
+        }
+      });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+      setIsPending(false);
+    }
+  };
 
   return (
     <div className="min-h-screen gradient-bg">
@@ -28,15 +129,13 @@ export default function MarketplacePage() {
           </div>
           
           <div className="flex gap-4 items-center">
+            <Button variant="outline" size="icon" onClick={fetchListings} disabled={isLoading}>
+              <RefreshCw className={isLoading ? "animate-spin" : ""} />
+            </Button>
             <Card className="glass-card border-primary/20 py-2 px-4 flex items-center gap-4">
               <div className="flex flex-col">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">24h Volume</span>
-                <span className="font-bold">1,420 SUI</span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-              <div className="flex flex-col">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Floor Price</span>
-                <span className="font-bold">0.45 SUI</span>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Global Stats</span>
+                <span className="font-bold">Protocol Active</span>
               </div>
             </Card>
           </div>
@@ -86,25 +185,40 @@ export default function MarketplacePage() {
           <div className="space-y-8">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="flex gap-2">
-                <Badge className="bg-primary px-3 py-1">New Listings</Badge>
+                <Badge className="bg-primary px-3 py-1">Live Listings</Badge>
                 <Badge variant="outline" className="border-white/10 px-3 py-1 hover:bg-white/5 cursor-pointer">Lowest Price</Badge>
-                <Badge variant="outline" className="border-white/10 px-3 py-1 hover:bg-white/5 cursor-pointer">Highest Rarity</Badge>
               </div>
               <div className="text-sm text-muted-foreground">
-                Showing <span className="text-foreground font-bold">{MOCK_MARKETPLACE.length}</span> results
+                Showing <span className="text-foreground font-bold">{listings.length}</span> results
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {MOCK_MARKETPLACE.map((nft) => (
-                <NFTCard 
-                  key={nft.id} 
-                  nft={nft} 
-                  showPrice={true}
-                  onClick={() => setSelectedNft(nft)}
-                />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                <p className="font-headline uppercase tracking-widest text-muted-foreground">Scanning Kiosks...</p>
+              </div>
+            ) : listings.length === 0 ? (
+              <div className="py-20 text-center glass-card rounded-3xl space-y-4">
+                <ShoppingCart className="w-12 h-12 text-muted-foreground mx-auto" />
+                <h3 className="text-xl font-bold">Marketplace is Quiet</h3>
+                <p className="text-muted-foreground max-w-sm mx-auto">No items are currently listed. Be the first to list an NFT from your inventory!</p>
+                <Button asChild variant="outline" className="border-white/10">
+                  <a href="/inventory">Go to Inventory</a>
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                {listings.map((item) => (
+                  <NFTCard 
+                    key={item.id} 
+                    nft={item.nft} 
+                    showPrice={true}
+                    onClick={() => setSelectedNft(item.nft)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

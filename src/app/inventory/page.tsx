@@ -16,7 +16,7 @@ export default function InventoryPage() {
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
   
-  const [selectedNft, setSelectedNft] = useState<NFT | null>(null);
+  const [selectedNft, setSelectedNft] = useState<any>(null);
   const [userNfts, setUserNfts] = useState<NFT[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,43 +45,37 @@ export default function InventoryPage() {
         parentId: kioskId,
       });
 
-      // Filter for fields that might be our NFTs
-      // In Kiosk, items are typically stored with the item ID as the name
-      const nftIds = fields.data.map(f => f.objectId);
-      
-      if (nftIds.length === 0) {
-        setUserNfts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Fetch the actual objects to check types
-      const nftObjects = await suiClient.multiGetObjects({
-        ids: nftIds,
-        options: { showContent: true }
-      });
-
       const nftType = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
       
+      // Kiosk stores items as dynamic fields. The object ID is in the dynamic field data.
+      const nftObjects = await suiClient.multiGetObjects({
+        ids: fields.data.map(f => f.objectId),
+        options: { showContent: true, showType: true }
+      });
+
       const mappedNfts: NFT[] = nftObjects
-        .filter((obj: any) => obj.data?.content?.type === nftType)
         .map((obj: any) => {
           const fields = obj.data?.content?.fields;
+          // In Kiosk, dynamic fields have 'name' and 'value'. 'value' contains the NFT.
+          const nftData = fields?.value?.fields || fields;
+          if (!nftData || obj.data?.content?.type !== nftType) return null;
+
           return {
-            id: obj.data?.objectId,
-            name: fields.name,
-            rarity: fields.rarity,
-            variantType: fields.variant_type,
-            image: fields.image_url || "https://images.unsplash.com/photo-1743355694962-40376ef681da?q=80&w=400",
-            hp: parseInt(fields.hp),
-            atk: parseInt(fields.atk),
-            spd: parseInt(fields.spd),
-            baseValue: parseInt(fields.base_value),
-            actualValue: parseInt(fields.actual_value),
-            lootboxSource: fields.lootbox_source,
-            globalId: parseInt(fields.global_sequential_id),
+            id: nftData.id?.id || obj.data?.objectId,
+            name: nftData.name,
+            rarity: nftData.rarity,
+            variantType: nftData.variant_type,
+            image: nftData.image_url || "https://images.unsplash.com/photo-1743355694962-40376ef681da?q=80&w=400",
+            hp: parseInt(nftData.hp),
+            atk: parseInt(nftData.atk),
+            spd: parseInt(nftData.spd),
+            baseValue: parseInt(nftData.base_value),
+            actualValue: parseInt(nftData.actual_value),
+            lootboxSource: nftData.lootbox_source,
+            globalId: parseInt(nftData.global_sequential_id),
           };
-        });
+        })
+        .filter((n): n is NFT => n !== null);
 
       setUserNfts(mappedNfts);
     } catch (err) {
@@ -169,6 +163,7 @@ export default function InventoryPage() {
         nft={selectedNft} 
         open={!!selectedNft} 
         onOpenChange={(open) => !open && setSelectedNft(null)} 
+        isInventory={true}
       />
     </div>
   );

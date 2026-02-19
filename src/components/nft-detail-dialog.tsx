@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { NFT, RARITY_LABELS, RARITY_COLORS } from "@/lib/mock-data";
+import { NFT, RARITY_LABELS } from "@/lib/mock-data";
 import {
   Dialog,
   DialogContent,
@@ -11,25 +11,36 @@ import {
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Info } from "lucide-react";
+import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Info, Loader2 } from "lucide-react";
 import { suggestNftName } from "@/ai/flows/suggest-nft-name";
 import { generateNftLore } from "@/ai/flows/generate-nft-lore";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 
 interface NFTDetailDialogProps {
   nft: NFT | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  isInventory?: boolean;
 }
 
-export function NFTDetailDialog({ nft, open, onOpenChange }: NFTDetailDialogProps) {
+export function NFTDetailDialog({ nft, open, onOpenChange, isInventory }: NFTDetailDialogProps) {
   const [isGeneratingName, setIsGeneratingName] = useState(false);
   const [isGeneratingLore, setIsGeneratingLore] = useState(false);
   const [suggestedName, setSuggestedName] = useState<string | null>(null);
   const [suggestedLore, setSuggestedLore] = useState<string | null>(null);
+  const [listPrice, setListPrice] = useState("");
+  const [isPending, setIsPending] = useState(false);
+
   const { toast } = useToast();
+  const account = useCurrentAccount();
+  const suiClient = useSuiClient();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
   if (!nft) return null;
 
@@ -72,6 +83,55 @@ export function NFTDetailDialog({ nft, open, onOpenChange }: NFTDetailDialogProp
     }
   };
 
+  const handleListForSale = async () => {
+    if (!account || !listPrice) return;
+    setIsPending(true);
+
+    try {
+      // 1. Find user's KioskOwnerCap
+      const ownedCaps = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
+      });
+
+      if (ownedCaps.data.length === 0) {
+        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to list items." });
+        setIsPending(false);
+        return;
+      }
+
+      const kioskCapId = ownedCaps.data[0].data?.objectId;
+      const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
+      const kioskId = (capObject.data?.content as any)?.fields?.for;
+
+      const txb = new Transaction();
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.LIST_NFT}`,
+        arguments: [
+          txb.object(kioskId),
+          txb.object(kioskCapId!),
+          txb.pure.id(nft.id),
+          txb.pure.u64(BigInt(parseFloat(listPrice) * 1_000_000_000)),
+        ],
+      });
+
+      signAndExecute({ transaction: txb }, {
+        onSuccess: () => {
+          toast({ title: "Listed Successfully", description: `${nft.name} is now on the marketplace for ${listPrice} SUI.` });
+          setIsPending(false);
+          onOpenChange(false);
+        },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Listing Failed", description: err.message });
+          setIsPending(false);
+        }
+      });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+      setIsPending(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-background border-white/10 glass-card">
@@ -98,7 +158,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange }: NFTDetailDialogProp
           <div className="p-8 flex flex-col gap-6">
             <DialogHeader className="p-0">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">NFT ID #{nft.globalId}</span>
+                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">NFT ID #{nft.globalId || nft.id.slice(0, 6)}</span>
               </div>
               <DialogTitle className="font-headline text-4xl font-bold flex items-center gap-3">
                 {suggestedName || nft.name}
@@ -155,7 +215,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange }: NFTDetailDialogProp
                   )}
                 </div>
 
-                {/* Marketplace Info */}
+                {/* Economy Info */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-3 border-t border-white/10">
                     <span className="text-xs text-muted-foreground font-bold">Lootbox Source</span>
@@ -170,6 +230,27 @@ export function NFTDetailDialog({ nft, open, onOpenChange }: NFTDetailDialogProp
                     <span className="text-sm font-bold text-accent">{nft.actualValue} MIST</span>
                   </div>
                 </div>
+
+                {isInventory && (
+                  <div className="pt-4 border-t border-white/10 space-y-4">
+                    <h3 className="text-xs uppercase font-bold tracking-widest text-primary">Marketplace Listing</h3>
+                    <div className="flex gap-3">
+                      <div className="relative flex-1">
+                        <Input 
+                          placeholder="Price in SUI" 
+                          type="number" 
+                          value={listPrice} 
+                          onChange={(e) => setListPrice(e.target.value)}
+                          className="bg-white/5"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground">SUI</span>
+                      </div>
+                      <Button onClick={handleListForSale} disabled={isPending || !listPrice} className="bg-primary/20 hover:bg-primary/40 text-primary border-primary/20">
+                        {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "List NFT"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </ScrollArea>
 
@@ -177,9 +258,11 @@ export function NFTDetailDialog({ nft, open, onOpenChange }: NFTDetailDialogProp
               <Button className="flex-1 font-bold h-12 bg-primary hover:bg-primary/80 glow-purple">
                 Battle Mode
               </Button>
-              <Button variant="outline" className="flex-1 font-bold h-12 border-white/10">
-                List for Sale
-              </Button>
+              {!isInventory && (
+                <Button className="flex-1 font-bold h-12 bg-accent hover:bg-accent/80">
+                  Buy Character
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -189,7 +272,7 @@ export function NFTDetailDialog({ nft, open, onOpenChange }: NFTDetailDialogProp
 }
 
 function StatItem({ icon: Icon, label, value, max, color }: any) {
-  const percentage = (value / max) * 100;
+  const percentage = Math.min((value / max) * 100, 100);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -198,9 +281,7 @@ function StatItem({ icon: Icon, label, value, max, color }: any) {
         </span>
         <span>{value}</span>
       </div>
-      <Progress value={percentage} className={`h-1 bg-white/5`}>
-        <div className={`bg-${color}-500 h-full w-full`} />
-      </Progress>
+      <Progress value={percentage} className={`h-1 bg-white/5`} />
     </div>
   );
 }

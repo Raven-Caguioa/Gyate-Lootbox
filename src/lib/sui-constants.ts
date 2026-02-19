@@ -12,6 +12,11 @@ export const KIOSK_REGISTRY = "0x561c34ed574e5d2f7293b22b5a57e36e83c5e97a2a5fe21
 export const POLICY_ADMIN = "0x7b717e9a7d2c935d0f7193a1228958d1a8df5fc16e97e65b12644b644e905bdb";
 export const RANDOM_STATE = "0x8";
 
+// Note: In your Move package, marketplace functions are in the 'marketplace' module.
+// In Sui, TransferPolicy is a shared object. You'll need its ID.
+// For the purpose of this prototype, we assume a policy ID.
+export const TRANSFER_POLICY = "0x981604a3765e90d70337d6e87f8976f5780287532657891234567890abcdef12"; 
+
 export const MODULE_NAMES = {
   LOOTBOX: 'lootbox', 
   MARKETPLACE: 'marketplace',
