@@ -394,8 +394,8 @@ export default function AdminPage() {
         txb.pure.string(name),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName),
-        txb.pure.u64(BigInt(parseInt(variantDropRate.toString()) * 100)), 
-        txb.pure.u64(BigInt(parseInt(variantMultiplier.toString()) * 100)), 
+        txb.pure.u64(BigInt(Math.floor(parseFloat(variantDropRate) * 100))), 
+        txb.pure.u64(BigInt(Math.floor(parseFloat(variantMultiplier) * 100))), 
         txb.pure.string(variantImage),
         txb.pure.bool(hasSeqId), 
         txb.pure.u64(BigInt(useLimits ? availFrom : "0")), 
@@ -412,7 +412,7 @@ export default function AdminPage() {
         fetchFullBoxData(targetBoxId);
       },
       onError: (err) => { 
-        toast({ variant: "destructive", title: "Failed", description: "Check variant parameters." }); 
+        toast({ variant: "destructive", title: "Failed", description: "Check variant parameters. Ensure base NFT exists in the draft." }); 
         setIsPending(false); 
       },
     });
