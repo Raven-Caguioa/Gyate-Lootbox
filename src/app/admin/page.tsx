@@ -404,7 +404,6 @@ export default function AdminPage() {
     setIsPending(true);
     const txb = new Transaction();
     
-    // Fix: Move code expects 0 for "disabled" limits (epoch/mint caps)
     const fromVal = useLimits ? (availFrom || "0") : "0";
     const untilVal = useLimits ? (availUntil || "0") : "0"; 
     const mintLimitVal = useLimits ? (maxMints || "0") : "0";
@@ -416,9 +415,6 @@ export default function AdminPage() {
         txb.pure.string(name.trim()),
         txb.pure.u8(parseInt(rarity)),
         txb.pure.string(variantName.trim()),
-        // CRITICAL FIX: Removed the * 100 multiplication here because the Move code 
-        // already does `drop_rate_pct * 100` internally. Sending 500 resulted in 50000 
-        // which caused the underflow error instruction 94.
         txb.pure.u64(BigInt(Math.floor(parseFloat(variantDropRate || "0")))), 
         txb.pure.u64(BigInt(Math.floor(parseFloat(variantMultiplier || "0")))), 
         txb.pure.string(variantImage.trim()),
@@ -646,6 +642,27 @@ export default function AdminPage() {
                     <Badge variant="outline" className="text-[9px] py-0 border-white/10">ATK: {nft.min_atk}-{nft.max_atk}</Badge>
                   </div>
                 </div>
+
+                {/* Variants Display Restoration */}
+                {nft.variant_configs && nft.variant_configs.length > 0 && (
+                  <div className="pl-4 space-y-2 border-l border-white/5 ml-6">
+                    {nft.variant_configs.map((v, vIdx) => {
+                      const variant = v.fields;
+                      return (
+                        <div key={vIdx} className="flex items-center justify-between text-[10px] bg-white/5 p-2 rounded-lg border border-white/5">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-3 h-3 text-accent" />
+                            <span className="font-bold">{variant.variant_name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 opacity-70 font-mono">
+                            <span>{parseInt(variant.drop_rate) / 100}%</span>
+                            <span>{parseInt(variant.value_multiplier) / 10000}x</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -904,15 +921,20 @@ export default function AdminPage() {
                   </div>
 
                   <Card className="glass-card border-accent/20">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg">Finalize Protocol</CardTitle>
-                        <CardDescription>Activate the draft for the network</CardDescription>
-                      </div>
-                      <Button className="glow-violet bg-accent font-bold px-8 h-12" onClick={handleFinalize} disabled={isPending || !targetBoxId}>
-                        Go Live <ArrowUpRight className="w-4 h-4 ml-2" />
-                      </Button>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Finalize Protocol</CardTitle>
+                      <CardDescription>Activate the draft for the network</CardDescription>
                     </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex flex-row items-center justify-between">
+                         <div className="text-xs text-muted-foreground max-w-[60%] leading-relaxed italic">
+                           Ensure every rarity tier has at least one character before finalizing. Protocol will check registry during activation.
+                         </div>
+                         <Button className="glow-violet bg-accent font-bold px-8 h-12" onClick={handleFinalize} disabled={isPending || !targetBoxId}>
+                          Go Live <ArrowUpRight className="w-4 h-4 ml-2" />
+                        </Button>
+                      </div>
+                    </CardContent>
                   </Card>
 
                   <div className="space-y-4">
