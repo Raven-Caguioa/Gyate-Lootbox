@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Store, Sparkles, Wand2, RefreshCw } from "lucide-react";
 import { NFTCard } from "./nft-card";
@@ -37,6 +38,13 @@ export function RevealLootboxDialog({ box, open, onOpenChange }: RevealLootboxDi
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md bg-transparent border-none shadow-none flex items-center justify-center p-0">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Lootbox Reveal</DialogTitle>
+          <DialogDescription>
+            The process of opening a {box?.name || 'lootbox'} to reveal a new hero character on-chain.
+          </DialogDescription>
+        </DialogHeader>
+
         <div className="w-full flex flex-col items-center justify-center text-center space-y-8">
           
           {step === "ready" && (
