@@ -11,8 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { Badge } from "@/components/ui/badge";
-import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Info, Loader2 } from "lucide-react";
+import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Loader2 } from "lucide-react";
 import { suggestNftName } from "@/ai/flows/suggest-nft-name";
 import { generateNftLore } from "@/ai/flows/generate-nft-lore";
 import { Progress } from "@/components/ui/progress";
