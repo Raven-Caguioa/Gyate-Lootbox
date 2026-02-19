@@ -10,7 +10,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Users, FileText, Gift, AlertCircle } from "lucide-react";
+import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Users, FileText, Gift, AlertCircle, Pause, Play, Trash2 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +26,7 @@ interface LootboxOption {
   name: string;
   isSetup: boolean;
   isActive: boolean;
+  price: string;
 }
 
 interface VariantData {
@@ -236,6 +237,7 @@ export default function AdminPage() {
           name: fields?.name || "Unnamed Box",
           isSetup: fields?.is_setup_mode || false,
           isActive: fields?.is_active || false,
+          price: fields?.price || "0",
         };
       });
 
@@ -416,6 +418,54 @@ export default function AdminPage() {
     });
   };
 
+  const handlePause = async (boxId: string) => {
+    setIsPending(true);
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.PAUSE}`,
+      arguments: [
+        txb.object(LOOTBOX_REGISTRY),
+        txb.object(boxId),
+      ],
+    });
+
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Lootbox Paused", description: "Protocol removed from active shop." });
+        setIsPending(false);
+        setTimeout(fetchLootboxes, 3000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Pause Failed", description: err.message });
+        setIsPending(false);
+      }
+    });
+  };
+
+  const handleUnpause = async (boxId: string) => {
+    setIsPending(true);
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.UNPAUSE}`,
+      arguments: [
+        txb.object(LOOTBOX_REGISTRY),
+        txb.object(boxId),
+      ],
+    });
+
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Lootbox Restored", description: "Protocol is now live in the shop." });
+        setIsPending(false);
+        setTimeout(fetchLootboxes, 3000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Restore Failed", description: err.message });
+        setIsPending(false);
+      }
+    });
+  };
+
   const handleCreateAchievement = async () => {
     if (!newAch.name || !newAch.description) return;
     setIsPending(true);
@@ -495,7 +545,6 @@ export default function AdminPage() {
   const handleFinalize = async () => {
     if (!targetBoxId || !selectedBoxFullData) return;
 
-    // Check for empty tiers that would cause "Dry run failed" instruction 14
     const emptyTiers = [];
     if (selectedBoxFullData.common_configs.length === 0) emptyTiers.push("Common");
     if (selectedBoxFullData.rare_configs.length === 0) emptyTiers.push("Rare");
@@ -711,6 +760,41 @@ export default function AdminPage() {
                       </Button>
                     </CardHeader>
                   </Card>
+
+                  {/* Live Management Section */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <Play className="w-4 h-4" /> Live Protocols ({myLootboxes.filter(b => !b.isSetup).length})
+                    </h3>
+                    <div className="grid gap-4">
+                      {myLootboxes.filter(b => !b.isSetup).map((box) => (
+                        <Card key={box.id} className="bg-white/5 border-white/5 p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className={cn("w-2 h-2 rounded-full", box.isActive ? "bg-green-500 animate-pulse" : "bg-red-500")} />
+                            <div>
+                              <div className="font-bold text-sm">{box.name}</div>
+                              <div className="text-[10px] text-muted-foreground font-mono">{box.id.slice(0, 12)}...</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-right mr-4">
+                              <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Price</div>
+                              <div className="text-xs font-bold">{parseInt(box.price) / 1_000_000_000} SUI</div>
+                            </div>
+                            {box.isActive ? (
+                              <Button variant="outline" size="sm" onClick={() => handlePause(box.id)} disabled={isPending} className="h-8 border-red-500/20 text-red-400 hover:bg-red-500/10">
+                                <Pause className="w-3 h-3 mr-1" /> Pause
+                              </Button>
+                            ) : (
+                              <Button variant="outline" size="sm" onClick={() => handleUnpause(box.id)} disabled={isPending} className="h-8 border-green-500/20 text-green-400 hover:bg-green-500/10">
+                                <Play className="w-3 h-3 mr-1" /> Restore
+                              </Button>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <Card className="glass-card border-white/10 flex flex-col h-[700px]">
