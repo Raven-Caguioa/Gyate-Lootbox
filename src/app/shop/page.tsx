@@ -3,17 +3,18 @@
 
 import { Navigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";
-import { Store, Shield, Sparkles, AlertCircle, Loader2, RefreshCw, Zap, TrendingUp, Info } from "lucide-react";
+import { Store, Shield, Sparkles, AlertCircle, Loader2, RefreshCw, Zap, TrendingUp, Info, Coins } from "lucide-react";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useState, useEffect, useCallback } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, ACHIEVEMENT_REGISTRY } from "@/lib/sui-constants";
+import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, TREASURY_CAP } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 interface LootboxData {
   id: string;
@@ -32,6 +33,7 @@ export default function ShopPage() {
   const [activeBoxes, setActiveBoxes] = useState<LootboxData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'SUI' | 'GYATE'>('SUI');
   
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
@@ -94,6 +96,7 @@ export default function ShopPage() {
     setIsPending(true);
     
     try {
+      // 1. Setup Kiosk refs
       const ownedCaps = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
@@ -109,14 +112,14 @@ export default function ShopPage() {
       const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
       const kioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // Find PlayerStats for Achievement recording
+      // 2. Find PlayerStats for Achievement recording
       const statsObjects = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` }
       });
 
       if (statsObjects.data.length === 0) {
-        toast({ variant: "destructive", title: "Achievement Setup Required", description: "Initialize your stats in the account section." });
+        toast({ variant: "destructive", title: "Account Setup Required", description: "Initialize your profile in the Account section first." });
         setIsPending(false);
         return;
       }
@@ -124,15 +127,41 @@ export default function ShopPage() {
       const statsId = statsObjects.data[0].data?.objectId;
       const txb = new Transaction();
 
-      let targetFunction = FUNCTIONS.OPEN_LOOTBOX;
-      let paymentAmount = BigInt(box.price);
-      let progressId: string | null = null;
+      // 3. Determine payment and function
+      let paymentAmount = mode === 'multi' 
+        ? BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price) * BigInt(box.multi_open_size)
+        : BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price);
 
-      if (mode === 'multi') {
-        targetFunction = FUNCTIONS.MULTI_OPEN_LOOTBOX;
-        paymentAmount = BigInt(box.price) * BigInt(box.multi_open_size);
-      } else if (mode === 'pity') {
-        targetFunction = FUNCTIONS.OPEN_LOOTBOX_WITH_PITY;
+      let targetFunction = "";
+      if (paymentMethod === 'SUI') {
+        if (mode === 'single') targetFunction = FUNCTIONS.OPEN_LOOTBOX;
+        else if (mode === 'multi') targetFunction = FUNCTIONS.MULTI_OPEN_LOOTBOX;
+        else if (mode === 'pity') targetFunction = FUNCTIONS.OPEN_LOOTBOX_WITH_PITY;
+      } else {
+        if (mode === 'single') targetFunction = FUNCTIONS.OPEN_LOOTBOX_WITH_GYATE;
+        else if (mode === 'multi') targetFunction = FUNCTIONS.MULTI_OPEN_LOOTBOX_GYATE;
+        else if (mode === 'pity') targetFunction = FUNCTIONS.OPEN_LOOTBOX_GYATE_WITH_PITY;
+      }
+
+      // 4. Handle Coin splitting/merging
+      let paymentCoin;
+      if (paymentMethod === 'SUI') {
+        [paymentCoin] = txb.splitCoins(txb.gas, [paymentAmount]);
+      } else {
+        const gyateType = `${PACKAGE_ID}::${MODULE_NAMES.GYATE_COIN}::GYATE_COIN`;
+        const coins = await suiClient.getCoins({ owner: account.address, coinType: gyateType });
+        if (coins.data.length === 0) throw new Error("No $GYATE tokens found in wallet.");
+        
+        const [mainCoin, ...otherCoins] = coins.data.map(c => c.coinObjectId);
+        if (otherCoins.length > 0) {
+          txb.mergeCoins(txb.object(mainCoin), otherCoins.map(c => txb.object(c)));
+        }
+        [paymentCoin] = txb.splitCoins(txb.object(mainCoin), [paymentAmount]);
+      }
+
+      // 5. Handle Pity Progress injection if needed
+      let progressId: string | null = null;
+      if (mode === 'pity') {
         const progressObjects = await suiClient.getOwnedObjects({
           owner: account.address,
           filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::UserProgress` },
@@ -140,33 +169,37 @@ export default function ShopPage() {
         });
         const progress = progressObjects.data.find((p: any) => p.data?.content?.fields?.lootbox_id === box.id);
         if (!progress) {
-          toast({ variant: "destructive", title: "Pity Tracking Disabled", description: "Initialize pity for this box first." });
+          toast({ variant: "destructive", title: "Pity Tracking Disabled", description: "Initialize pity progress for this box in your profile." });
           setIsPending(false);
           return;
         }
         progressId = progress.data!.objectId;
       }
 
-      const [paymentCoin] = txb.splitCoins(txb.gas, [paymentAmount]);
+      // 6. Execute Move Call
+      // Logic branches based on Move signature: SUI takes pool, GYATE takes treasury_cap
+      const baseArgs = [txb.object(box.id), txb.object(LOOTBOX_REGISTRY)];
+      const authArg = paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(TREASURY_CAP);
+      
+      const callArgs = [
+        ...baseArgs,
+        authArg,
+        ...(progressId ? [txb.object(progressId)] : []),
+        paymentCoin,
+        txb.object(statsId!),
+        txb.object(RANDOM_STATE),
+        txb.object(kioskId),
+        txb.object(kioskCapId!),
+      ];
 
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`,
-        arguments: [
-          txb.object(box.id),
-          txb.object(LOOTBOX_REGISTRY),
-          txb.object(TREASURY_POOL),
-          ...(mode === 'pity' && progressId ? [txb.object(progressId)] : []),
-          paymentCoin,
-          txb.object(statsId!),
-          txb.object(RANDOM_STATE),
-          txb.object(kioskId),
-          txb.object(kioskCapId!),
-        ],
+        arguments: callArgs,
       });
 
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
-          toast({ title: "Summon Successful", description: "Minting character on-chain..." });
+          toast({ title: "Summon Successful", description: "Character materialized on-chain." });
           setOpeningBox(box);
           setIsPending(false);
         },
@@ -176,7 +209,7 @@ export default function ShopPage() {
         }
       });
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Setup error", description: err.message });
+      toast({ variant: "destructive", title: "Summon Error", description: err.message });
       setIsPending(false);
     }
   };
@@ -198,15 +231,35 @@ export default function ShopPage() {
               </p>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <Card className="glass-card border-accent/20 p-4">
-                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Pity Enabled</div>
-                 <div className="text-xl font-headline font-bold text-accent">ACTIVE</div>
-              </Card>
-              <Card className="glass-card border-primary/20 p-4">
-                 <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Batch Summon</div>
-                 <div className="text-xl font-headline font-bold text-primary">UP TO 10x</div>
-              </Card>
+            <div className="flex flex-col items-end gap-4">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={cn("px-6 rounded-lg font-bold text-xs h-9", paymentMethod === 'SUI' ? "bg-primary text-white glow-purple" : "text-muted-foreground")}
+                  onClick={() => setPaymentMethod('SUI')}
+                >
+                  SUI MODE
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={cn("px-6 rounded-lg font-bold text-xs h-9", paymentMethod === 'GYATE' ? "bg-accent text-white glow-violet" : "text-muted-foreground")}
+                  onClick={() => setPaymentMethod('GYATE')}
+                >
+                  $GYATE MODE
+                </Button>
+              </div>
+              <div className="flex gap-4">
+                <Card className="glass-card border-accent/20 px-4 py-2">
+                   <div className="text-[9px] uppercase font-bold text-muted-foreground">Pity System</div>
+                   <div className="text-sm font-headline font-bold text-accent">ACTIVE</div>
+                </Card>
+                <Card className="glass-card border-primary/20 px-4 py-2">
+                   <div className="text-[9px] uppercase font-bold text-muted-foreground">Max Batch</div>
+                   <div className="text-sm font-headline font-bold text-primary">10x SUMMON</div>
+                </Card>
+              </div>
             </div>
           </div>
 
@@ -246,29 +299,40 @@ export default function ShopPage() {
                     <div className="space-y-4 mt-auto">
                       <div className="flex justify-between items-end border-b border-white/5 pb-4">
                         <div className="flex flex-col">
-                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Cost</span>
-                          <span className="text-2xl font-bold flex items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Active Price</span>
+                          <span className={cn(
+                            "text-2xl font-bold flex items-center gap-1",
+                            paymentMethod === 'SUI' ? "text-white" : "text-muted-foreground line-through opacity-50"
+                          )}>
                             {Number(box.price) / 1_000_000_000} <span className="text-accent text-sm font-headline">SUI</span>
                           </span>
                         </div>
                         <div className="text-right">
                            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Alt Price</span>
-                           <div className="text-sm font-bold text-primary">{box.gyate_price} $GYATE</div>
+                           <div className={cn(
+                             "text-sm font-bold flex items-center justify-end gap-1",
+                             paymentMethod === 'GYATE' ? "text-primary scale-110 transition-transform" : "text-muted-foreground line-through opacity-50"
+                           )}>
+                             {box.gyate_price} <Coins className="w-3 h-3" />
+                           </div>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <Button 
-                          className="h-12 font-bold glow-purple bg-primary"
+                          className={cn(
+                            "h-12 font-bold transition-all",
+                            paymentMethod === 'SUI' ? "glow-purple bg-primary" : "glow-violet bg-accent"
+                          )}
                           disabled={isPending}
                           onClick={() => handleSummon(box, 'single')}
                         >
-                          Single Pull
+                          {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Single Pull"}
                         </Button>
                         {box.multi_open_enabled && (
                           <Button 
                             variant="secondary"
-                            className="h-12 font-bold bg-accent/20 hover:bg-accent/40 text-accent"
+                            className="h-12 font-bold bg-white/5 hover:bg-white/10 border-white/10"
                             disabled={isPending}
                             onClick={() => handleSummon(box, 'multi')}
                           >
@@ -276,6 +340,17 @@ export default function ShopPage() {
                           </Button>
                         )}
                       </div>
+                      
+                      {box.pity_enabled && (
+                        <Button 
+                          variant="outline" 
+                          className="w-full h-10 text-[10px] font-bold tracking-widest uppercase border-accent/20 text-accent hover:bg-accent/10"
+                          disabled={isPending}
+                          onClick={() => handleSummon(box, 'pity')}
+                        >
+                          Execute Pity-Guaranteed Summon
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
