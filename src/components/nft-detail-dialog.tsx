@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import Image from "next/image";
 import { Sword, Shield, Zap, Sparkles, Wand2, Tag, Loader2, Flame, Coins } from "lucide-react";
 import { suggestNftName } from "@/ai/flows/suggest-nft-name";
@@ -21,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
+import { cn } from "@/lib/utils";
 
 interface NFTDetailDialogProps {
   nft: NFT | null;
