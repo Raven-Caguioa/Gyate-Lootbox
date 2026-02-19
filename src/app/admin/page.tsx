@@ -112,7 +112,10 @@ export default function AdminPage() {
   const [isPending, setIsPending] = useState(false);
   const [myLootboxes, setMyLootboxes] = useState<LootboxOption[]>([]);
   const [isLoadingBoxes, setIsLoadingBoxes] = useState(false);
-  const [selectedBoxFullData, setSelectedBoxFullData] = useState<LootboxFullData | null>(null);
+
+  // --- Segregated Data States ---
+  const [contentBoxData, setContentBoxData] = useState<LootboxFullData | null>(null);
+  const [variantBoxData, setVariantBoxData] = useState<LootboxFullData | null>(null);
   const [isFetchingFullData, setIsFetchingFullData] = useState(false);
 
   // --- Achievement State ---
@@ -180,7 +183,7 @@ export default function AdminPage() {
         options: { showContent: true }
       });
       const achs = (obj.data?.content as any)?.fields?.achievements || [];
-      setAchievements(achs.map((a: any) => a.fields));
+      setAchievements(achs.map((a: any) => ({ ...a.fields, id: a.fields.id.id || a.fields.id })));
     } catch (err) {
       console.error("Failed to fetch achievements:", err);
     } finally {
@@ -250,8 +253,11 @@ export default function AdminPage() {
     }
   }, [suiClient]);
 
-  const fetchFullBoxData = useCallback(async (id: string) => {
-    if (!id) return;
+  const fetchFullBoxData = useCallback(async (id: string, setter: (data: LootboxFullData | null) => void) => {
+    if (!id) {
+      setter(null);
+      return;
+    }
     setIsFetchingFullData(true);
     try {
       const obj = await suiClient.getObject({
@@ -260,7 +266,7 @@ export default function AdminPage() {
       });
       const fields = (obj.data?.content as any)?.fields;
       if (fields) {
-        setSelectedBoxFullData({
+        setter({
           id,
           name: fields.name,
           price: fields.price,
@@ -292,26 +298,28 @@ export default function AdminPage() {
     fetchAchievements();
   }, [fetchLootboxes, fetchTreasuryData, fetchAchievements]);
 
+  // Synchronize target box data for Content Lab
   useEffect(() => {
-    const id = targetBoxId || variantBoxId;
-    if (id) {
-      fetchFullBoxData(id);
-    } else {
-      setSelectedBoxFullData(null);
-    }
-  }, [targetBoxId, variantBoxId, fetchFullBoxData]);
+    fetchFullBoxData(targetBoxId, setContentBoxData);
+  }, [targetBoxId, fetchFullBoxData]);
 
-  const allAvailableNfts = useMemo(() => {
-    if (!selectedBoxFullData) return [];
+  // Synchronize variant box data for Variant Lab
+  useEffect(() => {
+    fetchFullBoxData(variantBoxId, setVariantBoxData);
+    setSelectedNftForVariant(""); // Reset selection when box changes to prevent Instruction 94 mismatch
+  }, [variantBoxId, fetchFullBoxData]);
+
+  const variantNftOptions = useMemo(() => {
+    if (!variantBoxData) return [];
     return [
-      ...selectedBoxFullData.common_configs,
-      ...selectedBoxFullData.rare_configs,
-      ...selectedBoxFullData.super_rare_configs,
-      ...selectedBoxFullData.ssr_configs,
-      ...selectedBoxFullData.ultra_rare_configs,
-      ...selectedBoxFullData.legend_rare_configs,
+      ...variantBoxData.common_configs,
+      ...variantBoxData.rare_configs,
+      ...variantBoxData.super_rare_configs,
+      ...variantBoxData.ssr_configs,
+      ...variantBoxData.ultra_rare_configs,
+      ...variantBoxData.legend_rare_configs,
     ];
-  }, [selectedBoxFullData]);
+  }, [variantBoxData]);
 
   const handleCreateDraft = async () => {
     if (!newBoxName || !newBoxPrice) return;
@@ -374,7 +382,7 @@ export default function AdminPage() {
         toast({ title: "NFT Type Added", description: `${nftName} added to registry.` });
         setIsPending(false);
         setNftName("");
-        fetchFullBoxData(targetBoxId);
+        fetchFullBoxData(targetBoxId, setContentBoxData);
       },
       onError: (err) => { 
         toast({ variant: "destructive", title: "Addition Failed", description: err.message }); 
@@ -385,7 +393,14 @@ export default function AdminPage() {
 
   const handleAddVariant = async () => {
     if (!variantBoxId || !selectedNftForVariant || !variantName) return;
-    const [name, rarity] = selectedNftForVariant.split("|");
+    
+    // Use robust delimiter to avoid issues with names containing spaces
+    const [name, rarity] = selectedNftForVariant.split(":::");
+    if (!name || isNaN(parseInt(rarity))) {
+      toast({ variant: "destructive", title: "Selection Error", description: "Invalid character selection format." });
+      return;
+    }
+
     setIsPending(true);
     const txb = new Transaction();
     
@@ -411,10 +426,10 @@ export default function AdminPage() {
         toast({ title: "Variant Added", description: `${variantName} variant deployed.` });
         setIsPending(false);
         setVariantName("");
-        fetchFullBoxData(variantBoxId);
+        fetchFullBoxData(variantBoxId, setVariantBoxData);
       },
       onError: (err) => { 
-        toast({ variant: "destructive", title: "Failed", description: "Base character not found in draft or box is already active." }); 
+        toast({ variant: "destructive", title: "Failed", description: "Base character not found in draft. Ensure you have selected a character from the correct Lootbox." }); 
         setIsPending(false); 
       },
     });
@@ -479,7 +494,7 @@ export default function AdminPage() {
         txb.pure.string(newAch.name),
         txb.pure.string(newAch.description),
         txb.pure.string(newAch.imageUrl),
-        txb.pure.u64(BigInt(newAch.reward)),
+        txb.pure.u64(BigInt(parseFloat(newAch.reward) * 1_000_000_000)),
         txb.pure.u8(parseInt(newAch.reqType)),
         txb.pure.u64(BigInt(newAch.reqValue)),
         txb.pure.u8(parseInt(newAch.reqRarity)),
@@ -545,15 +560,15 @@ export default function AdminPage() {
   };
 
   const handleFinalize = async () => {
-    if (!targetBoxId || !selectedBoxFullData) return;
+    if (!targetBoxId || !contentBoxData) return;
 
     const emptyTiers = [];
-    if (selectedBoxFullData.common_configs.length === 0) emptyTiers.push("Common");
-    if (selectedBoxFullData.rare_configs.length === 0) emptyTiers.push("Rare");
-    if (selectedBoxFullData.super_rare_configs.length === 0) emptyTiers.push("Super Rare");
-    if (selectedBoxFullData.ssr_configs.length === 0) emptyTiers.push("SSR");
-    if (selectedBoxFullData.ultra_rare_configs.length === 0) emptyTiers.push("Ultra Rare");
-    if (selectedBoxFullData.legend_rare_configs.length === 0) emptyTiers.push("Legend Rare");
+    if (contentBoxData.common_configs.length === 0) emptyTiers.push("Common");
+    if (contentBoxData.rare_configs.length === 0) emptyTiers.push("Rare");
+    if (contentBoxData.super_rare_configs.length === 0) emptyTiers.push("Super Rare");
+    if (contentBoxData.ssr_configs.length === 0) emptyTiers.push("SSR");
+    if (contentBoxData.ultra_rare_configs.length === 0) emptyTiers.push("Ultra Rare");
+    if (contentBoxData.legend_rare_configs.length === 0) emptyTiers.push("Legend Rare");
 
     if (emptyTiers.length > 0) {
       toast({ 
@@ -631,7 +646,7 @@ export default function AdminPage() {
     );
   };
 
-  const ProtocolInspector = () => (
+  const ProtocolInspector = ({ data }: { data: LootboxFullData | null }) => (
     <Card className="glass-card border-white/10 flex flex-col h-[800px]">
       <CardHeader className="border-b border-white/5">
         <CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2">
@@ -644,14 +659,14 @@ export default function AdminPage() {
             <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
               <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading...
             </div>
-          ) : selectedBoxFullData ? (
+          ) : data ? (
             <div className="space-y-6">
-              {renderRarityTier("Legend Rare", selectedBoxFullData.legend_rare_configs)}
-              {renderRarityTier("Ultra Rare", selectedBoxFullData.ultra_rare_configs)}
-              {renderRarityTier("SSR", selectedBoxFullData.ssr_configs)}
-              {renderRarityTier("Super Rare", selectedBoxFullData.super_rare_configs)}
-              {renderRarityTier("Rare", selectedBoxFullData.rare_configs)}
-              {renderRarityTier("Common", selectedBoxFullData.common_configs)}
+              {renderRarityTier("Legend Rare", data.legend_rare_configs)}
+              {renderRarityTier("Ultra Rare", data.ultra_rare_configs)}
+              {renderRarityTier("SSR", data.ssr_configs)}
+              {renderRarityTier("Super Rare", data.super_rare_configs)}
+              {renderRarityTier("Rare", data.rare_configs)}
+              {renderRarityTier("Common", data.common_configs)}
             </div>
           ) : (
             <div className="text-center py-20 text-xs text-muted-foreground">Select a draft to inspect</div>
@@ -927,7 +942,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <ProtocolInspector />
+                <ProtocolInspector data={contentBoxData} />
               </div>
             </TabsContent>
 
@@ -1043,7 +1058,7 @@ export default function AdminPage() {
                                  <div className="text-[10px] text-muted-foreground">{REQ_LABELS[a.requirement_type]}: {a.requirement_value}</div>
                                </div>
                                <div className="text-right">
-                                 <div className="text-xs font-bold text-primary">+{a.gyate_reward} G</div>
+                                 <div className="text-xs font-bold text-primary">+{parseInt(a.gyate_reward) / 1000000000} G</div>
                                  <div className="text-[9px] text-muted-foreground">Claimed: {a.total_claimed}</div>
                                </div>
                             </div>
@@ -1060,151 +1075,205 @@ export default function AdminPage() {
             </TabsContent>
 
             <TabsContent value="treasury" className="space-y-8">
-              <div className="grid md:grid-cols-[1fr_400px] gap-8">
+              <div className="grid md:grid-cols-2 gap-8">
                 <Card className="glass-card border-primary/20">
                   <CardHeader>
-                    <CardTitle>Treasury Operations</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                       <Coins className="w-5 h-5 text-accent" /> Treasury Overview
+                    </CardTitle>
+                    <CardDescription>Current balance and activity</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6">
+                  <CardContent className="space-y-4">
+                    {isFetchingTreasury ? (
+                      <div className="text-center py-20 text-sm text-muted-foreground">
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading Treasury Stats...
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Balance</Label>
+                            <div className="text-sm font-bold">{treasuryStats?.balance ? parseInt(treasuryStats.balance) / 1_000_000_000 : 0} SUI</div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Total From Lootboxes</Label>
+                            <div className="text-sm font-bold">{treasuryStats?.totalFromLootboxes ? parseInt(treasuryStats.totalFromLootboxes) / 1_000_000_000 : 0} SUI</div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Total From Marketplace</Label>
+                            <div className="text-sm font-bold">{treasuryStats?.totalFromMarketplace ? parseInt(treasuryStats.totalFromMarketplace) / 1_000_000_000 : 0} SUI</div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Total Withdrawn</Label>
+                            <div className="text-sm font-bold">{treasuryStats?.totalWithdrawn ? parseInt(treasuryStats.totalWithdrawn) / 1_000_000_000 : 0} SUI</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-card border-accent/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Wallet className="w-5 h-5 text-accent" /> Withdraw GYATE
+                    </CardTitle>
+                    <CardDescription>Transfer $GYATE to a wallet</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Withdraw SUI</Label>
+                      <Label>Amount to Withdraw</Label>
                       <Input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} />
                     </div>
-                    <Button className="w-full h-12 glow-purple font-bold" onClick={() => {}} disabled={isPending}>
+                    <Button className="w-full glow-purple font-bold h-12" onClick={async () => {
+                      if (!withdrawAmount) return;
+                      setIsPending(true);
+                      const txb = new Transaction();
+                      txb.moveCall({
+                        target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::withdraw_gyate`,
+                        arguments: [
+                          txb.object(TREASURY_CAP),
+                          txb.pure.u64(BigInt(parseFloat(withdrawAmount) * 1_000_000_000)),
+                        ],
+                      });
+
+                      signAndExecute({ transaction: txb }, {
+                        onSuccess: () => {
+                          toast({ title: "Withdrawal Sent", description: `Withdrawal of ${withdrawAmount} GYATE initiated.` });
+                          setIsPending(false);
+                          setWithdrawAmount("");
+                          fetchTreasuryData();
+                        },
+                        onError: (err) => {
+                          toast({ variant: "destructive", title: "Withdrawal Failed", description: err.message });
+                          setIsPending(false);
+                        }
+                      });
+                    }} disabled={isPending}>
                       Execute On-Chain Withdrawal
                     </Button>
                   </CardContent>
                 </Card>
-
-                <div className="space-y-4">
-                  <h3 className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-accent" /> Treasury Pool Status
-                  </h3>
-                  <div className="grid gap-4">
-                    <Card className="bg-white/5 border-white/10 p-4">
-                      <div className="text-[10px] text-muted-foreground uppercase mb-1">Available SUI</div>
-                      <div className="text-3xl font-bold font-headline">
-                        {treasuryStats ? (parseInt(treasuryStats.balance) / 1000000000).toFixed(2) : "0.00"}
-                      </div>
-                    </Card>
-                  </div>
-                </div>
               </div>
             </TabsContent>
 
             <TabsContent value="variants" className="space-y-8">
               <div className="grid md:grid-cols-[1fr_350px] gap-8">
-                <Card className="glass-card border-primary/20">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-accent" /> Variant Lab
-                    </CardTitle>
-                    <CardDescription>Configure special hero editions and limited drops</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Target Box (Drafts Only)</Label>
-                        <Select value={variantBoxId} onValueChange={setVariantBoxId}>
-                          <SelectTrigger className="bg-white/5">
-                            <SelectValue placeholder="Select box..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {myLootboxes.filter(b => b.isSetup).map(box => (
-                              <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Character Selection</Label>
-                        <Select value={selectedNftForVariant} onValueChange={setSelectedNftForVariant} disabled={!variantBoxId}>
-                          <SelectTrigger className="bg-white/5">
-                            <SelectValue placeholder="Select character..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allAvailableNfts.map((nft, idx) => (
-                              <SelectItem key={idx} value={`${nft.name}|${nft.rarity}`}>
-                                {nft.name} ({RARITY_LABELS[nft.rarity as keyof typeof RARITY_LABELS]})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Variant Name</Label>
-                        <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} placeholder="e.g. Shiny, Holographic" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Drop Rate (%)</Label>
-                        <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Value Multiplier (%)</Label>
-                        <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} placeholder="150 = 1.5x" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Variant Image URL</Label>
-                        <Input value={variantImage} onChange={(e) => setVariantImage(e.target.value)} placeholder="IPFS or HTTPS link" />
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-white/5 space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label className="flex items-center gap-2"><Hash className="w-3 h-3" /> Sequential IDs</Label>
-                          <p className="text-[10px] text-muted-foreground">Give each mint a unique serial number (e.g. #1, #2)</p>
+                <div className="space-y-8">
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <Card className="glass-card border-primary/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Badge className="bg-primary/20 text-primary">03</Badge> Select Base
+                        </CardTitle>
+                        <CardDescription>Choose the base NFT for variant customization</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Select Draft Box</Label>
+                          <Select value={variantBoxId} onValueChange={setVariantBoxId}>
+                            <SelectTrigger className="bg-white/5 border-white/10">
+                              <SelectValue placeholder="Choose a draft..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {myLootboxes.filter(b => b.isSetup).map(box => (
+                                <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                        <Switch checked={hasSeqId} onCheckedChange={setHasSeqId} />
-                      </div>
-
-                      <div className="flex items-center justify-between border-t border-white/5 pt-6">
-                        <div className="space-y-0.5">
-                          <Label className="flex items-center gap-2">Supply & Time Limits</Label>
-                          <p className="text-[10px] text-muted-foreground">Configure availability period and maximum total supply</p>
+                        <div className="space-y-2">
+                          <Label>Select Base NFT</Label>
+                          <Select value={selectedNftForVariant} onValueChange={setSelectedNftForVariant}>
+                            <SelectTrigger className="bg-white/5">
+                              <SelectValue placeholder="Choose a character..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {variantNftOptions.map((nft, idx) => (
+                                <SelectItem key={idx} value={`${nft.name}:::${nft.rarity}`}>
+                                  {nft.name} ({RARITY_LABELS[nft.rarity as keyof typeof RARITY_LABELS]})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                        <Switch checked={useLimits} onCheckedChange={setUseLimits} />
-                      </div>
+                      </CardContent>
+                    </Card>
 
-                      {useLimits && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
-                                <Clock className="w-3 h-3" /> Available From (Epoch)
-                              </Label>
-                              <Input value={availFrom} onChange={(e) => setAvailFrom(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="flex items-center gap-2 text-[10px] uppercase font-bold text-muted-foreground">
-                                <Clock className="w-3 h-3" /> Available Until (Epoch)
-                              </Label>
-                              <Input value={availUntil} onChange={(e) => setAvailUntil(e.target.value)} />
-                            </div>
-                          </div>
-
+                    <Card className="glass-card border-primary/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Badge className="bg-primary/20 text-primary">04</Badge> Create Variant
+                        </CardTitle>
+                        <CardDescription>Configure appearance and mechanics</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Variant Name</Label>
+                          <Input value={variantName} onChange={(e) => setVariantName(e.target.value)} placeholder="e.g. Shiny, Holographic" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label className="text-[10px] uppercase font-bold text-muted-foreground">Max Total Mints</Label>
-                            <Input value={maxMints} onChange={(e) => setMaxMints(e.target.value)} placeholder="0 for unlimited" />
+                            <Label>Drop Rate (%)</Label>
+                            <Input type="number" value={variantDropRate} onChange={(e) => setVariantDropRate(e.target.value)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Multiplier (%)</Label>
+                            <Input type="number" value={variantMultiplier} onChange={(e) => setVariantMultiplier(e.target.value)} placeholder="150 = 1.5x" />
                           </div>
                         </div>
-                      )}
-                    </div>
+                        <div className="space-y-2">
+                          <Label>Variant Image URL</Label>
+                          <Input value={variantImage} onChange={(e) => setVariantImage(e.target.value)} placeholder="IPFS or HTTPS link" />
+                        </div>
+                        
+                        <div className="pt-4 border-t border-white/5 space-y-6">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label className="flex items-center gap-2"><Hash className="w-3 h-3" /> Sequential IDs</Label>
+                              <p className="text-[10px] text-muted-foreground">Unique serial number per mint</p>
+                            </div>
+                            <Switch checked={hasSeqId} onCheckedChange={setHasSeqId} />
+                          </div>
 
-                    <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12 glow-violet" onClick={handleAddVariant} disabled={isPending || !variantBoxId || !selectedNftForVariant}>
-                      {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                      Deploy Variant to Blockchain
-                    </Button>
-                  </CardContent>
-                </Card>
+                          <div className="flex items-center justify-between border-t border-white/5 pt-6">
+                            <div className="space-y-0.5">
+                              <Label className="flex items-center gap-2">Supply & Time Limits</Label>
+                              <p className="text-[10px] text-muted-foreground">Configure availability period</p>
+                            </div>
+                            <Switch checked={useLimits} onCheckedChange={setUseLimits} />
+                          </div>
 
-                <ProtocolInspector />
+                          {useLimits && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">From (Epoch)</Label>
+                                  <Input value={availFrom} onChange={(e) => setAvailFrom(e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label className="text-[10px] uppercase font-bold text-muted-foreground">Until (Epoch)</Label>
+                                  <Input value={availUntil} onChange={(e) => setAvailUntil(e.target.value)} />
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Max Total Mints</Label>
+                                <Input value={maxMints} onChange={(e) => setMaxMints(e.target.value)} placeholder="0 for unlimited" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <Button className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12 glow-violet" onClick={handleAddVariant} disabled={isPending || !variantBoxId || !selectedNftForVariant}>
+                          {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                          Deploy Variant
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                <ProtocolInspector data={variantBoxData} />
               </div>
             </TabsContent>
           </Tabs>
