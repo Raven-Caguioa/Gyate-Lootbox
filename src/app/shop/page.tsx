@@ -3,7 +3,7 @@
 
 import { Navigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";
-import { Store, Sparkles, Loader2, RefreshCw, Zap, Info, Coins } from "lucide-react";
+import { Store, Sparkles, Loader2, RefreshCw, Zap, Info, Coins, ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect, useCallback } from "react";
@@ -14,6 +14,12 @@ import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, R
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import useEmblaCarousel from "embla-carousel-react";
+
+interface PossibleNFT {
+  name: string;
+  image: string;
+}
 
 interface LootboxData {
   id: string;
@@ -25,13 +31,63 @@ interface LootboxData {
   pity_enabled: boolean;
   multi_open_enabled: boolean;
   multi_open_size: string;
-  // Character counts to prevent instruction 14
   common_count: number;
   rare_count: number;
   super_rare_count: number;
   ssr_count: number;
   ultra_rare_count: number;
   legend_rare_count: number;
+  possibleNfts: PossibleNFT[];
+}
+
+function LootboxPreviewCarousel({ nfts, fallbackImage }: { nfts: PossibleNFT[], fallbackImage: string }) {
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, duration: 30 });
+
+  useEffect(() => {
+    if (!emblaApi || nfts.length <= 1) return;
+    const intervalId = setInterval(() => {
+      emblaApi.scrollNext();
+    }, 3000);
+    return () => clearInterval(intervalId);
+  }, [emblaApi, nfts.length]);
+
+  if (nfts.length === 0) {
+    return (
+      <div className="relative aspect-[4/3] w-full overflow-hidden">
+        <Image src={fallbackImage} alt="Lootbox" fill className="object-cover" />
+        <div className="absolute inset-0 bg-black/40" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative aspect-[4/3] w-full overflow-hidden bg-black/20" ref={emblaRef}>
+      <div className="flex h-full">
+        {nfts.map((nft, idx) => (
+          <div key={idx} className="relative flex-[0_0_100%] min-w-0 h-full group">
+            <Image 
+              src={nft.image || fallbackImage} 
+              alt={nft.name} 
+              fill 
+              className="object-cover transition-transform duration-700 group-hover:scale-110" 
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+            <div className="absolute bottom-3 left-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/60 bg-black/40 px-2 py-1 rounded-md backdrop-blur-sm">
+                Possible Drop: {nft.name}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Overlay Decoration */}
+      <div className="absolute inset-0 pointer-events-none border-b border-white/5" />
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 group-hover:opacity-40 transition-opacity">
+         <Store className="w-16 h-16 text-white" />
+      </div>
+    </div>
+  );
 }
 
 export default function ShopPage() {
@@ -68,6 +124,24 @@ export default function ShopPage() {
 
       const boxes: LootboxData[] = boxesData.map((obj: any) => {
         const fields = obj.data?.content?.fields;
+        
+        const extractNfts = (configs: any[]) => {
+          if (!configs) return [];
+          return configs.map(c => ({
+            name: c.fields.name,
+            image: c.fields.base_image_url
+          }));
+        };
+
+        const possibleNfts = [
+          ...extractNfts(fields.common_configs),
+          ...extractNfts(fields.rare_configs),
+          ...extractNfts(fields.super_rare_configs),
+          ...extractNfts(fields.ssr_configs),
+          ...extractNfts(fields.ultra_rare_configs),
+          ...extractNfts(fields.legend_rare_configs),
+        ];
+
         return {
           id: obj.data?.objectId,
           name: fields?.name || "Premium Crate",
@@ -84,6 +158,7 @@ export default function ShopPage() {
           ssr_count: fields?.ssr_configs?.length || 0,
           ultra_rare_count: fields?.ultra_rare_configs?.length || 0,
           legend_rare_count: fields?.legend_rare_configs?.length || 0,
+          possibleNfts
         };
       });
 
@@ -105,7 +180,6 @@ export default function ShopPage() {
       return;
     }
 
-    // Protection: Verify the box isn't empty in a way that causes instruction 14
     const totalChars = box.common_count + box.rare_count + box.super_rare_count + box.ssr_count + box.ultra_rare_count + box.legend_rare_count;
     if (totalChars === 0) {
       toast({ variant: "destructive", title: "Empty Protocol", description: "This lootbox has no character types registered yet." });
@@ -115,7 +189,6 @@ export default function ShopPage() {
     setIsPending(true);
     
     try {
-      // 1. Setup Kiosk refs
       const ownedCaps = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
@@ -131,7 +204,6 @@ export default function ShopPage() {
       const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
       const kioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // 2. Find PlayerStats
       const statsObjects = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` }
@@ -146,7 +218,6 @@ export default function ShopPage() {
       const statsId = statsObjects.data[0].data?.objectId;
       const txb = new Transaction();
 
-      // 3. Determine payment and function
       let paymentAmount = mode === 'multi' 
         ? BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price) * BigInt(box.multi_open_size)
         : BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price);
@@ -162,7 +233,6 @@ export default function ShopPage() {
         else if (mode === 'pity') targetFunction = FUNCTIONS.OPEN_LOOTBOX_GYATE_WITH_PITY;
       }
 
-      // 4. Handle Coin splitting/merging
       let paymentCoin;
       if (paymentMethod === 'SUI') {
         [paymentCoin] = txb.splitCoins(txb.gas, [paymentAmount]);
@@ -178,7 +248,6 @@ export default function ShopPage() {
         [paymentCoin] = txb.splitCoins(txb.object(mainCoin), [paymentAmount]);
       }
 
-      // 5. Handle Pity Progress injection if needed
       let progressId: string | null = null;
       if (mode === 'pity') {
         const progressObjects = await suiClient.getOwnedObjects({
@@ -195,19 +264,16 @@ export default function ShopPage() {
         progressId = progress.data!.objectId;
       }
 
-      // 6. Final Call Construction - ENSURE PRECISE ARGUMENT ORDER
       const callArgs = [
         txb.object(box.id),
         txb.object(LOOTBOX_REGISTRY),
         paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(TREASURY_CAP),
       ];
 
-      // Insert progress object for pity functions (it's the 4th argument in Move)
       if (mode === 'pity' && progressId) {
         callArgs.push(txb.object(progressId));
       }
 
-      // Remaining arguments
       callArgs.push(paymentCoin);
       callArgs.push(txb.object(statsId!));
       callArgs.push(txb.object(RANDOM_STATE));
@@ -290,15 +356,9 @@ export default function ShopPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               {activeBoxes.map((box) => (
                 <Card key={box.id} className="glass-card overflow-hidden group border-white/5 hover:border-primary/40 transition-all flex flex-col">
-                  <div className="relative aspect-[4/3]">
-                    <Image src={box.image} alt={box.name} fill className="object-cover group-hover:scale-105 transition-transform" />
-                    <div className="absolute inset-0 bg-black/40" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="p-4 rounded-3xl bg-primary/20 backdrop-blur-xl border border-primary/30 glow-purple">
-                        <Store className="w-12 h-12 text-white" />
-                      </div>
-                    </div>
-                  </div>
+                  
+                  <LootboxPreviewCarousel nfts={box.possibleNfts} fallbackImage={box.image} />
+
                   <CardContent className="p-6 space-y-6 flex-1 flex flex-col">
                     <div>
                       <h3 className="font-headline font-bold text-2xl mb-2">{box.name}</h3>
