@@ -231,7 +231,8 @@ export default function ShopPage() {
 
       let paymentCoin;
       if (paymentMethod === 'SUI') {
-        [paymentCoin] = txb.splitCoins(txb.gas, [paymentAmount]);
+        const [coin] = txb.splitCoins(txb.gas, [txb.pure.u64(paymentAmount)]);
+        paymentCoin = coin;
       } else {
         const gyateType = `${PACKAGE_ID}::${MODULE_NAMES.GYATE_COIN}::GYATE_COIN`;
         const coins = await suiClient.getCoins({ owner: account.address, coinType: gyateType });
@@ -241,7 +242,8 @@ export default function ShopPage() {
         if (otherCoins.length > 0) {
           txb.mergeCoins(txb.object(mainCoin), otherCoins.map(c => txb.object(c)));
         }
-        [paymentCoin] = txb.splitCoins(txb.object(mainCoin), [paymentAmount]);
+        const [coin] = txb.splitCoins(txb.object(mainCoin), [txb.pure.u64(paymentAmount)]);
+        paymentCoin = coin;
       }
 
       let progressId: string | null = null;
@@ -275,6 +277,11 @@ export default function ShopPage() {
       callArgs.push(txb.object(RANDOM_STATE));
       callArgs.push(txb.object(kioskId));
       callArgs.push(txb.object(kioskCapId!));
+
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`,
+        arguments: callArgs,
+      });
 
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
