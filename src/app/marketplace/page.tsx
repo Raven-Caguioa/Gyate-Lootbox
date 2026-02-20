@@ -28,9 +28,9 @@ export default function MarketplacePage() {
   // Filtering State
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRarities, setSelectedRarities] = useState<number[]>([]);
-  const [hpRange, setHpRange] = useState([0, 2500]);
-  const [atkRange, setAtkRange] = useState([0, 600]);
-  const [spdRange, setSpdRange] = useState([0, 400]);
+  const [hpRange, setHpRange] = useState({ min: "0", max: "2500" });
+  const [atkRange, setAtkRange] = useState({ min: "0", max: "600" });
+  const [spdRange, setSpdRange] = useState({ min: "0", max: "400" });
 
   const suiClient = useSuiClient();
   const account = useCurrentAccount();
@@ -138,15 +138,16 @@ export default function MarketplacePage() {
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // Switch to queryObjects to find shared TransferPolicies
-      const policyResponse = await suiClient.queryObjects({
+      // Find the TransferPolicy by searching the admin's owned objects
+      const policyResponse = await suiClient.getOwnedObjects({
+        owner: ADMIN_ADDRESS,
         filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
       });
 
       const transferPolicyId = policyResponse.data[0]?.data?.objectId;
 
       if (!transferPolicyId) {
-        toast({ variant: "destructive", title: "Policy Error", description: "No active TransferPolicy found on the network for this character type." });
+        toast({ variant: "destructive", title: "Policy Error", description: "No active TransferPolicy found on the platform for this character type." });
         setIsPending(false);
         return;
       }
@@ -185,12 +186,19 @@ export default function MarketplacePage() {
   };
 
   const filteredListings = useMemo(() => {
+    const minHp = parseInt(hpRange.min) || 0;
+    const maxHp = parseInt(hpRange.max) || 999999;
+    const minAtk = parseInt(atkRange.min) || 0;
+    const maxAtk = parseInt(atkRange.max) || 999999;
+    const minSpd = parseInt(spdRange.min) || 0;
+    const maxSpd = parseInt(spdRange.max) || 999999;
+
     return listings.filter(l => {
       const matchesSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase()) || l.id.includes(searchTerm);
       const matchesRarity = selectedRarities.length === 0 || selectedRarities.includes(l.rarity);
-      const matchesHp = l.hp >= hpRange[0] && l.hp <= hpRange[1];
-      const matchesAtk = l.atk >= atkRange[0] && l.atk <= atkRange[1];
-      const matchesSpd = l.spd >= spdRange[0] && l.spd <= spdRange[1];
+      const matchesHp = l.hp >= minHp && l.hp <= maxHp;
+      const matchesAtk = l.atk >= minAtk && l.atk <= maxAtk;
+      const matchesSpd = l.spd >= minSpd && l.spd <= maxSpd;
       
       return matchesSearch && matchesRarity && matchesHp && matchesAtk && matchesSpd;
     });
@@ -205,9 +213,9 @@ export default function MarketplacePage() {
   const resetFilters = () => {
     setSearchTerm("");
     setSelectedRarities([]);
-    setHpRange([0, 2500]);
-    setAtkRange([0, 600]);
-    setSpdRange([0, 400]);
+    setHpRange({ min: "0", max: "2500" });
+    setAtkRange({ min: "0", max: "600" });
+    setSpdRange({ min: "0", max: "400" });
   };
 
   return (
@@ -289,16 +297,16 @@ export default function MarketplacePage() {
                       <Input
                         type="number"
                         placeholder="Min"
-                        value={hpRange[0]}
-                        onChange={(e) => setHpRange([parseInt(e.target.value) || 0, hpRange[1]])}
+                        value={hpRange.min}
+                        onChange={(e) => setHpRange({ ...hpRange, min: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
                       <span className="text-muted-foreground">-</span>
                       <Input
                         type="number"
                         placeholder="Max"
-                        value={hpRange[1]}
-                        onChange={(e) => setHpRange([hpRange[0], parseInt(e.target.value) || 0])}
+                        value={hpRange.max}
+                        onChange={(e) => setHpRange({ ...hpRange, max: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
                     </div>
@@ -311,16 +319,16 @@ export default function MarketplacePage() {
                       <Input
                         type="number"
                         placeholder="Min"
-                        value={atkRange[0]}
-                        onChange={(e) => setAtkRange([parseInt(e.target.value) || 0, atkRange[1]])}
+                        value={atkRange.min}
+                        onChange={(e) => setAtkRange({ ...atkRange, min: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
                       <span className="text-muted-foreground">-</span>
                       <Input
                         type="number"
                         placeholder="Max"
-                        value={atkRange[1]}
-                        onChange={(e) => setAtkRange([atkRange[0], parseInt(e.target.value) || 0])}
+                        value={atkRange.max}
+                        onChange={(e) => setAtkRange({ ...atkRange, max: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
                     </div>
@@ -333,16 +341,16 @@ export default function MarketplacePage() {
                       <Input
                         type="number"
                         placeholder="Min"
-                        value={spdRange[0]}
-                        onChange={(e) => setSpdRange([parseInt(e.target.value) || 0, spdRange[1]])}
+                        value={spdRange.min}
+                        onChange={(e) => setSpdRange({ ...spdRange, min: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
                       <span className="text-muted-foreground">-</span>
                       <Input
                         type="number"
                         placeholder="Max"
-                        value={spdRange[1]}
-                        onChange={(e) => setSpdRange([spdRange[0], parseInt(e.target.value) || 0])}
+                        value={spdRange.max}
+                        onChange={(e) => setSpdRange({ ...spdRange, max: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
                     </div>
