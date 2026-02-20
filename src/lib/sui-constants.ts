@@ -1,4 +1,3 @@
-
 export const SUI_NETWORK = 'testnet';
 
 export const PACKAGE_ID = "0xb57d011dd4c245cca994592fe4e550e9776c6bcfcf3730180f82a264727e8e4e";
@@ -47,9 +46,10 @@ export const FUNCTIONS = {
   FUND: 'fund',
 
   // Marketplace module
-  CREATE_KIOSK: 'create_kiosk',
+  CREATE_KIOASK: 'create_kiosk',
   LIST_NFT: 'list_nft',
   BUY_NFT: 'buy_nft',
+  CREATE_TRANSFER_POLICY: 'create_transfer_policy',
 
   // Gyate Coin module
   ADMIN_MINT: 'admin_mint',

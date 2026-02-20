@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -138,7 +137,7 @@ export default function MarketplacePage() {
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // Find the TransferPolicy by searching the admin's owned objects
+      // Reverting to checking Admin's private wallet for TransferPolicy
       const policyResponse = await suiClient.getOwnedObjects({
         owner: ADMIN_ADDRESS,
         filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }

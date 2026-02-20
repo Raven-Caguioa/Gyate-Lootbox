@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -8,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY, TREASURY_CAP } from "@/lib/sui-constants";
+import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY, TREASURY_CAP, PUBLISHER } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Gift, AlertCircle, Pause, Play, ChevronRight } from "lucide-react";
+import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Gift, AlertCircle, Pause, Play, ChevronRight, ShieldCheck } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -601,6 +600,28 @@ export default function AdminPage() {
     });
   };
 
+  const handleCreateTransferPolicy = async () => {
+    setIsPending(true);
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.CREATE_TRANSFER_POLICY}`,
+      arguments: [
+        txb.object(PUBLISHER),
+      ],
+    });
+
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "TransferPolicy Created", description: "Policy initialized for your wallet." });
+        setIsPending(false);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Creation Failed", description: err.message });
+        setIsPending(false);
+      }
+    });
+  };
+
   const renderRarityTier = (label: string, configs: NFTTypeData[]) => {
     const isEmpty = !configs || configs.length === 0;
     return (
@@ -724,6 +745,9 @@ export default function AdminPage() {
             <TabsList className="bg-white/5 border border-white/10 p-1 h-14 overflow-x-auto whitespace-nowrap">
               <TabsTrigger value="lootbox" className="px-8 h-full data-[state=active]:bg-primary">
                 <Package className="w-4 h-4 mr-2" /> Lootbox Factory
+              </TabsTrigger>
+              <TabsTrigger value="marketplace" className="px-8 h-full data-[state=active]:bg-primary">
+                <ShieldCheck className="w-4 h-4 mr-2" /> Marketplace Setup
               </TabsTrigger>
               <TabsTrigger value="achievements" className="px-8 h-full data-[state=active]:bg-primary">
                 <Trophy className="w-4 h-4 mr-2" /> Achievements
@@ -933,6 +957,37 @@ export default function AdminPage() {
                 </div>
 
                 <ProtocolInspector data={contentBoxData} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="marketplace" className="space-y-8">
+              <div className="max-w-2xl mx-auto">
+                <Card className="glass-card border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-accent" /> Initialize Marketplace
+                    </CardTitle>
+                    <CardDescription>Create a TransferPolicy to enable secondary trading</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="p-4 rounded-xl bg-accent/5 border border-accent/10 space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Secondary sales on this platform require a TransferPolicy. This policy ensures all Kiosk-based trades follow the protocol rules.
+                      </p>
+                      <p className="text-xs font-mono text-muted-foreground/60 italic">
+                        Publisher ID: {PUBLISHER.slice(0, 20)}...
+                      </p>
+                    </div>
+                    <Button 
+                      className="w-full glow-purple font-bold h-12" 
+                      onClick={handleCreateTransferPolicy} 
+                      disabled={isPending}
+                    >
+                      {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
+                      Create TransferPolicy
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 
