@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -59,7 +60,8 @@ export default function MarketplacePage() {
       const activeListingsMetadata = listedEvents.data
         .map((e: any) => ({
           id: e.parsedJson.id,
-          kioskId: e.parsedJson.kiosk,
+          // Handle both string and nested object ID formats from events
+          kioskId: typeof e.parsedJson.kiosk === 'string' ? e.parsedJson.kiosk : e.parsedJson.kiosk?.id || e.parsedJson.kiosk,
           price: e.parsedJson.price, 
         }))
         .filter(l => !soldIds.has(l.id) && !delistedIds.has(l.id));
@@ -136,19 +138,25 @@ export default function MarketplacePage() {
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
 
-      const txb = new Transaction();
-      const [paymentCoin] = txb.splitCoins(txb.gas, [BigInt((item.price || 1) * 1_000_000_000)]);
+      if (!buyerKioskId || !item.kioskId) {
+        throw new Error("Missing Kiosk identification for trade.");
+      }
 
+      const txb = new Transaction();
+      const amountMist = BigInt(Math.floor((item.price || 1) * 1_000_000_000));
+      const [paymentCoin] = txb.splitCoins(txb.gas, [txb.pure.u64(amountMist)]);
+
+      // Ensure IDs are treated as addresses for the Move call
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.BUY_NFT}`,
         arguments: [
-          txb.object(item.kioskId!),
+          txb.object(item.kioskId), // Seller's Kiosk (must be shared)
           txb.object(TRANSFER_POLICY),
           txb.object(TREASURY_POOL),
-          txb.pure.id(item.id),
+          txb.pure.address(item.id), // The NFT ID
           paymentCoin,
-          txb.object(buyerKioskId),
-          txb.object(buyerCapId!),
+          txb.object(buyerKioskId), // Buyer's Kiosk
+          txb.object(buyerCapId!), // Buyer's Cap
         ],
       });
 
