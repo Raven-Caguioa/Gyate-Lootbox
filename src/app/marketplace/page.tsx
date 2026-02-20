@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -137,13 +138,23 @@ export default function MarketplacePage() {
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // Reverting to checking Admin's private wallet for TransferPolicy
-      const policyResponse = await suiClient.getOwnedObjects({
-        owner: ADMIN_ADDRESS,
-        filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
-      });
+      // Search for TransferPolicy across common admin addresses (hardcoded platform + current user if admin)
+      const potentialAdmins = [ADMIN_ADDRESS];
+      if (account.address && !potentialAdmins.includes(account.address)) {
+        potentialAdmins.push(account.address);
+      }
 
-      const transferPolicyId = policyResponse.data[0]?.data?.objectId;
+      let transferPolicyId = null;
+      for (const adminAddr of potentialAdmins) {
+        const policyResponse = await suiClient.getOwnedObjects({
+          owner: adminAddr,
+          filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
+        });
+        if (policyResponse.data.length > 0) {
+          transferPolicyId = policyResponse.data[0].data?.objectId;
+          break;
+        }
+      }
 
       if (!transferPolicyId) {
         toast({ variant: "destructive", title: "Policy Error", description: "No active TransferPolicy found on the platform for this character type." });
@@ -231,7 +242,7 @@ export default function MarketplacePage() {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={fetchListings} disabled={isLoading} className="bg-white/5 border-white/10 h-11 px-6">
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading && 'animate-spin'}`} />
+              <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && 'animate-spin')} />
               Refresh Data
             </Button>
           </div>
@@ -247,7 +258,6 @@ export default function MarketplacePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-8">
-                {/* Search */}
                 <div className="space-y-3">
                   <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Search</Label>
                   <div className="relative">
@@ -263,7 +273,6 @@ export default function MarketplacePage() {
 
                 <Separator className="bg-white/5" />
 
-                {/* Rarity Checkboxes */}
                 <div className="space-y-4">
                   <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Rarity Tier</Label>
                   <div className="grid gap-3">
@@ -287,9 +296,7 @@ export default function MarketplacePage() {
 
                 <Separator className="bg-white/5" />
 
-                {/* Stat Inputs */}
                 <div className="space-y-6">
-                  {/* HP Range */}
                   <div className="space-y-3">
                     <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">HP Range</Label>
                     <div className="flex items-center gap-2">
@@ -311,7 +318,6 @@ export default function MarketplacePage() {
                     </div>
                   </div>
 
-                  {/* ATK Range */}
                   <div className="space-y-3">
                     <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ATK Range</Label>
                     <div className="flex items-center gap-2">
@@ -333,7 +339,6 @@ export default function MarketplacePage() {
                     </div>
                   </div>
 
-                  {/* SPD Range */}
                   <div className="space-y-3">
                     <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">SPD Range</Label>
                     <div className="flex items-center gap-2">

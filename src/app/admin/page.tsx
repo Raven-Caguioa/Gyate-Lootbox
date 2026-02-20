@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -9,7 +10,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS, ACHIEVEMENT_REGISTRY, TREASURY_CAP, PUBLISHER } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Gift, AlertCircle, Pause, Play, ChevronRight, ShieldCheck } from "lucide-react";
+import { Coins, ArrowUpRight, Package, RefreshCw, Eye, Image as ImageIcon, Wallet, Clock, Hash, Sparkles, Trophy, Gift, AlertCircle, Pause, Play, ChevronRight, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -134,6 +135,9 @@ export default function AdminPage() {
   const [isFetchingTreasury, setIsFetchingTreasury] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
 
+  const [policyExists, setPolicyExists] = useState<boolean | null>(null);
+  const [isCheckingPolicy, setIsCheckingPolicy] = useState(false);
+
   const [newBoxName, setNewBoxName] = useState("");
   const [newBoxPrice, setNewBoxPrice] = useState("1");
   const [newGyatePrice, setNewGyatePrice] = useState("100");
@@ -167,6 +171,23 @@ export default function AdminPage() {
   const [availFrom, setAvailFrom] = useState("0");
   const [availUntil, setAvailUntil] = useState("0");
   const [maxMints, setMaxMints] = useState("0");
+
+  const checkPolicy = useCallback(async () => {
+    if (!account) return;
+    setIsCheckingPolicy(true);
+    try {
+      const NFT_TYPE = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
+      const policyResponse = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
+      });
+      setPolicyExists(policyResponse.data.length > 0);
+    } catch (err) {
+      console.error("Policy check error:", err);
+    } finally {
+      setIsCheckingPolicy(false);
+    }
+  }, [account, suiClient]);
 
   const fetchAchievements = useCallback(async () => {
     setIsLoadingAchievements(true);
@@ -289,7 +310,8 @@ export default function AdminPage() {
     fetchLootboxes();
     fetchTreasuryData();
     fetchAchievements();
-  }, [fetchLootboxes, fetchTreasuryData, fetchAchievements]);
+    checkPolicy();
+  }, [fetchLootboxes, fetchTreasuryData, fetchAchievements, checkPolicy]);
 
   useEffect(() => {
     fetchFullBoxData(targetBoxId, setContentBoxData);
@@ -491,7 +513,6 @@ export default function AdminPage() {
         txb.pure.string(newAch.name.trim()),
         txb.pure.string(newAch.description.trim()),
         txb.pure.string(newAch.imageUrl.trim()),
-        // GYATE Reward is raw integer units
         txb.pure.u64(BigInt(Math.floor(parseFloat(newAch.reward || "0")))),
         txb.pure.u8(parseInt(newAch.reqType || "0")),
         txb.pure.u64(BigInt(newAch.reqValue || "0")),
@@ -614,6 +635,7 @@ export default function AdminPage() {
       onSuccess: () => {
         toast({ title: "TransferPolicy Created", description: "Policy initialized for your wallet." });
         setIsPending(false);
+        checkPolicy();
       },
       onError: (err) => {
         toast({ variant: "destructive", title: "Creation Failed", description: err.message });
@@ -731,7 +753,7 @@ export default function AdminPage() {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => { fetchLootboxes(); fetchTreasuryData(); fetchAchievements(); }} 
+                onClick={() => { fetchLootboxes(); fetchTreasuryData(); fetchAchievements(); checkPolicy(); }} 
                 disabled={isLoadingBoxes || isFetchingTreasury || isLoadingAchievements}
                 className="bg-white/5 border-white/10"
               >
@@ -970,10 +992,25 @@ export default function AdminPage() {
                     <CardDescription>Create a TransferPolicy to enable secondary trading</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <div className="p-4 rounded-xl bg-accent/5 border border-accent/10 space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        Secondary sales on this platform require a TransferPolicy. This policy ensures all Kiosk-based trades follow the protocol rules.
-                      </p>
+                    <div className="p-4 rounded-xl bg-accent/5 border border-accent/10 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">
+                          Secondary sales on this platform require a TransferPolicy. This policy ensures all Kiosk-based trades follow the protocol rules.
+                        </p>
+                        {isCheckingPolicy ? (
+                          <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+                        ) : policyExists ? (
+                          <div className="flex items-center gap-2 text-green-400">
+                             <CheckCircle2 className="w-5 h-5" />
+                             <span className="text-xs font-bold uppercase tracking-widest">Active</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-red-400">
+                             <AlertCircle className="w-5 h-5" />
+                             <span className="text-xs font-bold uppercase tracking-widest">Missing</span>
+                          </div>
+                        )}
+                      </div>
                       <p className="text-xs font-mono text-muted-foreground/60 italic">
                         Publisher ID: {PUBLISHER.slice(0, 20)}...
                       </p>
@@ -981,11 +1018,16 @@ export default function AdminPage() {
                     <Button 
                       className="w-full glow-purple font-bold h-12" 
                       onClick={handleCreateTransferPolicy} 
-                      disabled={isPending}
+                      disabled={isPending || policyExists === true}
                     >
                       {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
-                      Create TransferPolicy
+                      {policyExists ? "Policy Already Active" : "Create TransferPolicy"}
                     </Button>
+                    <div className="text-center">
+                      <Button variant="link" size="sm" onClick={checkPolicy} className="text-xs text-muted-foreground">
+                        <RefreshCw className="w-3 h-3 mr-1" /> Re-check On-Chain Status
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
