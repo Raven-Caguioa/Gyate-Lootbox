@@ -19,11 +19,21 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
+/**
+ * Normalizes a Sui ID string for reliable comparison.
+ * Handles prefixing and casing.
+ */
+function normalizeSuiId(id: string | any): string {
+  if (!id) return "";
+  const str = typeof id === 'string' ? id : id?.id || id?.objectId || JSON.stringify(id);
+  return str.toLowerCase().replace(/^(0x)?/, '0x');
+}
+
 export default function MarketplacePage() {
   const [selectedNft, setSelectedNft] = useState<any>(null);
   const [isPending, setIsPending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [listings, setListings] = useState<NFT[]>();
+  const [listings, setListings] = useState<NFT[]>([]);
   
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRarities, setSelectedRarities] = useState<number[]>([]);
@@ -41,19 +51,21 @@ export default function MarketplacePage() {
   const fetchListings = useCallback(async () => {
     setIsLoading(true);
     try {
+      // 1. Fetch relevant Kiosk events
       const [listed, purchased, delisted] = await Promise.all([
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` } }),
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` } }),
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` } }),
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` }, limit: 50, order: 'descending' }),
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` }, limit: 50, order: 'descending' }),
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` }, limit: 50, order: 'descending' }),
       ]);
 
-      const soldIds = new Set(purchased.data.map((e: any) => e.parsedJson.id));
-      const delistedIds = new Set(delisted.data.map((e: any) => e.parsedJson.id));
+      const soldIds = new Set(purchased.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
+      const delistedIds = new Set(delisted.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
       
+      // Filter out historically closed listings
       const activeListingsMetadata = listed.data
         .map((e: any) => ({
-          id: e.parsedJson.id,
-          kioskId: typeof e.parsedJson.kiosk === 'string' ? e.parsedJson.kiosk : e.parsedJson.kiosk?.id || e.parsedJson.kiosk,
+          id: normalizeSuiId(e.parsedJson.id),
+          kioskId: normalizeSuiId(e.parsedJson.kiosk),
           price: e.parsedJson.price, 
         }))
         .filter(l => !soldIds.has(l.id) && !delistedIds.has(l.id));
@@ -64,28 +76,26 @@ export default function MarketplacePage() {
         return;
       }
 
+      // 2. Fetch the current state of these objects on-chain
       const nftObjects = await suiClient.multiGetObjects({
         ids: activeListingsMetadata.map(l => l.id),
         options: { showContent: true, showOwner: true }
       });
 
-      // Map metadata for easy lookup
       const metaMap = new Map(activeListingsMetadata.map(m => [m.id, m]));
 
       const mappedListings: NFT[] = nftObjects.map((obj: any) => {
+        const id = normalizeSuiId(obj.data?.objectId);
         const fields = obj.data?.content?.fields;
         const owner = obj.data?.owner;
-        if (!fields || !owner) return null;
-        
-        const id = obj.data?.objectId;
         const meta = metaMap.get(id);
-        if (!meta) return null;
 
-        // VERIFICATION: Check if the NFT is actually owned by the Kiosk reported in the event.
-        // If the NFT was taken out of the kiosk, its owner will no longer be the kiosk ID.
-        // Sui Kiosk items are owned by the Kiosk object ID.
-        const actualKioskOwner = owner.AddressOwner || owner.ObjectOwner;
-        if (actualKioskOwner !== meta.kioskId) {
+        if (!fields || !owner || !meta) return null;
+
+        // 3. CRITICAL VERIFICATION: Is the NFT still in the Kiosk?
+        // In Sui, Kiosk items are owned by the Kiosk Object ID.
+        const actualOwner = normalizeSuiId(owner.ObjectOwner || owner.AddressOwner);
+        if (actualOwner !== meta.kioskId) {
           return null; // Stale listing, hide it.
         }
 
@@ -155,13 +165,13 @@ export default function MarketplacePage() {
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.BUY_NFT}`,
         arguments: [
-          txb.object(item.kioskId),
+          txb.object(normalizeSuiId(item.kioskId)),
           txb.object(TRANSFER_POLICY),
           txb.object(TREASURY_POOL),
-          txb.pure.address(item.id),
+          txb.pure.address(normalizeSuiId(item.id)),
           paymentCoin,
-          txb.object(buyerKioskId),
-          txb.object(buyerCapId!),
+          txb.object(normalizeSuiId(buyerKioskId)),
+          txb.object(normalizeSuiId(buyerCapId!)),
         ],
       });
 
