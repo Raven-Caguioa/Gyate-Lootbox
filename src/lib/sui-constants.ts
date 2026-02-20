@@ -12,6 +12,12 @@ export const ACHIEVEMENT_REGISTRY = "0x576c2a2071fdb89b255079647928db74f97beef4b
 export const POLICY_ADMIN = "0x4f8fcd54e3db6499ec3aa0cb0b75c8dd38b95f7c0bc5e120396f8f24d3bd209b";
 export const RANDOM_STATE = "0x8";
 
+/**
+ * Verified TransferPolicy for GyateNFT.
+ * This is a shared object used to validate secondary market trades.
+ */
+export const TRANSFER_POLICY = "0xcfaf534ac761a9dabcb3bf60e1a4621dd9edb65cda9aab272982ffd931be2f48";
+
 export const MODULE_NAMES = {
   LOOTBOX: 'lootbox', 
   MARKETPLACE: 'marketplace',

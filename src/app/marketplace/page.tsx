@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -10,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
-import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL } from "@/lib/sui-constants";
+import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL, TRANSFER_POLICY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Transaction } from "@mysten/sui/transactions";
 import { NFT, RARITY_LABELS } from "@/lib/mock-data";
@@ -37,7 +36,6 @@ export default function MarketplacePage() {
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const { toast } = useToast();
 
-  const ADMIN_ADDRESS = "0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a";
   const NFT_TYPE = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
 
   const fetchListings = useCallback(async () => {
@@ -138,30 +136,6 @@ export default function MarketplacePage() {
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
 
-      // Search for TransferPolicy across common admin addresses (hardcoded platform + current user if admin)
-      const potentialAdmins = [ADMIN_ADDRESS];
-      if (account.address && !potentialAdmins.includes(account.address)) {
-        potentialAdmins.push(account.address);
-      }
-
-      let transferPolicyId = null;
-      for (const adminAddr of potentialAdmins) {
-        const policyResponse = await suiClient.getOwnedObjects({
-          owner: adminAddr,
-          filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
-        });
-        if (policyResponse.data.length > 0) {
-          transferPolicyId = policyResponse.data[0].data?.objectId;
-          break;
-        }
-      }
-
-      if (!transferPolicyId) {
-        toast({ variant: "destructive", title: "Policy Error", description: "No active TransferPolicy found on the platform for this character type." });
-        setIsPending(false);
-        return;
-      }
-
       const txb = new Transaction();
       const [paymentCoin] = txb.splitCoins(txb.gas, [BigInt((item.price || 1) * 1_000_000_000)]);
 
@@ -169,7 +143,7 @@ export default function MarketplacePage() {
         target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.BUY_NFT}`,
         arguments: [
           txb.object(item.kioskId!),
-          txb.object(transferPolicyId),
+          txb.object(TRANSFER_POLICY),
           txb.object(TREASURY_POOL),
           txb.pure.id(item.id),
           paymentCoin,
