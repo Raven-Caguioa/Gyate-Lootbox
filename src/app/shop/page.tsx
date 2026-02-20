@@ -81,11 +81,7 @@ function LootboxPreviewCarousel({ nfts, fallbackImage }: { nfts: PossibleNFT[], 
         ))}
       </div>
       
-      {/* Overlay Decoration */}
       <div className="absolute inset-0 pointer-events-none border-b border-white/5" />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 group-hover:opacity-40 transition-opacity">
-         <Store className="w-16 h-16 text-white" />
-      </div>
     </div>
   );
 }
@@ -279,11 +275,6 @@ export default function ShopPage() {
       callArgs.push(txb.object(RANDOM_STATE));
       callArgs.push(txb.object(kioskId));
       callArgs.push(txb.object(kioskCapId!));
-
-      txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`,
-        arguments: callArgs,
-      });
 
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
