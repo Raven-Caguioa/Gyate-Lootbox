@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -137,15 +138,15 @@ export default function MarketplacePage() {
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
 
-      const policyResponse = await suiClient.getOwnedObjects({
-        owner: ADMIN_ADDRESS,
+      // Switch to queryObjects to find shared TransferPolicies
+      const policyResponse = await suiClient.queryObjects({
         filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
       });
 
       const transferPolicyId = policyResponse.data[0]?.data?.objectId;
 
       if (!transferPolicyId) {
-        toast({ variant: "destructive", title: "Policy Error", description: "No active TransferPolicy found." });
+        toast({ variant: "destructive", title: "Policy Error", description: "No active TransferPolicy found on the network for this character type." });
         setIsPending(false);
         return;
       }
