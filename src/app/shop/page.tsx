@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import useEmblaCarousel from "embla-carousel-react";
+import { NFT } from "@/lib/mock-data";
 
 interface PossibleNFT {
   name: string;
@@ -87,12 +88,16 @@ function LootboxPreviewCarousel({ nfts, fallbackImage }: { nfts: PossibleNFT[], 
 }
 
 export default function ShopPage() {
-  const [openingBox, setOpeningBox] = useState<any>(null);
   const [activeBoxes, setActiveBoxes] = useState<LootboxData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'SUI' | 'GYATE'>('SUI');
   
+  // Reveal state
+  const [revealBox, setRevealBox] = useState<LootboxData | null>(null);
+  const [revealResults, setRevealResults] = useState<NFT[]>([]);
+  const [showReveal, setShowReveal] = useState(false);
+
   const account = useCurrentAccount();
   const suiClient = useSuiClient();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
@@ -284,10 +289,53 @@ export default function ShopPage() {
       });
 
       signAndExecute({ transaction: txb }, {
-        onSuccess: () => {
-          toast({ title: "Summon Successful", description: "Character materialized on-chain." });
-          setOpeningBox(box);
-          setIsPending(false);
+        onSuccess: async (result) => {
+          toast({ title: "Transaction Sent", description: "Waiting for blockchain confirmation..." });
+          
+          try {
+            // Wait for transaction and fetch events
+            const resp = await suiClient.waitForTransaction({
+              digest: result.digest,
+              options: { showEvents: true }
+            });
+
+            const nftMintedEvents = resp.events?.filter(e => e.type.includes("::NFTMintedEvent")) || [];
+            if (nftMintedEvents.length === 0) throw new Error("No characters minted in transaction.");
+
+            const nftIds = nftMintedEvents.map((e: any) => e.parsedJson.nft_id);
+            
+            // Fetch objects to get images and stats
+            const objects = await suiClient.multiGetObjects({
+              ids: nftIds,
+              options: { showContent: true }
+            });
+
+            const results: NFT[] = objects.map((obj: any) => {
+              const fields = obj.data?.content?.fields;
+              return {
+                id: obj.data?.objectId,
+                name: fields.name,
+                rarity: fields.rarity,
+                variantType: fields.variant_type,
+                image: fields.image_url,
+                hp: parseInt(fields.hp),
+                atk: parseInt(fields.atk),
+                spd: parseInt(fields.spd),
+                baseValue: parseInt(fields.base_value),
+                actualValue: parseInt(fields.actual_value),
+                lootboxSource: fields.lootbox_source,
+                globalId: parseInt(fields.global_sequential_id),
+              };
+            });
+
+            setRevealBox(box);
+            setRevealResults(results);
+            setShowReveal(true);
+            setIsPending(false);
+          } catch (err: any) {
+            toast({ variant: "destructive", title: "Reveal Error", description: err.message });
+            setIsPending(false);
+          }
         },
         onError: (err) => {
           toast({ variant: "destructive", title: "Summon Failed", description: err.message });
@@ -431,9 +479,16 @@ export default function ShopPage() {
       </div>
 
       <RevealLootboxDialog 
-        box={openingBox} 
-        open={!!openingBox} 
-        onOpenChange={(open) => !open && setOpeningBox(null)} 
+        box={revealBox} 
+        results={revealResults}
+        open={showReveal} 
+        onOpenChange={(open) => {
+          setShowReveal(open);
+          if (!open) {
+            setRevealResults([]);
+            setRevealBox(null);
+          }
+        }} 
       />
     </div>
   );

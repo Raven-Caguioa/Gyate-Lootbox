@@ -6,40 +6,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Sparkles, Wand2, RefreshCw } from "lucide-react";
 import { NFTCard } from "./nft-card";
-import { MOCK_USER_NFTS } from "@/lib/mock-data";
+import { NFT } from "@/lib/mock-data";
+import { ScrollArea } from "./ui/scroll-area";
 
 interface RevealLootboxDialogProps {
   box: any;
+  results: NFT[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function RevealLootboxDialog({ box, open, onOpenChange }: RevealLootboxDialogProps) {
-  // We start directly at animating since this dialog is only opened after a successful transaction
+export function RevealLootboxDialog({ box, results, open, onOpenChange }: RevealLootboxDialogProps) {
   const [step, setStep] = useState<"animating" | "result">("animating");
-  const [revealedNft, setRevealedNft] = useState<any>(null);
 
   useEffect(() => {
     if (open) {
       setStep("animating");
-      setRevealedNft(null);
-      // Simulate summoning delay to show the animation
+      // Short dramatic delay before revealing actual results
       const timer = setTimeout(() => {
-        const randomNft = MOCK_USER_NFTS[Math.floor(Math.random() * MOCK_USER_NFTS.length)];
-        setRevealedNft(randomNft);
         setStep("result");
-      }, 3000);
+      }, 2500);
       return () => clearTimeout(timer);
     }
   }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-transparent border-none shadow-none flex items-center justify-center p-0">
+      <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] bg-transparent border-none shadow-none flex items-center justify-center p-0">
         <DialogHeader className="sr-only">
           <DialogTitle>Lootbox Reveal</DialogTitle>
           <DialogDescription>
-            Summoning process to reveal your new hero character.
+            Summoning process to reveal your new hero characters.
           </DialogDescription>
         </DialogHeader>
 
@@ -64,24 +61,38 @@ export function RevealLootboxDialog({ box, open, onOpenChange }: RevealLootboxDi
             </div>
           )}
 
-          {step === "result" && revealedNft && (
-            <div className="space-y-8 animate-in fade-in zoom-in duration-500 flex flex-col items-center">
+          {step === "result" && results.length > 0 && (
+            <div className="space-y-8 animate-in fade-in zoom-in duration-500 flex flex-col items-center w-full">
               <div className="space-y-2">
                 <h2 className="font-headline text-4xl font-bold text-white">Summon Successful!</h2>
-                <p className="text-muted-foreground">You have received a new hero.</p>
+                <p className="text-muted-foreground">
+                  {results.length === 1 
+                    ? `You have received ${results[0].name}.` 
+                    : `You have received ${results.length} new heroes.`}
+                </p>
               </div>
               
-              <div className="glow-purple rounded-3xl overflow-hidden scale-110">
-                <NFTCard nft={revealedNft} className="w-72" />
-              </div>
+              <ScrollArea className="w-full max-h-[60vh] px-4">
+                <div className={cn(
+                  "grid gap-6 justify-items-center py-6",
+                  results.length === 1 
+                    ? "grid-cols-1" 
+                    : "grid-cols-2 md:grid-cols-3 lg:grid-cols-5"
+                )}>
+                  {results.map((nft) => (
+                    <div key={nft.id} className="glow-purple rounded-3xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
+                      <NFTCard nft={nft} className="w-48 sm:w-56" />
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
 
-              <div className="flex gap-4 w-full pt-4">
+              <div className="flex gap-4 w-full max-w-xs pt-4">
                 <Button 
-                  variant="outline" 
-                  className="flex-1 h-12 border-white/10 text-white bg-white/5 hover:bg-white/10"
+                  className="flex-1 h-12 glow-purple bg-primary font-bold text-white"
                   onClick={() => onOpenChange(false)}
                 >
-                  Confirm
+                  Confirm & Close
                 </Button>
               </div>
             </div>
@@ -91,3 +102,6 @@ export function RevealLootboxDialog({ box, open, onOpenChange }: RevealLootboxDi
     </Dialog>
   );
 }
+
+// Helper for cn in this file if needed, or import it
+import { cn } from "@/lib/utils";
