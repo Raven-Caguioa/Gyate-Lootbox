@@ -23,9 +23,8 @@ export default function MarketplacePage() {
   const [selectedNft, setSelectedNft] = useState<any>(null);
   const [isPending, setIsPending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [listings, setListings] = useState<NFT[]>([]);
+  const [listings, setListings] = useState<NFT[]>();
   
-  // Filtering State
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRarities, setSelectedRarities] = useState<number[]>([]);
   const [hpRange, setHpRange] = useState({ min: "0", max: "2500" });
@@ -42,25 +41,18 @@ export default function MarketplacePage() {
   const fetchListings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const listedEvents = await suiClient.queryEvents({
-        query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` },
-      });
+      const [listed, purchased, delisted] = await Promise.all([
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` } }),
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` } }),
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` } }),
+      ]);
 
-      const purchasedEvents = await suiClient.queryEvents({
-        query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` },
-      });
-
-      const delistedEvents = await suiClient.queryEvents({
-        query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` },
-      });
-
-      const soldIds = new Set(purchasedEvents.data.map((e: any) => e.parsedJson.id));
-      const delistedIds = new Set(delistedEvents.data.map((e: any) => e.parsedJson.id));
+      const soldIds = new Set(purchased.data.map((e: any) => e.parsedJson.id));
+      const delistedIds = new Set(delisted.data.map((e: any) => e.parsedJson.id));
       
-      const activeListingsMetadata = listedEvents.data
+      const activeListingsMetadata = listed.data
         .map((e: any) => ({
           id: e.parsedJson.id,
-          // Handle both string and nested object ID formats from events
           kioskId: typeof e.parsedJson.kiosk === 'string' ? e.parsedJson.kiosk : e.parsedJson.kiosk?.id || e.parsedJson.kiosk,
           price: e.parsedJson.price, 
         }))
@@ -74,17 +66,31 @@ export default function MarketplacePage() {
 
       const nftObjects = await suiClient.multiGetObjects({
         ids: activeListingsMetadata.map(l => l.id),
-        options: { showContent: true }
+        options: { showContent: true, showOwner: true }
       });
 
-      const mappedListings: NFT[] = nftObjects.map((obj: any, idx) => {
+      // Map metadata for easy lookup
+      const metaMap = new Map(activeListingsMetadata.map(m => [m.id, m]));
+
+      const mappedListings: NFT[] = nftObjects.map((obj: any) => {
         const fields = obj.data?.content?.fields;
-        if (!fields) return null;
+        const owner = obj.data?.owner;
+        if (!fields || !owner) return null;
         
-        const meta = activeListingsMetadata[idx];
+        const id = obj.data?.objectId;
+        const meta = metaMap.get(id);
+        if (!meta) return null;
+
+        // VERIFICATION: Check if the NFT is actually owned by the Kiosk reported in the event.
+        // If the NFT was taken out of the kiosk, its owner will no longer be the kiosk ID.
+        // Sui Kiosk items are owned by the Kiosk object ID.
+        const actualKioskOwner = owner.AddressOwner || owner.ObjectOwner;
+        if (actualKioskOwner !== meta.kioskId) {
+          return null; // Stale listing, hide it.
+        }
 
         return {
-          id: obj.data?.objectId,
+          id: id,
           name: fields.name,
           rarity: fields.rarity,
           variantType: fields.variant_type,
@@ -105,7 +111,7 @@ export default function MarketplacePage() {
       setListings(mappedListings);
     } catch (err) {
       console.error("Discovery error:", err);
-      toast({ variant: "destructive", title: "Discovery Failed", description: "Could not query Sui events." });
+      toast({ variant: "destructive", title: "Discovery Failed", description: "Failed to sync marketplace data." });
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +123,7 @@ export default function MarketplacePage() {
 
   const handleBuyNft = async (item: NFT) => {
     if (!account) {
-      toast({ variant: "destructive", title: "Wallet required", description: "Connect to buy characters." });
+      toast({ variant: "destructive", title: "Wallet required" });
       return;
     }
 
@@ -146,25 +152,24 @@ export default function MarketplacePage() {
       const amountMist = BigInt(Math.floor((item.price || 1) * 1_000_000_000));
       const [paymentCoin] = txb.splitCoins(txb.gas, [txb.pure.u64(amountMist)]);
 
-      // Ensure IDs are treated as addresses for the Move call
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.BUY_NFT}`,
         arguments: [
-          txb.object(item.kioskId), // Seller's Kiosk (must be shared)
+          txb.object(item.kioskId),
           txb.object(TRANSFER_POLICY),
           txb.object(TREASURY_POOL),
-          txb.pure.address(item.id), // The NFT ID
+          txb.pure.address(item.id),
           paymentCoin,
-          txb.object(buyerKioskId), // Buyer's Kiosk
-          txb.object(buyerCapId!), // Buyer's Cap
+          txb.object(buyerKioskId),
+          txb.object(buyerCapId!),
         ],
       });
 
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
-          toast({ title: "Purchase Successful", description: `${item.name} is now yours!` });
+          toast({ title: "Purchase Successful", description: `${item.name} acquired.` });
           setIsPending(false);
-          fetchListings();
+          setTimeout(fetchListings, 3000); // Wait for indexing
         },
         onError: (err) => {
           toast({ variant: "destructive", title: "Purchase Failed", description: err.message });
@@ -178,6 +183,7 @@ export default function MarketplacePage() {
   };
 
   const filteredListings = useMemo(() => {
+    if (!listings) return [];
     const minHp = parseInt(hpRange.min) || 0;
     const maxHp = parseInt(hpRange.max) || 999999;
     const minAtk = parseInt(atkRange.min) || 0;
@@ -219,13 +225,13 @@ export default function MarketplacePage() {
           <div className="flex-1">
             <h1 className="font-headline text-5xl font-bold mb-4">Marketplace</h1>
             <p className="text-muted-foreground text-lg">
-              Pure on-chain event discovery. Filter by rarity and specialized combat stats.
+              Fully verified on-chain listings. Search by rarity and combat stats.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={fetchListings} disabled={isLoading} className="bg-white/5 border-white/10 h-11 px-6">
               <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && 'animate-spin')} />
-              Refresh Data
+              Refresh
             </Button>
           </div>
         </div>
@@ -235,8 +241,8 @@ export default function MarketplacePage() {
             <Card className="glass-card border-primary/20 sticky top-24">
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm uppercase tracking-widest flex items-center justify-between">
-                  <span className="flex items-center gap-2"><SlidersHorizontal className="w-4 h-4 text-accent" /> Filter Station</span>
-                  <Button variant="ghost" size="sm" onClick={resetFilters} className="h-7 text-[10px] font-bold text-muted-foreground hover:text-accent">RESET</Button>
+                  <span className="flex items-center gap-2"><SlidersHorizontal className="w-4 h-4 text-accent" /> Filters</span>
+                  <Button variant="ghost" size="sm" onClick={resetFilters} className="h-7 text-[10px] font-bold text-muted-foreground">RESET</Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-8">
@@ -256,7 +262,7 @@ export default function MarketplacePage() {
                 <Separator className="bg-white/5" />
 
                 <div className="space-y-4">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Rarity Tier</Label>
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Rarity</Label>
                   <div className="grid gap-3">
                     {[0, 1, 2, 3, 4, 5].map((r) => (
                       <div key={r} className="flex items-center space-x-3 group cursor-pointer" onClick={() => toggleRarity(r)}>
@@ -280,7 +286,7 @@ export default function MarketplacePage() {
 
                 <div className="space-y-6">
                   <div className="space-y-3">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">HP Range</Label>
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">HP (Min/Max)</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -289,7 +295,6 @@ export default function MarketplacePage() {
                         onChange={(e) => setHpRange({ ...hpRange, min: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
-                      <span className="text-muted-foreground">-</span>
                       <Input
                         type="number"
                         placeholder="Max"
@@ -301,7 +306,7 @@ export default function MarketplacePage() {
                   </div>
 
                   <div className="space-y-3">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ATK Range</Label>
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ATK (Min/Max)</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -310,7 +315,6 @@ export default function MarketplacePage() {
                         onChange={(e) => setAtkRange({ ...atkRange, min: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
-                      <span className="text-muted-foreground">-</span>
                       <Input
                         type="number"
                         placeholder="Max"
@@ -322,7 +326,7 @@ export default function MarketplacePage() {
                   </div>
 
                   <div className="space-y-3">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">SPD Range</Label>
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">SPD (Min/Max)</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -331,7 +335,6 @@ export default function MarketplacePage() {
                         onChange={(e) => setSpdRange({ ...spdRange, min: e.target.value })}
                         className="bg-white/5 border-white/10 text-xs h-8"
                       />
-                      <span className="text-muted-foreground">-</span>
                       <Input
                         type="number"
                         placeholder="Max"
@@ -349,7 +352,7 @@ export default function MarketplacePage() {
               <div className="flex gap-3 items-start">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Refining filters helps you find specific stat spreads for competitive play.
+                  Marketplace data is verified in real-time. Stale listings are hidden automatically.
                 </p>
               </div>
             </div>
@@ -359,7 +362,7 @@ export default function MarketplacePage() {
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-32 space-y-4">
                 <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">Accessing Blockchain Registry...</p>
+                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">Syncing Registry...</p>
               </div>
             ) : filteredListings.length > 0 ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -368,7 +371,7 @@ export default function MarketplacePage() {
                     <NFTCard nft={item} onClick={() => setSelectedNft(item)} showPrice />
                     <Button className="w-full h-12 glow-purple font-bold" onClick={() => handleBuyNft(item)} disabled={isPending}>
                       {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      Acquire Character
+                      Buy Character
                     </Button>
                   </div>
                 ))}
@@ -379,11 +382,11 @@ export default function MarketplacePage() {
                   <PackageSearch className="w-10 h-10 text-muted-foreground opacity-30" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-bold">No Matches Found</h3>
+                  <h3 className="text-2xl font-bold">No Heroes Found</h3>
                   <p className="text-muted-foreground max-w-sm mx-auto">
-                    Try adjusting your stat ranges or selecting different rarity tiers to broaden your search.
+                    Try adjusting your filters. Some listings might be hidden if they were recently moved or sold.
                   </p>
-                  <Button variant="link" onClick={resetFilters} className="text-accent font-bold mt-4">Clear All Filters</Button>
+                  <Button variant="link" onClick={resetFilters} className="text-accent font-bold mt-4">Clear Filters</Button>
                 </div>
               </div>
             )}
