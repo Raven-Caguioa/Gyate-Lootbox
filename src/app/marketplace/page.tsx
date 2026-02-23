@@ -21,12 +21,13 @@ import { cn } from "@/lib/utils";
 
 /**
  * Normalizes a Sui ID string for reliable comparison.
- * Handles prefixing and casing.
  */
 function normalizeSuiId(id: string | any): string {
   if (!id) return "";
   const str = typeof id === 'string' ? id : id?.id || id?.objectId || JSON.stringify(id);
-  return str.toLowerCase().replace(/^(0x)?/, '0x');
+  let normalized = str.toLowerCase();
+  if (!normalized.startsWith('0x')) normalized = '0x' + normalized;
+  return normalized;
 }
 
 export default function MarketplacePage() {
@@ -51,24 +52,23 @@ export default function MarketplacePage() {
   const fetchListings = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch relevant Kiosk events
-      const [listed, purchased, delisted] = await Promise.all([
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` }, limit: 50, order: 'descending' }),
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` }, limit: 50, order: 'descending' }),
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` }, limit: 50, order: 'descending' }),
+      // Fetch a larger sample of events to catch active listings
+      const [listedEvents, purchasedEvents, delistedEvents] = await Promise.all([
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` }, limit: 100, order: 'descending' }),
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` }, limit: 100, order: 'descending' }),
+        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` }, limit: 100, order: 'descending' }),
       ]);
 
-      const soldIds = new Set(purchased.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
-      const delistedIds = new Set(delisted.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
+      const soldIds = new Set(purchasedEvents.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
+      const removedIds = new Set(delistedEvents.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
       
-      // Filter out historically closed listings
-      const activeListingsMetadata = listed.data
+      const activeListingsMetadata = listedEvents.data
         .map((e: any) => ({
           id: normalizeSuiId(e.parsedJson.id),
           kioskId: normalizeSuiId(e.parsedJson.kiosk),
           price: e.parsedJson.price, 
         }))
-        .filter(l => !soldIds.has(l.id) && !delistedIds.has(l.id));
+        .filter(l => !soldIds.has(l.id) && !removedIds.has(l.id));
 
       if (activeListingsMetadata.length === 0) {
         setListings([]);
@@ -76,28 +76,28 @@ export default function MarketplacePage() {
         return;
       }
 
-      // 2. Fetch the current state of these objects on-chain
-      const nftObjects = await suiClient.multiGetObjects({
-        ids: activeListingsMetadata.map(l => l.id),
-        options: { showContent: true, showOwner: true }
+      // De-duplicate metadata by NFT ID (keep latest listing only)
+      const latestMetaMap = new Map();
+      activeListingsMetadata.forEach(m => {
+        if (!latestMetaMap.has(m.id)) latestMetaMap.set(m.id, m);
       });
 
-      const metaMap = new Map(activeListingsMetadata.map(m => [m.id, m]));
+      const nftObjects = await suiClient.multiGetObjects({
+        ids: Array.from(latestMetaMap.keys()),
+        options: { showContent: true, showOwner: true }
+      });
 
       const mappedListings: NFT[] = nftObjects.map((obj: any) => {
         const id = normalizeSuiId(obj.data?.objectId);
         const fields = obj.data?.content?.fields;
         const owner = obj.data?.owner;
-        const meta = metaMap.get(id);
+        const meta = latestMetaMap.get(id);
 
         if (!fields || !owner || !meta) return null;
 
-        // 3. CRITICAL VERIFICATION: Is the NFT still in the Kiosk?
-        // In Sui, Kiosk items are owned by the Kiosk Object ID.
+        // Verify current on-chain owner is actually the kiosk from the listing
         const actualOwner = normalizeSuiId(owner.ObjectOwner || owner.AddressOwner);
-        if (actualOwner !== meta.kioskId) {
-          return null; // Stale listing, hide it.
-        }
+        if (actualOwner !== meta.kioskId) return null;
 
         return {
           id: id,
@@ -113,7 +113,7 @@ export default function MarketplacePage() {
           lootboxSource: fields.lootbox_source,
           globalId: parseInt(fields.global_sequential_id),
           price: meta.price ? parseInt(meta.price) / 1_000_000_000 : 1, 
-          seller: "On-Chain Listing", 
+          seller: "On-Chain Offering", 
           kioskId: meta.kioskId,
         };
       }).filter((n): n is NFT => n !== null);
@@ -121,7 +121,7 @@ export default function MarketplacePage() {
       setListings(mappedListings);
     } catch (err) {
       console.error("Discovery error:", err);
-      toast({ variant: "destructive", title: "Discovery Failed", description: "Failed to sync marketplace data." });
+      toast({ variant: "destructive", title: "Sync Error", description: "Failed to load marketplace listings." });
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +145,7 @@ export default function MarketplacePage() {
       });
 
       if (ownedCaps.data.length === 0) {
-        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to purchase items." });
+        toast({ variant: "destructive", title: "Kiosk Required", description: "Initialize your Kiosk in the Inventory first." });
         setIsPending(false);
         return;
       }
@@ -153,10 +153,6 @@ export default function MarketplacePage() {
       const buyerCapId = ownedCaps.data[0].data?.objectId;
       const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
       const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
-
-      if (!buyerKioskId || !item.kioskId) {
-        throw new Error("Missing Kiosk identification for trade.");
-      }
 
       const txb = new Transaction();
       const amountMist = BigInt(Math.floor((item.price || 1) * 1_000_000_000));
@@ -177,12 +173,12 @@ export default function MarketplacePage() {
 
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
-          toast({ title: "Purchase Successful", description: `${item.name} acquired.` });
+          toast({ title: "Hero Acquired!", description: `${item.name} is now yours.` });
           setIsPending(false);
-          setTimeout(fetchListings, 3000); // Wait for indexing
+          setTimeout(fetchListings, 3000);
         },
         onError: (err) => {
-          toast({ variant: "destructive", title: "Purchase Failed", description: err.message });
+          toast({ variant: "destructive", title: "Trade Failed", description: err.message });
           setIsPending(false);
         }
       });
@@ -362,7 +358,7 @@ export default function MarketplacePage() {
               <div className="flex gap-3 items-start">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Marketplace data is verified in real-time. Stale listings are hidden automatically.
+                  Marketplace data is verified in real-time against on-chain Kiosk state.
                 </p>
               </div>
             </div>
@@ -372,7 +368,7 @@ export default function MarketplacePage() {
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-32 space-y-4">
                 <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">Syncing Registry...</p>
+                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">Scanning Events...</p>
               </div>
             ) : filteredListings.length > 0 ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -394,7 +390,7 @@ export default function MarketplacePage() {
                 <div className="space-y-2">
                   <h3 className="text-2xl font-bold">No Heroes Found</h3>
                   <p className="text-muted-foreground max-w-sm mx-auto">
-                    Try adjusting your filters. Some listings might be hidden if they were recently moved or sold.
+                    Try adjusting your filters or refresh the registry. Only active Kiosk listings are displayed.
                   </p>
                   <Button variant="link" onClick={resetFilters} className="text-accent font-bold mt-4">Clear Filters</Button>
                 </div>
