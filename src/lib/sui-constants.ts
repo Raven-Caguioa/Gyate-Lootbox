@@ -27,6 +27,26 @@ export const RANDOM_STATE = "0x8";
  */
 export const TRANSFER_POLICY = "0xb7547348d297967557517a988af66c2f3b77b4492c9aa9226cd465d58bf63173";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// OBJECT_IDS — grouped reference used by profile page + achievements tab
+// Mirrors the individual exports above so you can use either style:
+//   import { TREASURY_CAP } from "@/lib/sui-constants"
+//   import { OBJECT_IDS } from "@/lib/sui-constants" → OBJECT_IDS.TREASURY_CAP
+// ─────────────────────────────────────────────────────────────────────────────
+export const OBJECT_IDS = {
+  ACHIEVEMENT_REGISTRY,
+  LOOTBOX_REGISTRY,
+  TREASURY_POOL,
+  TREASURY_CAP,
+  KIOSK_REGISTRY,
+  TRANSFER_POLICY,
+  POLICY_ADMIN,
+  RANDOM_STATE,
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE_NAMES
+// ─────────────────────────────────────────────────────────────────────────────
 export const MODULE_NAMES = {
   LOOTBOX:     'lootbox',
   MARKETPLACE: 'marketplace',
@@ -36,8 +56,11 @@ export const MODULE_NAMES = {
   GYATE_COIN:  'gyate_coin',
   ACHIEVEMENT: 'achievement',
   COLLECTION:  'collection',
-};
+} as const;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTIONS
+// ─────────────────────────────────────────────────────────────────────────────
 export const FUNCTIONS = {
   // Lootbox
   CREATE_DRAFT:                 'create_draft',
@@ -72,7 +95,15 @@ export const FUNCTIONS = {
   BURN:       'burn',
 
   // Achievement
-  INITIALIZE_STATS:  'initialize_stats',
-  CLAIM_ACHIEVEMENT: 'claim_achievement',
+  INITIALIZE_STATS:   'initialize_stats',
+  CLAIM_ACHIEVEMENT:  'claim_achievement',
   CREATE_ACHIEVEMENT: 'create_achievement',
-};
+
+  // Collection
+  CREATE_COLLECTION_SET:              'create_collection_set',
+  ADD_TO_SET:                         'add_to_set',
+  ADD_TO_SET_BATCH:                   'add_to_set_batch',
+  FINALIZE_SET:                       'finalize_set',
+  CLAIM_COLLECTION_REWARD:            'claim_collection_reward',
+  CLAIM_COLLECTION_REWARD_WITH_NAMES: 'claim_collection_reward_with_names',
+} as const;

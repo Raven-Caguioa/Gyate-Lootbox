@@ -3,9 +3,13 @@
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
 import { Button } from "@/components/ui/button";
-import { Search, RefreshCw, ShoppingBag, Loader2, LayoutGrid, Tag } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Search, RefreshCw, ShoppingBag, Loader2, LayoutGrid,
+  Tag, ChevronRight, X, Layers, ArrowLeft, Flame, Filter
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_CAP } from "@/lib/sui-constants";
@@ -21,227 +25,237 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
+
+interface NFTWithListed extends NFT {
+  isListed: boolean;
+}
+
+interface NFTGroup {
+  name: string;
+  rarity: number;
+  baseImage: string;
+  items: NFTWithListed[];
+}
+
+// ─────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────
+
+const RARITY_LABELS  = ["Common", "Rare", "Super Rare", "SSR", "Ultra Rare", "Legend Rare"];
+const RARITY_COLORS  = [
+  "border-slate-400/40 bg-slate-400/5 text-slate-300",
+  "border-blue-400/40 bg-blue-400/5 text-blue-300",
+  "border-purple-400/40 bg-purple-400/5 text-purple-300",
+  "border-pink-400/40 bg-pink-400/5 text-pink-300",
+  "border-yellow-400/40 bg-yellow-400/5 text-yellow-300",
+  "border-red-400/40 bg-red-400/5 text-red-300",
+];
+const RARITY_BADGE_COLORS = [
+  "bg-slate-400/20 text-slate-300",
+  "bg-blue-400/20 text-blue-300",
+  "bg-purple-400/20 text-purple-300",
+  "bg-pink-400/20 text-pink-300",
+  "bg-yellow-400/20 text-yellow-300",
+  "bg-red-400/20 text-red-300",
+];
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 
 function normalizeSuiId(id: string | any): string {
   if (!id) return "";
-  const str =
-    typeof id === "string" ? id : id?.id || id?.objectId || JSON.stringify(id);
+  const str = typeof id === "string" ? id : id?.id || id?.objectId || JSON.stringify(id);
   return str.toLowerCase().replace(/^(0x)?/, "0x");
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+function shortenId(id: string): string {
+  return `${id.slice(0, 6)}...${id.slice(-4)}`;
+}
+
+// ─────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────
 
 export default function InventoryPage() {
-  const account = useCurrentAccount();
-  const suiClient = useSuiClient();
+  const account        = useCurrentAccount();
+  const suiClient      = useSuiClient();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
-  const { toast } = useToast();
+  const { toast }      = useToast();
 
-  const [selectedNft, setSelectedNft] = useState<NFT | null>(null);
-  const [userNfts, setUserNfts] = useState<NFT[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isBurning, setIsBurning] = useState(false);
-  const [isListing, setIsListing] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  // Data
+  const [userNfts, setUserNfts]     = useState<NFTWithListed[]>([]);
+  const [isLoading, setIsLoading]   = useState(false);
 
+  // View state: null = group grid, string = expanded group name
+  const [expandedGroup, setExpandedGroup]   = useState<string | null>(null);
+  const [selectedNft, setSelectedNft]       = useState<NFT | null>(null);
+  const [searchTerm, setSearchTerm]         = useState("");
+  const [rarityFilter, setRarityFilter]     = useState<number | null>(null);
+
+  // Burn / list state
+  const [isBurning, setIsBurning]     = useState(false);
+  const [isListing, setIsListing]     = useState(false);
   const [listDialogOpen, setListDialogOpen] = useState(false);
-  const [listingNft, setListingNft] = useState<NFT | null>(null);
+  const [listingNft, setListingNft]   = useState<NFT | null>(null);
   const [listPriceSui, setListPriceSui] = useState("");
 
-  // ── Fetch NFTs ──────────────────────────────────────────────────────────────
+  // ── Fetch NFTs ──────────────────────────────────────────────────────
   const fetchUserNfts = useCallback(async () => {
     if (!account) return;
     setIsLoading(true);
     try {
-      // Step 1 — get KioskOwnerCap (includes kiosk ID in its fields)
       const capsRes = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
         options: { showContent: true },
       });
 
-      if (capsRes.data.length === 0) {
-        setUserNfts([]);
-        return;
-      }
+      if (capsRes.data.length === 0) { setUserNfts([]); return; }
 
       const kioskCapId = capsRes.data[0].data?.objectId!;
-      const kioskId = (capsRes.data[0].data?.content as any)?.fields?.for;
+      const kioskId    = (capsRes.data[0].data?.content as any)?.fields?.for;
+      if (!kioskId)    { setUserNfts([]); return; }
 
-      if (!kioskId) {
-        setUserNfts([]);
-        return;
-      }
+      // Paginate all dynamic fields
+      let allFields: any[] = [];
+      let cursor: string | null | undefined = undefined;
+      do {
+        const page = await suiClient.getDynamicFields({ parentId: kioskId, cursor: cursor ?? undefined, limit: 50 });
+        allFields = [...allFields, ...page.data];
+        cursor = page.hasNextPage ? page.nextCursor : null;
+      } while (cursor);
 
-    // Step 2 — get ALL dynamic fields with pagination
-    let allDynamicFields: any[] = [];
-    let cursor: string | null | undefined = undefined;
+      if (allFields.length === 0) { setUserNfts([]); return; }
 
-    do {
-      const page = await suiClient.getDynamicFields({
-        parentId: kioskId,
-        cursor: cursor ?? undefined,
-        limit: 50,
-      });
-      allDynamicFields = [...allDynamicFields, ...page.data];
-      cursor = page.hasNextPage ? page.nextCursor : null;
-    } while (cursor);
-
-    if (allDynamicFields.length === 0) {
-      setUserNfts([]);
-      return;
-    }
-
-    const dynamicFields = { data: allDynamicFields };
-
-      const NFT_TYPE = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
-      const ITEM_TYPE = "0x2::kiosk::Item";
+      const NFT_TYPE     = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
+      const ITEM_TYPE    = "0x2::kiosk::Item";
       const LISTING_TYPE = "0x2::kiosk::Listing";
 
-      // Step 3 — separate Item fields from Listing fields
-      // CRITICAL: f.name.value.id is the REAL NFT object ID
-      // f.objectId is just the dynamic field wrapper — DO NOT use this for transactions
-      const itemFields = dynamicFields.data.filter(
-        (f) => typeof f.name.type === "string" && f.name.type.startsWith(ITEM_TYPE)
-      );
+      const itemFields   = allFields.filter(f => typeof f.name.type === "string" && f.name.type.startsWith(ITEM_TYPE));
+      const listingFields = allFields.filter(f => typeof f.name.type === "string" && f.name.type.startsWith(LISTING_TYPE));
 
-      const listingFields = dynamicFields.data.filter(
-        (f) => typeof f.name.type === "string" && f.name.type.startsWith(LISTING_TYPE)
-      );
+      if (itemFields.length === 0) { setUserNfts([]); return; }
 
-      if (itemFields.length === 0) {
-        setUserNfts([]);
-        return;
-      }
-
-      // Step 4 — extract real NFT IDs and build listed set
       const realNftIds: string[] = itemFields
-        .map((f) => normalizeSuiId((f.name.value as any)?.id || f.name.value))
+        .map(f => normalizeSuiId((f.name.value as any)?.id || f.name.value))
         .filter(Boolean);
 
       const listedNftIds = new Set(
-        listingFields.map((f) =>
-          normalizeSuiId((f.name.value as any)?.id || f.name.value)
-        )
+        listingFields.map(f => normalizeSuiId((f.name.value as any)?.id || f.name.value))
       );
 
-      if (realNftIds.length === 0) {
-        setUserNfts([]);
-        return;
-      }
-
-      // Step 5 — fetch full NFT content using REAL object IDs
-      const BATCH_SIZE = 50;
+      // Batch fetch
+      const BATCH = 50;
       const nftObjects: any[] = [];
-      for (let i = 0; i < realNftIds.length; i += BATCH_SIZE) {
-        const batch = realNftIds.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < realNftIds.length; i += BATCH) {
         const results = await suiClient.multiGetObjects({
-          ids: batch,
+          ids: realNftIds.slice(i, i + BATCH),
           options: { showContent: true, showType: true },
         });
         nftObjects.push(...results);
       }
 
-      console.log("=== INVENTORY DEBUG ===");
-      console.log("Total dynamic fields:", allDynamicFields.length);
-      console.log("Item fields:", itemFields.length);
-      console.log("Real NFT IDs:", realNftIds.length, realNftIds);
-      console.log("NFT objects returned:", nftObjects.length);
-      nftObjects.forEach((obj: any, i) => {
-        console.log(`[${i}] id:`, obj.data?.objectId, "| type:", obj.data?.content?.type, "| error:", obj.error);
-      });
-
-      // Step 6 — map to NFT type
-      const mappedNfts: (NFT & { isListed: boolean })[] = nftObjects
+      const mapped: NFTWithListed[] = nftObjects
         .map((obj: any) => {
           if (!obj.data) return null;
-
           const objectId = normalizeSuiId(obj.data.objectId);
-          const content = obj.data.content;
-
+          const content  = obj.data.content;
           if (content?.type !== NFT_TYPE) return null;
-          
           const f = content?.fields;
           if (!f) return null;
-
           return {
-            id: objectId, // The real NFT object ID — used for all transactions
-            name: f.name ?? "Unknown",
-            rarity: Number(f.rarity ?? 0),
-            variantType: f.variant_type ?? "Normal",
-            image:
-              f.image_url ||
-              "https://images.unsplash.com/photo-1743355694962-40376ef681da?q=80&w=400",
-            hp: parseInt(f.hp ?? "0"),
-            atk: parseInt(f.atk ?? "0"),
-            spd: parseInt(f.spd ?? "0"),
-            baseValue: parseInt(f.base_value ?? "0"),
-            actualValue: parseInt(f.actual_value ?? "0"),
+            id:           objectId,
+            name:         f.name ?? "Unknown",
+            rarity:       Number(f.rarity ?? 0),
+            variantType:  f.variant_type ?? "Normal",
+            image:        f.image_url || "https://images.unsplash.com/photo-1743355694962-40376ef681da?q=80&w=400",
+            hp:           parseInt(f.hp ?? "0"),
+            atk:          parseInt(f.atk ?? "0"),
+            spd:          parseInt(f.spd ?? "0"),
+            baseValue:    parseInt(f.base_value ?? "0"),
+            actualValue:  parseInt(f.actual_value ?? "0"),
             lootboxSource: f.lootbox_source ?? "",
-            globalId: parseInt(f.global_sequential_id ?? "0"),
+            globalId:     parseInt(f.global_sequential_id ?? "0"),
             kioskId,
             kioskCapId,
-            isListed: listedNftIds.has(objectId),
-          };
+            isListed:     listedNftIds.has(objectId),
+          } as NFTWithListed;
         })
-        .filter((n): n is NFT & { isListed: boolean } => n !== null);
+        .filter((n): n is NFTWithListed => n !== null);
 
-      setUserNfts(mappedNfts);
+      setUserNfts(mapped);
     } catch (err) {
       console.error("Inventory fetch error:", err);
-      toast({
-        variant: "destructive",
-        title: "Failed to load inventory",
-        description: "Check your connection and try again.",
-      });
+      toast({ variant: "destructive", title: "Failed to load inventory", description: "Check your connection and try again." });
     } finally {
       setIsLoading(false);
     }
   }, [account, suiClient, toast]);
 
-  useEffect(() => {
-    fetchUserNfts();
-  }, [fetchUserNfts]);
+  useEffect(() => { fetchUserNfts(); }, [fetchUserNfts]);
 
-  // ── Burn ────────────────────────────────────────────────────────────────────
+  // ── Group NFTs by name ──────────────────────────────────────────────
+  const groups = useMemo((): NFTGroup[] => {
+    const map = new Map<string, NFTGroup>();
+    for (const nft of userNfts) {
+      const key = nft.name;
+      if (!map.has(key)) {
+        map.set(key, { name: nft.name, rarity: nft.rarity, baseImage: nft.image, items: [] });
+      }
+      map.get(key)!.items.push(nft);
+    }
+    return Array.from(map.values()).sort((a, b) => b.rarity - a.rarity);
+  }, [userNfts]);
+
+  // ── Filter groups ───────────────────────────────────────────────────
+  const filteredGroups = useMemo(() => {
+    return groups.filter(g => {
+      const matchesSearch  = g.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesRarity  = rarityFilter === null || g.rarity === rarityFilter;
+      return matchesSearch && matchesRarity;
+    });
+  }, [groups, searchTerm, rarityFilter]);
+
+  // Items inside the currently expanded group (also filterable)
+  const expandedItems = useMemo(() => {
+    if (!expandedGroup) return [];
+    const group = groups.find(g => g.name === expandedGroup);
+    return group?.items ?? [];
+  }, [expandedGroup, groups]);
+
+  // ── Burn ─────────────────────────────────────────────────────────────
   const handleBurnNft = async (nft: NFT) => {
     if (!account || !nft.kioskId || !nft.kioskCapId) return;
     setIsBurning(true);
-    try {
-      const txb = new Transaction();
-      txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
-        arguments: [
-          txb.object(nft.kioskId),
-          txb.object(nft.kioskCapId),
-          txb.object(TREASURY_CAP),
-          txb.pure.id(nft.id), // pure.id not pure.address
-        ],
-      });
-
-      signAndExecute(
-        { transaction: txb },
-        {
-          onSuccess: () => {
-            toast({ title: "Hero Sacrificed 🔥", description: "You received $GYATE tokens." });
-            setIsBurning(false);
-            setSelectedNft(null);
-            setTimeout(fetchUserNfts, 3000);
-          },
-          onError: (err) => {
-            toast({ variant: "destructive", title: "Burn failed", description: err.message });
-            setIsBurning(false);
-          },
-        }
-      );
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Setup error", description: err.message });
-      setIsBurning(false);
-    }
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
+      arguments: [
+        txb.object(nft.kioskId),
+        txb.object(nft.kioskCapId),
+        txb.object(TREASURY_CAP),
+        txb.pure.id(nft.id),
+      ],
+    });
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Hero Sacrificed 🔥", description: "You received $GYATE tokens." });
+        setIsBurning(false);
+        setSelectedNft(null);
+        setTimeout(fetchUserNfts, 3000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Burn failed", description: err.message });
+        setIsBurning(false);
+      },
+    });
   };
 
-  // ── List for sale ───────────────────────────────────────────────────────────
+  // ── List for sale ─────────────────────────────────────────────────────
   const openListDialog = (nft: NFT) => {
     setListingNft(nft);
     setListPriceSui("");
@@ -250,113 +264,84 @@ export default function InventoryPage() {
 
   const handleListNft = async () => {
     if (!listingNft || !account || !listingNft.kioskId || !listingNft.kioskCapId) return;
-
     const priceFloat = parseFloat(listPriceSui);
     if (isNaN(priceFloat) || priceFloat <= 0) {
       toast({ variant: "destructive", title: "Enter a valid price" });
       return;
     }
-
-    // Keep as BigInt to avoid float precision loss
     const priceMist = BigInt(Math.round(priceFloat * 1_000_000_000));
-
     setIsListing(true);
-    try {
-      const txb = new Transaction();
-      txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.LIST_NFT}`,
-        arguments: [
-          txb.object(listingNft.kioskId),
-          txb.object(listingNft.kioskCapId),
-          txb.pure.id(listingNft.id), // real NFT ID — critical
-          txb.pure.u64(priceMist),
-        ],
-      });
-
-      signAndExecute(
-        { transaction: txb },
-        {
-          onSuccess: () => {
-            toast({
-              title: "Listed! 🏷️",
-              description: `${listingNft.name} listed for ${priceFloat} SUI.`,
-            });
-            setIsListing(false);
-            setListDialogOpen(false);
-            setListingNft(null);
-            setTimeout(fetchUserNfts, 3000);
-          },
-          onError: (err) => {
-            toast({ variant: "destructive", title: "Listing failed", description: err.message });
-            setIsListing(false);
-          },
-        }
-      );
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Setup error", description: err.message });
-      setIsListing(false);
-    }
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.LIST_NFT}`,
+      arguments: [
+        txb.object(listingNft.kioskId),
+        txb.object(listingNft.kioskCapId),
+        txb.pure.id(listingNft.id),
+        txb.pure.u64(priceMist),
+      ],
+    });
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Listed! 🏷️", description: `${listingNft.name} listed for ${priceFloat} SUI.` });
+        setIsListing(false);
+        setListDialogOpen(false);
+        setListingNft(null);
+        setTimeout(fetchUserNfts, 3000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Listing failed", description: err.message });
+        setIsListing(false);
+      },
+    });
   };
 
-  // ── Delist ──────────────────────────────────────────────────────────────────
+  // ── Delist ────────────────────────────────────────────────────────────
   const handleDelistNft = async (nft: NFT) => {
     if (!account || !nft.kioskId || !nft.kioskCapId) return;
-    try {
-      const txb = new Transaction();
-      txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.DELIST_NFT}`,
-        arguments: [
-          txb.object(nft.kioskId),
-          txb.object(nft.kioskCapId),
-          txb.pure.id(nft.id),
-        ],
-      });
-
-      signAndExecute(
-        { transaction: txb },
-        {
-          onSuccess: () => {
-            toast({ title: "Delisted", description: `${nft.name} removed from marketplace.` });
-            setTimeout(fetchUserNfts, 3000);
-          },
-          onError: (err) => {
-            toast({ variant: "destructive", title: "Delist failed", description: err.message });
-          },
-        }
-      );
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Setup error", description: err.message });
-    }
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.DELIST_NFT}`,
+      arguments: [
+        txb.object(nft.kioskId),
+        txb.object(nft.kioskCapId),
+        txb.pure.id(nft.id),
+      ],
+    });
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Delisted", description: `${nft.name} removed from marketplace.` });
+        setTimeout(fetchUserNfts, 3000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Delist failed", description: err.message });
+      },
+    });
   };
 
-  const filtered = userNfts.filter((n) =>
-    n.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen gradient-bg">
       <Navigation />
 
       <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
           <div>
-            <h1 className="font-headline text-4xl font-bold mb-2">Inventory</h1>
-            <p className="text-muted-foreground">Manage your on-chain collection and $GYATE economy.</p>
+            <h1 className="font-headline text-4xl font-bold mb-1">Inventory</h1>
+            <p className="text-muted-foreground text-sm">
+              {userNfts.length} hero{userNfts.length !== 1 ? "es" : ""} across {groups.length} type{groups.length !== 1 ? "s" : ""}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={fetchUserNfts}
-              className="border-white/10"
-            >
+            <Button variant="outline" size="icon" onClick={fetchUserNfts} className="border-white/10">
               <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
             </Button>
             <div className="relative md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search NFTs..."
+                placeholder="Search by name..."
                 className="pl-10 bg-white/5 border-white/10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -366,69 +351,70 @@ export default function InventoryPage() {
         </div>
 
         {!account ? (
-          <div className="py-32 text-center glass-card rounded-3xl">
-            <div className="max-w-xs mx-auto space-y-4">
-              <ShoppingBag className="w-12 h-12 text-primary mx-auto" />
-              <h2 className="text-xl font-bold font-headline">Connect Wallet</h2>
-              <p className="text-sm text-muted-foreground">View your collection on the Sui network.</p>
-            </div>
-          </div>
+          <EmptyState icon={<ShoppingBag className="w-12 h-12 text-primary mx-auto" />} title="Connect Wallet" description="View your collection on the Sui network." />
         ) : isLoading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
             <RefreshCw className="w-12 h-12 text-primary animate-spin" />
             <p className="font-headline tracking-widest text-muted-foreground">Accessing Kiosk...</p>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="py-32 text-center glass-card rounded-3xl">
-            <div className="max-w-xs mx-auto space-y-4">
-              <LayoutGrid className="w-12 h-12 text-primary mx-auto" />
-              <h2 className="text-xl font-bold">
-                {searchTerm ? "No results" : "Collection Empty"}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {searchTerm
-                  ? "Try a different search."
-                  : "Visit the Emporium to summon your first hero."}
-              </p>
-              {!searchTerm && (
-                <Button asChild className="glow-purple">
-                  <a href="/shop">Go to Shop</a>
-                </Button>
-              )}
-            </div>
-          </div>
+        ) : userNfts.length === 0 ? (
+          <EmptyState
+            icon={<LayoutGrid className="w-12 h-12 text-primary mx-auto" />}
+            title="Collection Empty"
+            description="Visit the Emporium to summon your first hero."
+            action={<Button asChild className="glow-purple"><a href="/shop">Go to Shop</a></Button>}
+          />
+        ) : expandedGroup ? (
+          // ── Expanded group view ──────────────────────────────────────
+          <ExpandedGroupView
+            group={groups.find(g => g.name === expandedGroup)!}
+            items={expandedItems}
+            onBack={() => setExpandedGroup(null)}
+            onSelectNft={setSelectedNft}
+            onList={openListDialog}
+            onDelist={handleDelistNft}
+          />
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {filtered.map((nft) => (
-              <div key={nft.id} className="space-y-2">
-                <NFTCard nft={nft} onClick={() => setSelectedNft(nft)} />
-                <div className="flex gap-2">
-                  {(nft as any).isListed ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs border-white/10 text-muted-foreground"
-                      onClick={() => handleDelistNft(nft)}
-                    >
-                      Delist
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs border-white/10"
-                      onClick={() => openListDialog(nft)}
-                    >
-                      <Tag className="w-3 h-3 mr-1" /> List
-                    </Button>
-                  )}
-                </div>
+          // ── Group grid view ──────────────────────────────────────────
+          <>
+            {/* Rarity filter pills */}
+            <div className="flex items-center gap-2 mb-6 flex-wrap">
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-bold uppercase tracking-widest mr-1">
+                <Filter className="w-3 h-3" /> Rarity
+              </span>
+              <FilterPill active={rarityFilter === null} onClick={() => setRarityFilter(null)}>
+                All
+              </FilterPill>
+              {[0, 1, 2, 3, 4, 5].filter(r => groups.some(g => g.rarity === r)).map(r => (
+                <FilterPill key={r} active={rarityFilter === r} onClick={() => setRarityFilter(rarityFilter === r ? null : r)}>
+                  {RARITY_LABELS[r]}
+                </FilterPill>
+              ))}
+            </div>
+
+            {filteredGroups.length === 0 ? (
+              <EmptyState
+                icon={<Search className="w-12 h-12 text-primary mx-auto" />}
+                title="No results"
+                description="Try a different search or filter."
+                action={<Button variant="link" onClick={() => { setSearchTerm(""); setRarityFilter(null); }} className="text-accent">Clear filters</Button>}
+              />
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {filteredGroups.map(group => (
+                  <GroupCard
+                    key={group.name}
+                    group={group}
+                    onClick={() => setExpandedGroup(group.name)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
+      {/* NFT detail dialog */}
       <NFTDetailDialog
         nft={selectedNft}
         open={!!selectedNft}
@@ -438,12 +424,11 @@ export default function InventoryPage() {
         isBurning={isBurning}
       />
 
+      {/* List dialog */}
       <Dialog open={listDialogOpen} onOpenChange={setListDialogOpen}>
         <DialogContent className="glass-card border-white/10 max-w-sm">
           <DialogHeader>
-            <DialogTitle className="font-headline">
-              List {listingNft?.name} for Sale
-            </DialogTitle>
+            <DialogTitle className="font-headline">List {listingNft?.name} for Sale</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
@@ -459,9 +444,7 @@ export default function InventoryPage() {
                 onChange={(e) => setListPriceSui(e.target.value)}
                 className="bg-white/5 border-white/10 pr-14 text-lg font-bold"
               />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
-                SUI
-              </span>
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">SUI</span>
             </div>
             {listPriceSui && !isNaN(parseFloat(listPriceSui)) && (
               <div className="text-xs text-muted-foreground space-y-1">
@@ -471,25 +454,290 @@ export default function InventoryPage() {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              className="border-white/10"
-              onClick={() => setListDialogOpen(false)}
-              disabled={isListing}
-            >
+            <Button variant="outline" className="border-white/10" onClick={() => setListDialogOpen(false)} disabled={isListing}>
               Cancel
             </Button>
-            <Button
-              className="glow-purple"
-              onClick={handleListNft}
-              disabled={isListing || !listPriceSui}
-            >
+            <Button className="glow-purple" onClick={handleListNft} disabled={isListing || !listPriceSui}>
               {isListing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Confirm Listing
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Group Card — shown in the main grid
+// ─────────────────────────────────────────────
+
+function GroupCard({ group, onClick }: { group: NFTGroup; onClick: () => void }) {
+  const listedCount   = group.items.filter(i => i.isListed).length;
+  const unlistedCount = group.items.length - listedCount;
+  const colorClass    = RARITY_COLORS[group.rarity] ?? RARITY_COLORS[0];
+  const badgeColor    = RARITY_BADGE_COLORS[group.rarity] ?? RARITY_BADGE_COLORS[0];
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "group relative rounded-2xl border overflow-hidden text-left transition-all duration-200",
+        "hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]",
+        colorClass
+      )}
+    >
+      {/* Stacked card effect — ghost cards behind */}
+      {group.items.length > 2 && (
+        <div className="absolute inset-x-3 top-1.5 h-full rounded-xl border border-white/5 bg-white/3 -z-10" />
+      )}
+      {group.items.length > 1 && (
+        <div className="absolute inset-x-1.5 top-0.5 h-full rounded-xl border border-white/5 bg-white/5 -z-10" />
+      )}
+
+      {/* Image */}
+      <div className="relative aspect-square overflow-hidden">
+        <img
+          src={group.baseImage}
+          alt={group.name}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+
+        {/* Count badge */}
+        <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] font-bold">
+          <Layers className="w-2.5 h-2.5" />
+          {group.items.length}
+        </div>
+
+        {/* Listed badge */}
+        {listedCount > 0 && (
+          <div className="absolute top-2 left-2 bg-accent/80 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
+            {listedCount} listed
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="p-3 space-y-2">
+        <div className="flex items-start justify-between gap-1">
+          <h3 className="font-bold text-sm leading-tight">{group.name}</h3>
+          <ChevronRight className="w-4 h-4 opacity-40 flex-shrink-0 mt-0.5 group-hover:opacity-100 transition-opacity" />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className={cn("text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-0.5", badgeColor)}>
+            {RARITY_LABELS[group.rarity]}
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            {unlistedCount} in wallet
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Expanded Group View — shows individual tokens
+// ─────────────────────────────────────────────
+
+function ExpandedGroupView({
+  group,
+  items,
+  onBack,
+  onSelectNft,
+  onList,
+  onDelist,
+}: {
+  group: NFTGroup;
+  items: NFTWithListed[];
+  onBack: () => void;
+  onSelectNft: (nft: NFT) => void;
+  onList: (nft: NFT) => void;
+  onDelist: (nft: NFT) => void;
+}) {
+  const badgeColor  = RARITY_BADGE_COLORS[group.rarity] ?? RARITY_BADGE_COLORS[0];
+  const listedCount = items.filter(i => i.isListed).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Back header */}
+      <div className="flex items-center gap-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onBack}
+          className="bg-white/5 border-white/10 gap-1.5"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </Button>
+
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10">
+            <img src={group.baseImage} alt={group.name} className="w-full h-full object-cover" />
+          </div>
+          <div>
+            <h2 className="font-headline text-xl font-bold">{group.name}</h2>
+            <div className="flex items-center gap-2">
+              <span className={cn("text-[10px] font-bold uppercase tracking-widest rounded-full px-2 py-0.5", badgeColor)}>
+                {RARITY_LABELS[group.rarity]}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {items.length} owned · {listedCount} listed
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Token list */}
+      <div className="grid gap-3">
+        {items.map((nft, idx) => (
+          <TokenRow
+            key={nft.id}
+            nft={nft}
+            index={idx + 1}
+            onView={() => onSelectNft(nft)}
+            onList={() => onList(nft)}
+            onDelist={() => onDelist(nft)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Token Row — individual NFT inside expanded group
+// ─────────────────────────────────────────────
+
+function TokenRow({
+  nft,
+  index,
+  onView,
+  onList,
+  onDelist,
+}: {
+  nft: NFTWithListed;
+  index: number;
+  onView: () => void;
+  onList: () => void;
+  onDelist: () => void;
+}) {
+  return (
+    <Card className={cn(
+      "bg-white/5 border transition-colors",
+      nft.isListed ? "border-accent/30" : "border-white/5 hover:border-white/10"
+    )}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-4">
+
+          {/* Thumbnail */}
+          <div
+            className="w-12 h-12 rounded-lg overflow-hidden border border-white/10 flex-shrink-0 cursor-pointer"
+            onClick={onView}
+          >
+            <img src={nft.image} alt={nft.name} className="w-full h-full object-cover" />
+          </div>
+
+          {/* ID + stats */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold font-mono text-muted-foreground">
+                #{String(index).padStart(3, "0")}
+              </span>
+              <span className="text-[10px] font-mono text-muted-foreground/60 truncate">
+                {shortenId(nft.id)}
+              </span>
+              {nft.isListed && (
+                <span className="text-[10px] font-bold bg-accent/10 text-accent border border-accent/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                  Listed
+                </span>
+              )}
+              {nft.variantType && nft.variantType !== "Normal" && (
+                <span className="text-[10px] font-bold bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                  {nft.variantType}
+                </span>
+              )}
+            </div>
+            {/* Combat stats */}
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-mono">
+              <span>HP <span className="text-foreground font-bold">{nft.hp}</span></span>
+              <span>ATK <span className="text-foreground font-bold">{nft.atk}</span></span>
+              <span>SPD <span className="text-foreground font-bold">{nft.spd}</span></span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onView}
+              className="text-xs border-white/10 bg-white/5 h-8 px-3"
+            >
+              View
+            </Button>
+            {nft.isListed ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onDelist}
+                className="text-xs border-white/10 text-muted-foreground h-8 px-3"
+              >
+                <X className="w-3 h-3 mr-1" /> Delist
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onList}
+                className="text-xs border-white/10 h-8 px-3"
+              >
+                <Tag className="w-3 h-3 mr-1" /> List
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Small helpers
+// ─────────────────────────────────────────────
+
+function FilterPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "px-3 py-1 rounded-full text-xs font-bold transition-colors border",
+        active
+          ? "bg-accent text-white border-accent"
+          : "bg-white/5 text-muted-foreground border-white/10 hover:border-white/20 hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EmptyState({ icon, title, description, action }: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="py-32 text-center glass-card rounded-3xl">
+      <div className="max-w-xs mx-auto space-y-4">
+        {icon}
+        <h2 className="text-xl font-bold font-headline">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
+        {action}
+      </div>
     </div>
   );
 }
