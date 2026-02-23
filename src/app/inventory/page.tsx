@@ -98,6 +98,20 @@ export default function InventoryPage() {
     setIsBurning(true);
     
     try {
+      // 1. Fetch PlayerStats object to track the burn on-chain
+      const statsObjects = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` }
+      });
+
+      if (statsObjects.data.length === 0) {
+        toast({ variant: "destructive", title: "Profile Required", description: "Please initialize your profile in the Account section to track burns." });
+        setIsBurning(false);
+        return;
+      }
+
+      const statsId = statsObjects.data[0].data!.objectId;
+
       const txb = new Transaction();
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
@@ -105,13 +119,14 @@ export default function InventoryPage() {
           txb.object(nft.kioskId),
           txb.object(nft.kioskCapId),
           txb.object(TREASURY_CAP),
-          txb.pure.id(nft.id),
+          txb.object(statsId), // Pass stats object so burn count increments
+          txb.pure.address(nft.id),
         ],
       });
 
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
-          toast({ title: "NFT Burned", description: "You've received $GYATE tokens." });
+          toast({ title: "NFT Burned", description: "You've received $GYATE tokens and your stats were updated." });
           setIsBurning(false);
           setSelectedNft(null);
           fetchUserNfts();

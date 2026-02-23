@@ -644,6 +644,43 @@ export default function AdminPage() {
     });
   };
 
+  const handleWithdrawGyate = async () => {
+    if (!withdrawAmount || !account) return;
+    setIsPending(true);
+    try {
+      const txb = new Transaction();
+      // In the pool module, withdraw_gyate usually returns a Coin object.
+      // We must pass the Pool object AND the Cap, and then handle the returned coin.
+      const [coin] = txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::withdraw_gyate`,
+        arguments: [
+          txb.object(TREASURY_CAP),
+          txb.object(TREASURY_POOL),
+          txb.pure.u64(BigInt(Math.floor(parseFloat(withdrawAmount)))),
+        ],
+      });
+
+      // Transfer the withdrawn coin to the admin wallet
+      txb.transferObjects([coin], txb.pure.address(account.address));
+
+      signAndExecute({ transaction: txb }, {
+        onSuccess: () => {
+          toast({ title: "Withdrawal Successful", description: `Withdrawn ${withdrawAmount} GYATE to your wallet.` });
+          setIsPending(false);
+          setWithdrawAmount("");
+          fetchTreasuryData();
+        },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Withdrawal Failed", description: err.message });
+          setIsPending(false);
+        }
+      });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Transaction Error", description: err.message });
+      setIsPending(false);
+    }
+  };
+
   const renderRarityTier = (label: string, configs: NFTTypeData[]) => {
     const isEmpty = !configs || configs.length === 0;
     return (
@@ -1205,38 +1242,19 @@ export default function AdminPage() {
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Wallet className="w-5 h-5 text-accent" /> Withdraw GYATE
                     </CardTitle>
-                    <CardDescription>Transfer $GYATE to a wallet</CardDescription>
+                    <CardDescription>Transfer $GYATE from treasury to your wallet</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label>Amount to Withdraw</Label>
                       <Input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} />
                     </div>
-                    <Button className="w-full glow-purple font-bold h-12" onClick={async () => {
-                      if (!withdrawAmount) return;
-                      setIsPending(true);
-                      const txb = new Transaction();
-                      txb.moveCall({
-                        target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::withdraw_gyate`,
-                        arguments: [
-                          txb.object(TREASURY_CAP),
-                          txb.pure.u64(BigInt(Math.floor(parseFloat(withdrawAmount)))),
-                        ],
-                      });
-
-                      signAndExecute({ transaction: txb }, {
-                        onSuccess: () => {
-                          toast({ title: "Withdrawal Sent", description: `Withdrawal of ${withdrawAmount} GYATE initiated.` });
-                          setIsPending(false);
-                          setWithdrawAmount("");
-                          fetchTreasuryData();
-                        },
-                        onError: (err) => {
-                          toast({ variant: "destructive", title: "Withdrawal Failed", description: err.message });
-                          setIsPending(false);
-                        }
-                      });
-                    }} disabled={isPending}>
+                    <Button 
+                      className="w-full glow-purple font-bold h-12" 
+                      onClick={handleWithdrawGyate} 
+                      disabled={isPending || !withdrawAmount}
+                    >
+                      {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Wallet className="w-4 h-4 mr-2" />}
                       Execute On-Chain Withdrawal
                     </Button>
                   </CardContent>
