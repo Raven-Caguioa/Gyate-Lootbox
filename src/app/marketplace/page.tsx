@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Navigation } from "@/components/navigation";
@@ -10,7 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
-import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL, TRANSFER_POLICY } from "@/lib/sui-constants";
+import {
+  PACKAGE_ID,
+  MODULE_NAMES,
+  FUNCTIONS,
+  TREASURY_POOL,
+  TRANSFER_POLICY,
+  KIOSK_REGISTRY,
+} from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Transaction } from "@mysten/sui/transactions";
 import { NFT, RARITY_LABELS } from "@/lib/mock-data";
@@ -19,28 +25,44 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-/**
- * Normalizes a Sui ID string for reliable comparison.
- */
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
 function normalizeSuiId(id: string | any): string {
   if (!id) return "";
-  const str = typeof id === 'string' ? id : id?.id || id?.objectId || JSON.stringify(id);
-  let normalized = str.toLowerCase();
-  if (!normalized.startsWith('0x')) normalized = '0x' + normalized;
-  return normalized;
+  const str =
+    typeof id === "string"
+      ? id
+      : id?.id || id?.objectId || JSON.stringify(id);
+  return str.toLowerCase().replace(/^(0x)?/, "0x");
 }
 
+/** Convert MIST (bigint/string) to SUI for display only */
+function mistToSui(mist: string | number | bigint): number {
+  return Number(BigInt(mist.toString())) / 1_000_000_000;
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+/** Internal listing type — price always stored as MIST string to avoid float loss */
+interface ActiveListing {
+  nftId: string;
+  kioskId: string;
+  priceMist: string; // raw MIST — never convert to float until display
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function MarketplacePage() {
-  const [selectedNft, setSelectedNft] = useState<any>(null);
+  const [selectedNft, setSelectedNft] = useState<NFT | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [listings, setListings] = useState<NFT[]>([]);
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRarities, setSelectedRarities] = useState<number[]>([]);
-  const [hpRange, setHpRange] = useState({ min: "0", max: "2500" });
-  const [atkRange, setAtkRange] = useState({ min: "0", max: "600" });
-  const [spdRange, setSpdRange] = useState({ min: "0", max: "400" });
+  const [hpRange, setHpRange] = useState({ min: "0", max: "9999" });
+  const [atkRange, setAtkRange] = useState({ min: "0", max: "9999" });
+  const [spdRange, setSpdRange] = useState({ min: "0", max: "9999" });
 
   const suiClient = useSuiClient();
   const account = useCurrentAccount();
@@ -49,79 +71,134 @@ export default function MarketplacePage() {
 
   const NFT_TYPE = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
 
+  // ── Fetch listings ──────────────────────────────────────────────────────────
   const fetchListings = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch a larger sample of events to catch active listings
-      const [listedEvents, purchasedEvents, delistedEvents] = await Promise.all([
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` }, limit: 100, order: 'descending' }),
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` }, limit: 100, order: 'descending' }),
-        suiClient.queryEvents({ query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` }, limit: 100, order: 'descending' }),
+      // Step 1 — collect ItemListed / ItemPurchased / ItemDelisted events
+      const [listedRes, purchasedRes, delistedRes] = await Promise.all([
+        suiClient.queryEvents({
+          query: { MoveEventType: `0x2::kiosk::ItemListed<${NFT_TYPE}>` },
+          limit: 100,
+          order: "descending",
+        }),
+        suiClient.queryEvents({
+          query: { MoveEventType: `0x2::kiosk::ItemPurchased<${NFT_TYPE}>` },
+          limit: 100,
+          order: "descending",
+        }),
+        suiClient.queryEvents({
+          query: { MoveEventType: `0x2::kiosk::ItemDelisted<${NFT_TYPE}>` },
+          limit: 100,
+          order: "descending",
+        }),
       ]);
 
-      const soldIds = new Set(purchasedEvents.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
-      const removedIds = new Set(delistedEvents.data.map((e: any) => normalizeSuiId(e.parsedJson.id)));
-      
-      const activeListingsMetadata = listedEvents.data
-        .map((e: any) => ({
-          id: normalizeSuiId(e.parsedJson.id),
-          kioskId: normalizeSuiId(e.parsedJson.kiosk),
-          price: e.parsedJson.price, 
-        }))
-        .filter(l => !soldIds.has(l.id) && !removedIds.has(l.id));
+      // Build sets of closed NFT IDs
+      const soldIds = new Set(
+        purchasedRes.data.map((e: any) => normalizeSuiId(e.parsedJson?.id))
+      );
+      const delistedIds = new Set(
+        delistedRes.data.map((e: any) => normalizeSuiId(e.parsedJson?.id))
+      );
 
-      if (activeListingsMetadata.length === 0) {
+      // Step 2 — filter to genuinely active listings
+      // Deduplicate by NFT ID keeping the most recent listing event
+      const seen = new Set<string>();
+      const activeListings: ActiveListing[] = [];
+
+      for (const e of listedRes.data) {
+        const nftId = normalizeSuiId(e.parsedJson?.id);
+        const kioskId = normalizeSuiId(e.parsedJson?.kiosk);
+        const priceMist = e.parsedJson?.price?.toString() ?? "0";
+
+        if (!nftId || seen.has(nftId)) continue;
+        seen.add(nftId);
+
+        if (soldIds.has(nftId) || delistedIds.has(nftId)) continue;
+
+        activeListings.push({ nftId, kioskId, priceMist });
+      }
+
+      if (activeListings.length === 0) {
         setListings([]);
-        setIsLoading(false);
         return;
       }
 
-      // De-duplicate metadata by NFT ID (keep latest listing only)
-      const latestMetaMap = new Map();
-      activeListingsMetadata.forEach(m => {
-        if (!latestMetaMap.has(m.id)) latestMetaMap.set(m.id, m);
-      });
+      // Step 3 — verify each NFT is still inside its kiosk using getDynamicFieldObject
+      // Kiosk stores items as dynamic fields keyed by their ID
+      const verifiedListings: NFT[] = [];
 
-      const nftObjects = await suiClient.multiGetObjects({
-        ids: Array.from(latestMetaMap.keys()),
-        options: { showContent: true, showOwner: true }
-      });
+      await Promise.all(
+        activeListings.map(async (listing) => {
+          try {
+            // Query the kiosk dynamic field — this is the canonical way to read
+            // a kiosk item's data. Falls through if item was removed outside the listing.
+            const dynField = await suiClient.getDynamicFieldObject({
+              parentId: listing.kioskId,
+              name: {
+                type: "0x2::kiosk::Item",
+                value: { id: listing.nftId },
+              },
+            });
 
-      const mappedListings: NFT[] = nftObjects.map((obj: any) => {
-        const id = normalizeSuiId(obj.data?.objectId);
-        const fields = obj.data?.content?.fields;
-        const owner = obj.data?.owner;
-        const meta = latestMetaMap.get(id);
+            if (!dynField?.data?.content) return;
 
-        if (!fields || !owner || !meta) return null;
+            // Also check the kiosk listing table to confirm it's still listed
+            const listedField = await suiClient.getDynamicFieldObject({
+              parentId: listing.kioskId,
+              name: {
+                type: "0x2::kiosk::Listing",
+                value: { id: listing.nftId, is_exclusive: false },
+              },
+            }).catch(() => null);
 
-        // Verify current on-chain owner is actually the kiosk from the listing
-        const actualOwner = normalizeSuiId(owner.ObjectOwner || owner.AddressOwner);
-        if (actualOwner !== meta.kioskId) return null;
+            // If the listing field doesn't exist the item was delisted
+            if (!listedField?.data) return;
 
-        return {
-          id: id,
-          name: fields.name,
-          rarity: fields.rarity,
-          variantType: fields.variant_type,
-          image: fields.image_url,
-          hp: parseInt(fields.hp),
-          atk: parseInt(fields.atk),
-          spd: parseInt(fields.spd),
-          baseValue: parseInt(fields.base_value),
-          actualValue: parseInt(fields.actual_value),
-          lootboxSource: fields.lootbox_source,
-          globalId: parseInt(fields.global_sequential_id),
-          price: meta.price ? parseInt(meta.price) / 1_000_000_000 : 1, 
-          seller: "On-Chain Offering", 
-          kioskId: meta.kioskId,
-        };
-      }).filter((n): n is NFT => n !== null);
+            // Step 4 — fetch full NFT object content
+            const nftObj = await suiClient.getObject({
+              id: listing.nftId,
+              options: { showContent: true },
+            });
 
-      setListings(mappedListings);
+            const fields = (nftObj.data?.content as any)?.fields;
+            if (!fields) return;
+
+            verifiedListings.push({
+              id: listing.nftId,
+              name: fields.name ?? "Unknown",
+              rarity: Number(fields.rarity ?? 0),
+              variantType: fields.variant_type ?? "Normal",
+              image: fields.image_url ?? "",
+              hp: Number(fields.hp ?? 0),
+              atk: Number(fields.atk ?? 0),
+              spd: Number(fields.spd ?? 0),
+              baseValue: Number(fields.base_value ?? 0),
+              actualValue: Number(fields.actual_value ?? 0),
+              lootboxSource: fields.lootbox_source ?? "",
+              globalId: Number(fields.global_sequential_id ?? 0),
+              // Store display price as SUI float — actual purchase uses priceMist
+              price: mistToSui(listing.priceMist),
+              // Stash MIST price for buy transaction (avoid float round-trip)
+              priceMist: listing.priceMist,
+              seller: "On-Chain Listing",
+              kioskId: listing.kioskId,
+            } as NFT & { priceMist: string });
+          } catch {
+            // If any fetch fails, skip this listing silently
+          }
+        })
+      );
+
+      setListings(verifiedListings);
     } catch (err) {
-      console.error("Discovery error:", err);
-      toast({ variant: "destructive", title: "Sync Error", description: "Failed to load marketplace listings." });
+      console.error("Marketplace fetch error:", err);
+      toast({
+        variant: "destructive",
+        title: "Sync Failed",
+        description: "Could not load marketplace listings.",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -131,65 +208,110 @@ export default function MarketplacePage() {
     fetchListings();
   }, [fetchListings]);
 
-  const handleBuyNft = async (item: NFT) => {
+  // ── Buy handler ─────────────────────────────────────────────────────────────
+  const handleBuyNft = async (item: NFT & { priceMist?: string }) => {
     if (!account) {
-      toast({ variant: "destructive", title: "Wallet required" });
+      toast({ variant: "destructive", title: "Connect your wallet first" });
+      return;
+    }
+    if (!item.kioskId) {
+      toast({ variant: "destructive", title: "Missing kiosk data for this listing" });
       return;
     }
 
     setIsPending(true);
     try {
-      const ownedCaps = await suiClient.getOwnedObjects({
+      // Step 1 — find buyer's KioskOwnerCap
+      const capsRes = await suiClient.getOwnedObjects({
         owner: account.address,
-        filter: { StructType: `0x2::kiosk::KioskOwnerCap` },
+        filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
+        options: { showContent: true },
       });
 
-      if (ownedCaps.data.length === 0) {
-        toast({ variant: "destructive", title: "Kiosk Required", description: "Initialize your Kiosk in the Inventory first." });
+      if (capsRes.data.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No Kiosk Found",
+          description: "You need a Kiosk to buy. Create one in your inventory first.",
+        });
         setIsPending(false);
         return;
       }
 
-      const buyerCapId = ownedCaps.data[0].data?.objectId;
-      const capObject = await suiClient.getObject({ id: buyerCapId!, options: { showContent: true } });
-      const buyerKioskId = (capObject.data?.content as any)?.fields?.for;
+      const buyerCapId = capsRes.data[0].data?.objectId!;
+      const buyerKioskId = (capsRes.data[0].data?.content as any)?.fields?.for;
 
+      if (!buyerKioskId) {
+        throw new Error("Could not determine your Kiosk ID from cap.");
+      }
+
+      // Step 2 — calculate total payment: listed_price + 10% fee
+      // Contract splits fee out first, remainder = exact listed_price for kiosk::purchase
+      // Buyer pays: listed_price * 1.1 (e.g. 0.11 SUI for a 0.1 SUI listing)
+      const listedPriceMist: bigint = item.priceMist
+        ? BigInt(item.priceMist)
+        : BigInt(Math.round((item.price ?? 0) * 1_000_000_000));
+      const feeMist = (listedPriceMist * 1000n) / 10000n;
+      const totalPaymentMist = listedPriceMist + feeMist;
+
+      // Step 3 — build the transaction
       const txb = new Transaction();
-      const amountMist = BigInt(Math.floor((item.price || 1) * 1_000_000_000));
-      const [paymentCoin] = txb.splitCoins(txb.gas, [txb.pure.u64(amountMist)]);
+
+      // Split total payment (listed price + fee) from gas coin
+      const [paymentCoin] = txb.splitCoins(txb.gas, [
+        txb.pure.u64(totalPaymentMist),
+      ]);
 
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.BUY_NFT}`,
         arguments: [
-          txb.object(normalizeSuiId(item.kioskId)),
-          txb.object(TRANSFER_POLICY),
-          txb.object(TREASURY_POOL),
-          txb.pure.address(normalizeSuiId(item.id)),
-          paymentCoin,
-          txb.object(normalizeSuiId(buyerKioskId)),
-          txb.object(normalizeSuiId(buyerCapId!)),
+          txb.object(normalizeSuiId(item.kioskId)),   // seller_kiosk
+          txb.object(TRANSFER_POLICY),                 // policy
+          txb.object(TREASURY_POOL),                   // pool
+          txb.pure.id(normalizeSuiId(item.id)),        // nft_id — must be ID type not address
+          paymentCoin,                                  // payment coin
+          txb.object(normalizeSuiId(buyerKioskId)),   // buyer_kiosk
+          txb.object(normalizeSuiId(buyerCapId)),     // buyer_cap
         ],
       });
 
-      signAndExecute({ transaction: txb }, {
-        onSuccess: () => {
-          toast({ title: "Hero Acquired!", description: `${item.name} is now yours.` });
-          setIsPending(false);
-          setTimeout(fetchListings, 3000);
-        },
-        onError: (err) => {
-          toast({ variant: "destructive", title: "Trade Failed", description: err.message });
-          setIsPending(false);
+      signAndExecute(
+        { transaction: txb },
+        {
+          onSuccess: (result) => {
+            toast({
+              title: "Purchase Successful! 🎉",
+              description: `${item.name} is now in your Kiosk.`,
+            });
+            setIsPending(false);
+            setSelectedNft(null);
+            // Refresh after a short delay to let indexer catch up
+            setTimeout(fetchListings, 3000);
+          },
+          onError: (err) => {
+            console.error("Buy error:", err);
+            toast({
+              variant: "destructive",
+              title: "Purchase Failed",
+              description: err.message ?? "Transaction rejected.",
+            });
+            setIsPending(false);
+          },
         }
-      });
+      );
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message });
+      console.error("Buy setup error:", err);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message ?? "Something went wrong.",
+      });
       setIsPending(false);
     }
   };
 
+  // ── Filters ─────────────────────────────────────────────────────────────────
   const filteredListings = useMemo(() => {
-    if (!listings) return [];
     const minHp = parseInt(hpRange.min) || 0;
     const maxHp = parseInt(hpRange.max) || 999999;
     const minAtk = parseInt(atkRange.min) || 0;
@@ -197,36 +319,41 @@ export default function MarketplacePage() {
     const minSpd = parseInt(spdRange.min) || 0;
     const maxSpd = parseInt(spdRange.max) || 999999;
 
-    return listings.filter(l => {
-      const matchesSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase()) || l.id.includes(searchTerm);
-      const matchesRarity = selectedRarities.length === 0 || selectedRarities.includes(l.rarity);
+    return listings.filter((l) => {
+      const matchesSearch =
+        l.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        l.id.includes(searchTerm);
+      const matchesRarity =
+        selectedRarities.length === 0 || selectedRarities.includes(l.rarity);
       const matchesHp = l.hp >= minHp && l.hp <= maxHp;
       const matchesAtk = l.atk >= minAtk && l.atk <= maxAtk;
       const matchesSpd = l.spd >= minSpd && l.spd <= maxSpd;
-      
+
       return matchesSearch && matchesRarity && matchesHp && matchesAtk && matchesSpd;
     });
   }, [listings, searchTerm, selectedRarities, hpRange, atkRange, spdRange]);
 
   const toggleRarity = (rarity: number) => {
-    setSelectedRarities(prev => 
-      prev.includes(rarity) ? prev.filter(r => r !== rarity) : [...prev, rarity]
+    setSelectedRarities((prev) =>
+      prev.includes(rarity) ? prev.filter((r) => r !== rarity) : [...prev, rarity]
     );
   };
 
   const resetFilters = () => {
     setSearchTerm("");
     setSelectedRarities([]);
-    setHpRange({ min: "0", max: "2500" });
-    setAtkRange({ min: "0", max: "600" });
-    setSpdRange({ min: "0", max: "400" });
+    setHpRange({ min: "0", max: "9999" });
+    setAtkRange({ min: "0", max: "9999" });
+    setSpdRange({ min: "0", max: "9999" });
   };
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen gradient-bg">
       <Navigation />
-      
+
       <div className="container mx-auto px-4 py-8">
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start gap-8 mb-12">
           <div className="flex-1">
             <h1 className="font-headline text-5xl font-bold mb-4">Marketplace</h1>
@@ -235,29 +362,47 @@ export default function MarketplacePage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={fetchListings} disabled={isLoading} className="bg-white/5 border-white/10 h-11 px-6">
-              <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && 'animate-spin')} />
+            <Button
+              variant="outline"
+              onClick={fetchListings}
+              disabled={isLoading}
+              className="bg-white/5 border-white/10 h-11 px-6"
+            >
+              <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
               Refresh
             </Button>
           </div>
         </div>
 
         <div className="grid lg:grid-cols-[320px_1fr] gap-12">
+          {/* Sidebar filters */}
           <aside className="space-y-6">
             <Card className="glass-card border-primary/20 sticky top-24">
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm uppercase tracking-widest flex items-center justify-between">
-                  <span className="flex items-center gap-2"><SlidersHorizontal className="w-4 h-4 text-accent" /> Filters</span>
-                  <Button variant="ghost" size="sm" onClick={resetFilters} className="h-7 text-[10px] font-bold text-muted-foreground">RESET</Button>
+                  <span className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-accent" /> Filters
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={resetFilters}
+                    className="h-7 text-[10px] font-bold text-muted-foreground"
+                  >
+                    RESET
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-8">
+                {/* Search */}
                 <div className="space-y-3">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Search</Label>
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Search
+                  </Label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <Input 
-                      placeholder="Name or ID..." 
+                    <Input
+                      placeholder="Name or ID..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="bg-white/5 border-white/10 pl-9 text-xs"
@@ -267,21 +412,32 @@ export default function MarketplacePage() {
 
                 <Separator className="bg-white/5" />
 
+                {/* Rarity */}
                 <div className="space-y-4">
-                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Rarity</Label>
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Rarity
+                  </Label>
                   <div className="grid gap-3">
-                    {[0, 1, 2, 3, 4, 5].map((r) => (
-                      <div key={r} className="flex items-center space-x-3 group cursor-pointer" onClick={() => toggleRarity(r)}>
-                        <Checkbox 
+                    {([0, 1, 2, 3, 4, 5] as const).map((r) => (
+                      <div
+                        key={r}
+                        className="flex items-center space-x-3 group cursor-pointer"
+                        onClick={() => toggleRarity(r)}
+                      >
+                        <Checkbox
                           checked={selectedRarities.includes(r)}
                           onCheckedChange={() => toggleRarity(r)}
                           className="border-white/20 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
                         />
-                        <span className={cn(
-                          "text-xs font-medium transition-colors",
-                          selectedRarities.includes(r) ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
-                        )}>
-                          {RARITY_LABELS[r as keyof typeof RARITY_LABELS]}
+                        <span
+                          className={cn(
+                            "text-xs font-medium transition-colors",
+                            selectedRarities.includes(r)
+                              ? "text-foreground"
+                              : "text-muted-foreground group-hover:text-foreground"
+                          )}
+                        >
+                          {RARITY_LABELS[r]}
                         </span>
                       </div>
                     ))}
@@ -290,66 +446,41 @@ export default function MarketplacePage() {
 
                 <Separator className="bg-white/5" />
 
+                {/* Stat ranges */}
                 <div className="space-y-6">
-                  <div className="space-y-3">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">HP (Min/Max)</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        placeholder="Min"
-                        value={hpRange.min}
-                        onChange={(e) => setHpRange({ ...hpRange, min: e.target.value })}
-                        className="bg-white/5 border-white/10 text-xs h-8"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Max"
-                        value={hpRange.max}
-                        onChange={(e) => setHpRange({ ...hpRange, max: e.target.value })}
-                        className="bg-white/5 border-white/10 text-xs h-8"
-                      />
+                  {(
+                    [
+                      { label: "HP", range: hpRange, setRange: setHpRange },
+                      { label: "ATK", range: atkRange, setRange: setAtkRange },
+                      { label: "SPD", range: spdRange, setRange: setSpdRange },
+                    ] as const
+                  ).map(({ label, range, setRange }) => (
+                    <div key={label} className="space-y-3">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                        {label} (Min / Max)
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          placeholder="Min"
+                          value={range.min}
+                          onChange={(e) =>
+                            setRange((prev: any) => ({ ...prev, min: e.target.value }))
+                          }
+                          className="bg-white/5 border-white/10 text-xs h-8"
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Max"
+                          value={range.max}
+                          onChange={(e) =>
+                            setRange((prev: any) => ({ ...prev, max: e.target.value }))
+                          }
+                          className="bg-white/5 border-white/10 text-xs h-8"
+                        />
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ATK (Min/Max)</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        placeholder="Min"
-                        value={atkRange.min}
-                        onChange={(e) => setAtkRange({ ...atkRange, min: e.target.value })}
-                        className="bg-white/5 border-white/10 text-xs h-8"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Max"
-                        value={atkRange.max}
-                        onChange={(e) => setAtkRange({ ...atkRange, max: e.target.value })}
-                        className="bg-white/5 border-white/10 text-xs h-8"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">SPD (Min/Max)</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        placeholder="Min"
-                        value={spdRange.min}
-                        onChange={(e) => setSpdRange({ ...spdRange, min: e.target.value })}
-                        className="bg-white/5 border-white/10 text-xs h-8"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Max"
-                        value={spdRange.max}
-                        onChange={(e) => setSpdRange({ ...spdRange, max: e.target.value })}
-                        className="bg-white/5 border-white/10 text-xs h-8"
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -358,30 +489,54 @@ export default function MarketplacePage() {
               <div className="flex gap-3 items-start">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Marketplace data is verified in real-time against on-chain Kiosk state.
+                  Listings are verified in real-time via on-chain kiosk state. Stale or
+                  delisted items are hidden automatically.
                 </p>
               </div>
             </div>
           </aside>
 
+          {/* Main grid */}
           <main>
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-32 space-y-4">
                 <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">Scanning Events...</p>
+                <p className="font-headline tracking-widest text-muted-foreground uppercase text-xs">
+                  Syncing Registry...
+                </p>
               </div>
             ) : filteredListings.length > 0 ? (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredListings.map((item) => (
-                  <div key={item.id} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <NFTCard nft={item} onClick={() => setSelectedNft(item)} showPrice />
-                    <Button className="w-full h-12 glow-purple font-bold" onClick={() => handleBuyNft(item)} disabled={isPending}>
-                      {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                      Buy Character
-                    </Button>
-                  </div>
-                ))}
-              </div>
+              <>
+                <p className="text-xs text-muted-foreground mb-6 uppercase tracking-widest">
+                  {filteredListings.length} listing{filteredListings.length !== 1 ? "s" : ""} found
+                </p>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredListings.map((item) => (
+                    <div
+                      key={item.id}
+                      className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300"
+                    >
+                      <NFTCard
+                        nft={item}
+                        onClick={() => setSelectedNft(item)}
+                        showPrice
+                      />
+                      <Button
+                        className="w-full h-12 glow-purple font-bold"
+                        onClick={() => handleBuyNft(item as any)}
+                        disabled={isPending || item.kioskId === account?.address}
+                      >
+                        {isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        ) : null}
+                        {item.kioskId === account?.address
+                          ? "Your Listing"
+                          : "Buy Now"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-32 glass-card rounded-3xl space-y-6 text-center px-12">
                 <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center">
@@ -390,9 +545,15 @@ export default function MarketplacePage() {
                 <div className="space-y-2">
                   <h3 className="text-2xl font-bold">No Heroes Found</h3>
                   <p className="text-muted-foreground max-w-sm mx-auto">
-                    Try adjusting your filters or refresh the registry. Only active Kiosk listings are displayed.
+                    Try adjusting your filters, or check back soon for new listings.
                   </p>
-                  <Button variant="link" onClick={resetFilters} className="text-accent font-bold mt-4">Clear Filters</Button>
+                  <Button
+                    variant="link"
+                    onClick={resetFilters}
+                    className="text-accent font-bold mt-4"
+                  >
+                    Clear Filters
+                  </Button>
                 </div>
               </div>
             )}
@@ -400,10 +561,10 @@ export default function MarketplacePage() {
         </div>
       </div>
 
-      <NFTDetailDialog 
-        nft={selectedNft} 
-        open={!!selectedNft} 
-        onOpenChange={(open) => !open && setSelectedNft(null)} 
+      <NFTDetailDialog
+        nft={selectedNft}
+        open={!!selectedNft}
+        onOpenChange={(open) => !open && setSelectedNft(null)}
       />
     </div>
   );

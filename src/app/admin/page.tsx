@@ -177,13 +177,23 @@ export default function AdminPage() {
     setIsCheckingPolicy(true);
     try {
       const NFT_TYPE = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
-      const policyResponse = await suiClient.getOwnedObjects({
+      
+      // TransferPolicy is shared — check for the Cap instead, which is wallet-owned
+      const capResponse = await suiClient.getOwnedObjects({
         owner: account.address,
-        filter: { StructType: `0x2::transfer_policy::TransferPolicy<${NFT_TYPE}>` }
+        filter: { StructType: `0x2::transfer_policy::TransferPolicyCap<${NFT_TYPE}>` },
       });
-      setPolicyExists(policyResponse.data.length > 0);
+      
+      setPolicyExists(capResponse.data.length > 0);
+      
+      // Also extract and log the TransferPolicy ID so you can update constants
+      if (capResponse.data.length > 0) {
+        const capId = capResponse.data[0].data?.objectId;
+        console.log("TransferPolicyCap ID:", capId);
+      }
     } catch (err) {
       console.error("Policy check error:", err);
+      setPolicyExists(false);
     } finally {
       setIsCheckingPolicy(false);
     }
@@ -503,23 +513,23 @@ export default function AdminPage() {
   };
 
   const handleCreateAchievement = async () => {
-    if (!newAch.name || !newAch.description) return;
+    if (!newAch.name || !newAch.description || !account) return;
     setIsPending(true);
     const txb = new Transaction();
     txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::${FUNCTIONS.CREATE_ACHIEVEMENT}`,
+      target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::create_achievement`,
       arguments: [
         txb.object(ACHIEVEMENT_REGISTRY),
         txb.pure.string(newAch.name.trim()),
         txb.pure.string(newAch.description.trim()),
-        txb.pure.string(newAch.imageUrl.trim()),
+        txb.pure.string((newAch.imageUrl || "").trim()),
         txb.pure.u64(BigInt(Math.floor(parseFloat(newAch.reward || "0")))),
         txb.pure.u8(parseInt(newAch.reqType || "0")),
         txb.pure.u64(BigInt(newAch.reqValue || "0")),
         txb.pure.u8(parseInt(newAch.reqRarity || "0")),
       ],
     });
-
+  
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
         toast({ title: "Achievement Created", description: "New on-chain goal registered." });
@@ -649,23 +659,18 @@ export default function AdminPage() {
     setIsPending(true);
     try {
       const txb = new Transaction();
-      // In the pool module, withdraw_gyate usually returns a Coin object.
-      // We must pass the Pool object AND the Cap, and then handle the returned coin.
-      const [coin] = txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::withdraw_gyate`,
+      
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.TREASURY}::${FUNCTIONS.WITHDRAW}`,
         arguments: [
-          txb.object(TREASURY_CAP),
           txb.object(TREASURY_POOL),
-          txb.pure.u64(BigInt(Math.floor(parseFloat(withdrawAmount)))),
+          txb.pure.u64(BigInt(Math.floor(parseFloat(withdrawAmount) * 1_000_000_000))),
         ],
       });
-
-      // Transfer the withdrawn coin to the admin wallet
-      txb.transferObjects([coin], txb.pure.address(account.address));
-
+  
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
-          toast({ title: "Withdrawal Successful", description: `Withdrawn ${withdrawAmount} GYATE to your wallet.` });
+          toast({ title: "Withdrawal Successful", description: `${withdrawAmount} SUI sent to admin wallet.` });
           setIsPending(false);
           setWithdrawAmount("");
           fetchTreasuryData();
