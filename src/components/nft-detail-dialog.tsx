@@ -43,39 +43,6 @@ export function NFTDetailDialog({ nft, open, onOpenChange, isInventory, onBurn, 
 
   if (!nft) return null;
 
-  const handleListForSale = async () => {
-    if (!account || !listPrice || !nft.kioskId || !nft.kioskCapId) return;
-    setIsListing(true);
-
-    try {
-      const txb = new Transaction();
-      txb.moveCall({
-        target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.LIST_NFT}`,
-        arguments: [
-          txb.object(nft.kioskId),
-          txb.object(nft.kioskCapId),
-          txb.pure.id(nft.id),
-          txb.pure.u64(BigInt(parseFloat(listPrice) * 1_000_000_000)),
-        ],
-      });
-
-      signAndExecute({ transaction: txb }, {
-        onSuccess: () => {
-          toast({ title: "Listed Successfully", description: "Your hero is now on the marketplace." });
-          setIsListing(false);
-          onOpenChange(false);
-        },
-        onError: (err) => {
-          toast({ variant: "destructive", title: "Listing Failed", description: err.message });
-          setIsListing(false);
-        }
-      });
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err.message });
-      setIsListing(false);
-    }
-  };
-
   const burnReward = BURN_REWARDS[nft.rarity] || 0;
 
   return (

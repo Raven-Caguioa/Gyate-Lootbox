@@ -26,7 +26,6 @@ interface PlayerStatsData {
   total_burns: string;
   total_gyate_spent: string;
   rarity_mints: string[];
-  claimed_ids: string[];
 }
 
 interface UserBadge {
@@ -52,7 +51,7 @@ interface AchievementDef {
 interface KioskEarnings {
   kioskId: string;
   kioskCapId: string;
-  profitsMist: bigint; // raw MIST — never lose precision
+  profitsMist: bigint;
 }
 
 // ─────────────────────────────────────────────
@@ -152,29 +151,33 @@ export default function ProfilePage() {
           total_burns:       fields.total_burns,
           total_gyate_spent: fields.total_gyate_spent,
           rarity_mints:      fields.rarity_mints,
-          claimed_ids:       fields.claimed_ids ?? [],
+          // FIX: claimed_ids is now a Table<u64, bool> — not readable as a plain array.
+          // We derive claimed status from owned AchievementBadge objects instead (see below).
         };
         setStats(fetchedStats);
       }
 
-      // 2. Badges
+      // 2. Badges — FIX: this is now the ONLY source of truth for claimed achievement IDs.
+      // claimed_ids in PlayerStats changed from vector<u64> to Table<u64, bool>.
+      // Tables serialize as { fields: { id: {...}, size: "N" } } — not iterable from the frontend.
+      // Reading which achievements are claimed is done by checking what AchievementBadge
+      // objects the player actually owns in their wallet.
       const badgeObjects = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::AchievementBadge` },
         options: { showContent: true },
       });
-      setBadges(
-        badgeObjects.data.map((obj: any) => {
-          const f = obj.data?.content?.fields;
-          return {
-            id:             obj.data?.objectId,
-            achievement_id: f.achievement_id,
-            name:           f.achievement_name,
-            imageUrl:       f.badge_image_url,
-            earnedAt:       f.earned_at,
-          };
-        })
-      );
+      const fetchedBadges: UserBadge[] = badgeObjects.data.map((obj: any) => {
+        const f = obj.data?.content?.fields;
+        return {
+          id:             obj.data?.objectId,
+          achievement_id: String(f.achievement_id),
+          name:           f.achievement_name,
+          imageUrl:       f.badge_image_url,
+          earnedAt:       f.earned_at,
+        };
+      });
+      setBadges(fetchedBadges);
 
       // 3. AchievementRegistry
       if (OBJECT_IDS?.ACHIEVEMENT_REGISTRY) {
@@ -183,29 +186,61 @@ export default function ProfilePage() {
           options: { showContent: true },
         });
         const regFields = (regObj.data?.content as any)?.fields;
-        const rawAchs: any[] = regFields?.achievements ?? [];
-        setAchievements(
-          rawAchs
-            .filter((a: any) => a?.fields?.enabled)
-            .map((a: any) => {
-              const f = a.fields;
-              return {
-                id:                 f.id,
-                name:               f.name,
-                description:        f.description,
-                badge_image_url:    f.badge_image_url,
-                gyate_reward:       f.gyate_reward,
-                requirement_type:   String(f.requirement_type),
-                requirement_value:  f.requirement_value,
-                requirement_rarity: f.requirement_rarity,
-                enabled:            f.enabled,
-              };
-            })
-        );
+
+        // FIX: achievements is now a Table<u64, AchievementDef>.
+        // Tables are not inlined in getObject content — dynamic fields must be paginated.
+        // We read achievement_ids (the ordered vector) to get IDs, then fetch each one
+        // as a dynamic field from the table.
+        const achievementIds: string[] = regFields?.achievement_ids ?? [];
+
+        if (achievementIds.length > 0) {
+          const tableId = regFields?.achievements?.fields?.id?.id;
+          if (tableId) {
+            // Fetch all dynamic fields of the Table (each is one AchievementDef)
+            let allDynFields: any[] = [];
+            let cursor: string | null | undefined = undefined;
+            do {
+              const page = await suiClient.getDynamicFields({
+                parentId: tableId,
+                cursor: cursor ?? undefined,
+                limit: 50,
+              });
+              allDynFields = [...allDynFields, ...page.data];
+              cursor = page.hasNextPage ? page.nextCursor : null;
+            } while (cursor);
+
+            // Fetch each AchievementDef object
+            if (allDynFields.length > 0) {
+              const defObjects = await suiClient.multiGetObjects({
+                ids: allDynFields.map(f => f.objectId),
+                options: { showContent: true },
+              });
+
+              const parsed: AchievementDef[] = defObjects
+                .map((obj: any) => {
+                  const f = obj.data?.content?.fields?.value?.fields ?? obj.data?.content?.fields;
+                  if (!f || !f.enabled) return null;
+                  return {
+                    id:                 String(f.id),
+                    name:               f.name,
+                    description:        f.description,
+                    badge_image_url:    f.badge_image_url,
+                    gyate_reward:       f.gyate_reward,
+                    requirement_type:   String(f.requirement_type),
+                    requirement_value:  f.requirement_value,
+                    requirement_rarity: String(f.requirement_rarity),
+                    enabled:            f.enabled,
+                  } as AchievementDef;
+                })
+                .filter((a): a is AchievementDef => a !== null);
+
+              setAchievements(parsed);
+            }
+          }
+        }
       }
 
-      // 4. Kiosk earnings — read profits field from the kiosk object
-      // This is a FREE off-chain read, no gas required
+      // 4. Kiosk earnings
       const capsRes = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
@@ -222,10 +257,7 @@ export default function ProfilePage() {
             options: { showContent: true },
           });
 
-          // `profits` field is the balance inside the kiosk — stored as a Balance<SUI>
-          // Its inner value is in the nested fields
           const kioskFields = (kioskObj.data?.content as any)?.fields;
-          // profits is stored as { fields: { value: "1234" } } in the Sui kiosk struct
           const rawProfits = kioskFields?.profits?.fields?.value
             ?? kioskFields?.profits
             ?? "0";
@@ -303,19 +335,15 @@ export default function ProfilePage() {
     try {
       const txb = new Transaction();
 
-      // 0x2::kiosk::withdraw returns Option<Coin<SUI>>
-      // Pass null to withdraw everything
       const [profitCoin] = txb.moveCall({
         target: "0x2::kiosk::withdraw",
         arguments: [
           txb.object(earnings.kioskId),
           txb.object(earnings.kioskCapId),
-          // option::none<u64>() — withdraw entire balance
           txb.pure.option("u64", null),
         ],
       });
 
-      // Transfer the unwrapped coin to the seller's wallet
       txb.transferObjects([profitCoin], account.address);
 
       signAndExecute({ transaction: txb }, {
@@ -325,7 +353,6 @@ export default function ProfilePage() {
             description: `${mistToSui(earnings.profitsMist)} SUI sent to your wallet.`,
           });
           setIsWithdrawing(false);
-          // Refresh after indexer delay
           setTimeout(fetchProfileData, 3000);
         },
         onError: (err) => {
@@ -429,13 +456,13 @@ export default function ProfilePage() {
                   <Trophy className="w-4 h-4" />
                   Achievements
                   {achievements.filter(a =>
-                    !stats.claimed_ids.includes(a.id) &&
+                    !badges.some(b => b.achievement_id === String(a.id)) &&
                     a.requirement_type !== REQ_ADMIN_GRANTED &&
                     getProgress(a, stats).pct >= 100
                   ).length > 0 && (
                     <span className="ml-1 text-[10px] bg-yellow-400/20 text-yellow-400 rounded-full px-1.5 py-0.5 font-bold">
                       {achievements.filter(a =>
-                        !stats.claimed_ids.includes(a.id) &&
+                        !badges.some(b => b.achievement_id === String(a.id)) &&
                         a.requirement_type !== REQ_ADMIN_GRANTED &&
                         getProgress(a, stats).pct >= 100
                       ).length} ready
@@ -531,6 +558,9 @@ export default function ProfilePage() {
                 <AchievementsTab
                   achievements={achievements}
                   stats={stats}
+                  // FIX: pass owned badges instead of claimed_ids from stats,
+                  // since claimed_ids is now a Table and not readable as an array
+                  claimedAchievementIds={new Set(badges.map(b => b.achievement_id))}
                   claimingId={claimingId}
                   onClaim={handleClaim}
                   onRefresh={fetchProfileData}
@@ -578,7 +608,6 @@ function EarningsTab({
   return (
     <div className="space-y-6 max-w-2xl">
 
-      {/* Header row */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           SUI earned from marketplace sales sits in your Kiosk until you withdraw it.
@@ -595,7 +624,6 @@ function EarningsTab({
         </Button>
       </div>
 
-      {/* No kiosk */}
       {!earnings ? (
         <Card className="glass-card border-white/10">
           <CardContent className="p-12 text-center space-y-4">
@@ -612,8 +640,6 @@ function EarningsTab({
         </Card>
       ) : (
         <div className="space-y-4">
-
-          {/* Main earnings card */}
           <Card className={cn(
             "overflow-hidden border transition-all",
             hasEarnings
@@ -622,8 +648,6 @@ function EarningsTab({
           )}>
             <CardContent className="p-8">
               <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
-
-                {/* Icon */}
                 <div className={cn(
                   "w-20 h-20 rounded-2xl flex items-center justify-center flex-shrink-0",
                   hasEarnings
@@ -636,7 +660,6 @@ function EarningsTab({
                   )} />
                 </div>
 
-                {/* Amount */}
                 <div className="flex-1 text-center md:text-left space-y-1">
                   <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                     Pending Kiosk Earnings
@@ -655,7 +678,6 @@ function EarningsTab({
                   </p>
                 </div>
 
-                {/* Withdraw button */}
                 <div className="flex-shrink-0">
                   <Button
                     size="lg"
@@ -680,7 +702,6 @@ function EarningsTab({
             </CardContent>
           </Card>
 
-          {/* Info cards row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <InfoTile
               icon={<TrendingUp className="w-4 h-4 text-accent" />}
@@ -699,7 +720,6 @@ function EarningsTab({
             />
           </div>
 
-          {/* Empty state message */}
           {!hasEarnings && (
             <div className="text-center py-8 glass-card rounded-2xl border-dashed border-white/10">
               <p className="text-sm text-muted-foreground">
@@ -733,6 +753,7 @@ function InfoTile({ icon, label, value }: { icon: React.ReactNode; label: string
 function AchievementsTab({
   achievements,
   stats,
+  claimedAchievementIds,  // FIX: was stats.claimed_ids (vector), now Set derived from owned badges
   claimingId,
   onClaim,
   onRefresh,
@@ -740,16 +761,22 @@ function AchievementsTab({
 }: {
   achievements: AchievementDef[];
   stats: PlayerStatsData;
+  claimedAchievementIds: Set<string>;
   claimingId: string | null;
   onClaim: (id: string) => void;
   onRefresh: () => void;
   isLoading: boolean;
 }) {
-  const claimedSet = new Set(stats.claimed_ids.map(String));
-
-  const claimable  = achievements.filter(a => !claimedSet.has(String(a.id)) && a.requirement_type !== REQ_ADMIN_GRANTED && getProgress(a, stats).pct >= 100);
-  const inProgress = achievements.filter(a => !claimedSet.has(String(a.id)) && (a.requirement_type === REQ_ADMIN_GRANTED || getProgress(a, stats).pct < 100));
-  const claimed    = achievements.filter(a => claimedSet.has(String(a.id)));
+  const claimable  = achievements.filter(a =>
+    !claimedAchievementIds.has(String(a.id)) &&
+    a.requirement_type !== REQ_ADMIN_GRANTED &&
+    getProgress(a, stats).pct >= 100
+  );
+  const inProgress = achievements.filter(a =>
+    !claimedAchievementIds.has(String(a.id)) &&
+    (a.requirement_type === REQ_ADMIN_GRANTED || getProgress(a, stats).pct < 100)
+  );
+  const claimed = achievements.filter(a => claimedAchievementIds.has(String(a.id)));
 
   return (
     <div className="space-y-8">

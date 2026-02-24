@@ -231,28 +231,54 @@ export default function InventoryPage() {
   const handleBurnNft = async (nft: NFT) => {
     if (!account || !nft.kioskId || !nft.kioskCapId) return;
     setIsBurning(true);
-    const txb = new Transaction();
-    txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
-      arguments: [
-        txb.object(nft.kioskId),
-        txb.object(nft.kioskCapId),
-        txb.object(TREASURY_CAP),
-        txb.pure.id(nft.id),
-      ],
-    });
-    signAndExecute({ transaction: txb }, {
-      onSuccess: () => {
-        toast({ title: "Hero Sacrificed 🔥", description: "You received $GYATE tokens." });
+
+    try {
+      // FIX: burn_nft_for_gyate now requires PlayerStats — fetch it first
+      const statsObjects = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` },
+      });
+
+      if (statsObjects.data.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "Profile Required",
+          description: "Initialize your profile in the Account section before burning.",
+        });
         setIsBurning(false);
-        setSelectedNft(null);
-        setTimeout(fetchUserNfts, 3000);
-      },
-      onError: (err) => {
-        toast({ variant: "destructive", title: "Burn failed", description: err.message });
-        setIsBurning(false);
-      },
-    });
+        return;
+      }
+
+      const statsId = statsObjects.data[0].data!.objectId;
+
+      const txb = new Transaction();
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
+        arguments: [
+          txb.object(nft.kioskId),
+          txb.object(nft.kioskCapId),
+          txb.object(TREASURY_CAP),
+          txb.object(statsId),    // FIX: new required parameter added in updated contract
+          txb.pure.id(nft.id),
+        ],
+      });
+
+      signAndExecute({ transaction: txb }, {
+        onSuccess: () => {
+          toast({ title: "Hero Sacrificed 🔥", description: "You received $GYATE tokens." });
+          setIsBurning(false);
+          setSelectedNft(null);
+          setTimeout(fetchUserNfts, 3000);
+        },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Burn failed", description: err.message });
+          setIsBurning(false);
+        },
+      });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Burn error", description: err.message });
+      setIsBurning(false);
+    }
   };
 
   // ── List for sale ─────────────────────────────────────────────────────

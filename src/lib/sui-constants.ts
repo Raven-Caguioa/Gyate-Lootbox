@@ -1,16 +1,16 @@
 export const SUI_NETWORK = 'testnet';
 
-export const PACKAGE_ID = "0x907538ee7309fe7a9fa06c963646d7213e3d80430e087886400910ed7d9c17cc";
-export const PUBLISHER = "0xa76c6fe827d92f141c1d827e995862fcadde7a8eff2ec5ce2876cb11c7b29b29";
-export const TREASURY_CAP = "0x0d51052f041a5bdbbee5e2584e333484b9df9fdd03c1e5dc3bfea2f2c18d7063";
-export const COIN_METADATA = "0x3b022adba60aaa0064b13398f5dc38110b621ac68cc7cbe6680388b740fa6229";
-export const NFT_DISPLAY = "0x8d0ed0439348c8af193c01ecfd51dd2a7bd3961e27b6b5820ae9151abbc380a3";
-export const LOOTBOX_REGISTRY = "0xf3066dc8fd2b717561c140027b8bb9c77ed926c23c3aba243b3d9ff245177bef";
-export const TREASURY_POOL = "0x17eba5defb080ca2467cfee7c877c05eed2f844b7454a45c52ebe4bb852945d8";
-export const KIOSK_REGISTRY = "0x4bec157f496da95b4c85a207b8becd6d1379803d8ec878a6944d7ca246b6fb42";
-export const ACHIEVEMENT_REGISTRY = "0x60499e1d911e7b6bc54517329e3ea968f2cc8b8796cccbdfd55b936115c1e579";
-export const POLICY_ADMIN = "0x45537e489556091a29bd8d662020243edddfc641b4c4361e5b91f6cd92d47171";
-export const RANDOM_STATE = "0x8";
+export const PACKAGE_ID         = "0xba75b672a6667d618922dec437c2de3b43f082232390fae1fdb2f7cbc7d9a94e";
+export const PUBLISHER          = "0x7d3f380518b701671820e9caca3d0193f972fdd04f4e7a6f3a14481d635a55c7";
+export const TREASURY_CAP       = "0x8b614e740d2516c877befda35a0db8c16304b9862c6b842918cda8bd34d2f183";
+export const COIN_METADATA      = "0x09064d8786310ffd08e366db9f2001db89fb1f5150bc5c2273b3d8cbcf58576f";
+export const NFT_DISPLAY        = "0x45a0f0fbcc24c6372bc91fcd6e1afad2dd711facbd0d5dcc422995abfbe7b6f2";
+export const LOOTBOX_REGISTRY   = "0x1507d0d2fc9ada2c76ed46fe4fa333891592842fbc66a019f45bb78e737c0e72";
+export const TREASURY_POOL      = "0x5041954fec0603127c38f6d4443d668eb898a8822e664f231bdc364037bd30f8";
+export const KIOSK_REGISTRY     = "0xf28807c3456d57004b62c2e64995dc3ae6f7497af434e1ebd30100716a844598";
+export const ACHIEVEMENT_REGISTRY = "0x7316d0c2e5333f4572286764d1fcfcf77fb2c0a52058ee088f5ee842d7ba4174";
+export const POLICY_ADMIN       = "0x5418f3f4d057e0f3033a3017971b12d5e1ab589416b44580b0f9189402a10c2d";
+export const RANDOM_STATE       = "0x8";
 
 /**
  * TransferPolicy<GyateNFT> — shared object for marketplace trades.
@@ -19,13 +19,13 @@ export const RANDOM_STATE = "0x8";
  * Command:
  *   sui client switch --address 0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a
  *   sui client call `
- *     --package 0x907538ee7309fe7a9fa06c963646d7213e3d80430e087886400910ed7d9c17cc `
+ *     --package 0xba75b672a6667d618922dec437c2de3b43f082232390fae1fdb2f7cbc7d9a94e `
  *     --module marketplace `
  *     --function create_transfer_policy `
- *     --args 0xa76c6fe827d92f141c1d827e995862fcadde7a8eff2ec5ce2876cb11c7b29b29 `
+ *     --args 0x7d3f380518b701671820e9caca3d0193f972fdd04f4e7a6f3a14481d635a55c7 `
  *     --gas-budget 10000000
  */
-export const TRANSFER_POLICY = "0xb7547348d297967557517a988af66c2f3b77b4492c9aa9226cd465d58bf63173";
+export const TRANSFER_POLICY = "TODO_run_create_transfer_policy";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OBJECT_IDS — grouped reference used by profile page + achievements tab
