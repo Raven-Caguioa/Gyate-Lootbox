@@ -1,0 +1,4660 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GyateGyate ✦ Open Your Fate</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Nunito:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Icons -->
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      html {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      html::-webkit-scrollbar {
+        display: none;
+      }
+
+      :root {
+        --paper: #fafafa;
+        --ink: #1a1a1a;
+        --lavender: #c9b8ff;
+        --pink: #ffb8d9;
+        --mint: #b8ffe8;
+        --yellow: #fff5b8;
+        --blue: #b8eeff;
+      }
+
+      body {
+        font-family: "Nunito", sans-serif;
+        background-color: var(--paper);
+        color: var(--ink);
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .paper-texture {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.4;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E");
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      .font-hand {
+        font-family: "Caveat", cursive;
+      }
+
+      .doodle-border {
+        border: 2px solid var(--ink);
+        border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+        box-shadow: 4px 4px 0px rgba(201, 184, 255, 0.4);
+        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      .doodle-border:hover {
+        transform: scale(1.02) translateY(-2px);
+        box-shadow: 6px 6px 0px rgba(201, 184, 255, 0.6);
+      }
+
+      .doodle-box {
+        border: 2px solid var(--ink);
+        background: white;
+        border-radius: 2% 98% 1% 99% / 99% 2% 98% 1%;
+      }
+
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0px) rotate(0deg);
+        }
+        50% {
+          transform: translateY(-12px) rotate(1deg);
+        }
+      }
+      @keyframes wobble {
+        0% {
+          transform: rotate(-2deg);
+        }
+        100% {
+          transform: rotate(2deg);
+        }
+      }
+      @keyframes holographic {
+        0% {
+          background-position: 0% 50%;
+          filter: hue-rotate(0deg);
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+          filter: hue-rotate(360deg);
+        }
+      }
+
+      .animate-float {
+        animation: float 6s ease-in-out infinite;
+      }
+      .animate-wobble {
+        animation: wobble 2s ease-in-out infinite alternate;
+      }
+
+      .scroll-hidden {
+        opacity: 0;
+        transform: translateY(40px);
+        transition:
+          opacity 0.8s ease-out,
+          transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: transform, opacity;
+      }
+      .scroll-visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .legend-card {
+        background: linear-gradient(
+          135deg,
+          #ff9de2,
+          #ffd6a5,
+          #caffbf,
+          #9bf6ff,
+          #a0c4ff,
+          #bdb2ff
+        );
+        background-size: 400% 400%;
+        animation: holographic 3s ease infinite;
+        border: 2px solid var(--ink);
+      }
+
+      .parallax-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        will-change: transform;
+      }
+
+      /* ─── 3D LOOTBOX ─── */
+      .scene {
+        perspective: 800px;
+        perspective-origin: 50% 35%;
+        width: 260px;
+        height: 240px;
+        position: relative;
+      }
+      .box-wrapper {
+        position: absolute;
+        width: 200px;
+        height: 200px;
+        top: 80px;
+        left: 30px;
+        transform-style: preserve-3d;
+        transform: rotateX(-22deg) rotateY(-38deg);
+        animation: floatBox 5s ease-in-out infinite;
+        cursor: pointer;
+        will-change: transform;
+      }
+      .body-group {
+        position: absolute;
+        inset: 0;
+        transform-style: preserve-3d;
+      }
+      .face {
+        position: absolute;
+        width: 200px;
+        height: 200px;
+        border: 3px solid #1a1a1a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .face-front {
+        transform: rotateY(0deg) translateZ(100px);
+        background: linear-gradient(160deg, #fffde8, #fff5b8);
+      }
+      .face-back {
+        transform: rotateY(180deg) translateZ(100px);
+        background: linear-gradient(160deg, #d0edff, #b8eeff);
+      }
+      .face-right {
+        transform: rotateY(90deg) translateZ(100px);
+        background: linear-gradient(160deg, #ffe0ef, #ffb8d9);
+      }
+      .face-left {
+        transform: rotateY(-90deg) translateZ(100px);
+        background: linear-gradient(160deg, #d8fff0, #b8ffe8);
+      }
+      .face-bottom {
+        transform: rotateX(-90deg) translateZ(100px);
+        background: linear-gradient(160deg, #fff5cc, #fffae0);
+      }
+
+      .lid-group {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 200px;
+        height: 200px;
+        transform-style: preserve-3d;
+        transform: translateY(-200px);
+        transform-origin: 50% 100%;
+        transition: transform 0.7s cubic-bezier(0.34, 1.05, 0.64, 1);
+      }
+      .box-wrapper.is-open .lid-group {
+        transform: translateY(-200px) translateX(280px);
+      }
+
+      .lid-top {
+        position: absolute;
+        width: 200px;
+        height: 200px;
+        border: 3px solid #1a1a1a;
+        background: linear-gradient(145deg, #fffde8, #fff5b8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        transform: rotateX(90deg) translateZ(-70px);
+      }
+      .lid-skirt {
+        position: absolute;
+        top: 170px;
+        width: 200px;
+        height: 30px;
+        border: 3px solid #1a1a1a;
+        overflow: hidden;
+      }
+      .lid-skirt-front {
+        transform: rotateY(0deg) translateZ(100px);
+        background: linear-gradient(180deg, #fffde8, #fff5b8);
+      }
+      .lid-skirt-back {
+        transform: rotateY(180deg) translateZ(100px);
+        background: linear-gradient(180deg, #d0edff, #b8eeff);
+      }
+      .lid-skirt-right {
+        transform: rotateY(90deg) translateZ(100px);
+        background: linear-gradient(180deg, #ffe0ef, #ffb8d9);
+      }
+      .lid-skirt-left {
+        transform: rotateY(-90deg) translateZ(100px);
+        background: linear-gradient(180deg, #d8fff0, #b8ffe8);
+      }
+
+      .rib-v {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 26px;
+        transform: translateX(-50%);
+        background: linear-gradient(to right, #ffb8e0, #ff3d9a, #ffb8e0);
+        border-left: 2px solid #c4006e;
+        border-right: 2px solid #c4006e;
+        z-index: 1;
+        pointer-events: none;
+      }
+      .rib-h {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 26px;
+        transform: translateY(-50%);
+        background: linear-gradient(to bottom, #ffb8e0, #ff3d9a, #ffb8e0);
+        border-top: 2px solid #c4006e;
+        border-bottom: 2px solid #c4006e;
+        z-index: 1;
+        pointer-events: none;
+      }
+      .lid-rib-v {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 26px;
+        transform: translateX(-50%);
+        background: linear-gradient(to right, #ffb8e0, #ff3d9a, #ffb8e0);
+        border-left: 2px solid #c4006e;
+        border-right: 2px solid #c4006e;
+        pointer-events: none;
+        z-index: 1;
+      }
+      .lid-rib-h {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 26px;
+        transform: translateY(-50%);
+        background: linear-gradient(to bottom, #ffb8e0, #ff3d9a, #ffb8e0);
+        border-top: 2px solid #c4006e;
+        border-bottom: 2px solid #c4006e;
+        pointer-events: none;
+        z-index: 1;
+      }
+      .skirt-rib-v {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 26px;
+        transform: translateX(-50%);
+        background: linear-gradient(to right, #ffb8e0, #ff3d9a, #ffb8e0);
+        border-left: 2px solid #c4006e;
+        border-right: 2px solid #c4006e;
+        pointer-events: none;
+      }
+
+      .bow {
+        position: absolute;
+        width: 68px;
+        height: 44px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -58%);
+        z-index: 10;
+      }
+      .bow-ear {
+        position: absolute;
+        width: 28px;
+        height: 22px;
+        background: linear-gradient(135deg, #ffb8e0, #ff3d9a);
+        border: 2.5px solid #c4006e;
+        top: 0;
+      }
+      .bow-ear.L {
+        left: 0;
+        border-radius: 50% 0 50% 0;
+        transform: rotate(-26deg);
+        transform-origin: right center;
+      }
+      .bow-ear.R {
+        right: 0;
+        border-radius: 0 50% 0 50%;
+        transform: rotate(26deg);
+        transform-origin: left center;
+      }
+      .bow-knot {
+        position: absolute;
+        width: 15px;
+        height: 15px;
+        background: #ff3d9a;
+        border: 2.5px solid #c4006e;
+        border-radius: 50%;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 6;
+      }
+      .bow-tail {
+        position: absolute;
+        bottom: -6px;
+        width: 15px;
+        height: 14px;
+        background: linear-gradient(135deg, #ffb8e0, #ff3d9a);
+        border: 2px solid #c4006e;
+      }
+      .bow-tail.L {
+        left: 16px;
+        border-radius: 0 0 0 8px;
+        transform: rotate(12deg);
+      }
+      .bow-tail.R {
+        right: 16px;
+        border-radius: 0 0 8px 0;
+        transform: rotate(-12deg);
+      }
+
+      /* ─── INNER NFT CARD (Rare) ─── */
+      /* inner-nft — matches Rare tier card from Six Tiers of Destiny (light blue) */
+      .inner-nft {
+        position: absolute;
+        width: 128px;
+        height: 178px;
+        top: 12px;
+        left: 36px;
+        border-radius: 16px;
+        z-index: 100;
+        pointer-events: none;
+        transform: translateZ(100px) scale(0) rotate(-5deg);
+        opacity: 0;
+        transition:
+          transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s,
+          opacity 0.35s ease 0.4s;
+        overflow: visible;
+      }
+      .box-wrapper.is-open .inner-nft {
+        transform: translateZ(100px) translateY(-255px) rotate(7deg) scale(1.1);
+        opacity: 1;
+      }
+      /* Animated blue border — Rare tier */
+      .inner-nft-border {
+        position: absolute;
+        inset: -2px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #74c0fc, #228be6, #4dabf7, #74c0fc);
+        background-size: 300% 300%;
+        animation: rareBorderShift 3s ease infinite;
+        z-index: 0;
+        box-shadow:
+          0 4px 20px rgba(116, 192, 252, 0.5),
+          0 12px 40px rgba(34, 139, 230, 0.3);
+      }
+      @keyframes rareBorderShift {
+        0%,
+        100% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+      }
+      /* Card body — light blue gradient matching Rare tier */
+      .inner-nft-body {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        border-radius: 14px;
+        background: linear-gradient(145deg, #e8f4fd, #cce5ff);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      /* Shine sweep — same as Rare tier */
+      .inner-nft-body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          105deg,
+          transparent 35%,
+          rgba(255, 255, 255, 0.5) 50%,
+          transparent 65%
+        );
+        background-size: 200% 200%;
+        animation: rareShimmer 2.5s ease-in-out infinite;
+        z-index: 10;
+        pointer-events: none;
+        border-radius: 14px;
+      }
+      @keyframes rareShimmer {
+        0%,
+        100% {
+          background-position: -100% 0;
+        }
+        50% {
+          background-position: 200% 0;
+        }
+      }
+      .nft-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 5px;
+        position: relative;
+        z-index: 5;
+      }
+      /* Badge — matching Rare tier gradient badge */
+      .nft-rarity-pip {
+        background: linear-gradient(135deg, #228be6, #1971c2);
+        border-radius: 5px;
+        padding: 2px 7px;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .nft-rarity-dot {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: white;
+        box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+        animation: dotPulse 1.5s ease-in-out infinite;
+      }
+      @keyframes dotPulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.6;
+          transform: scale(0.8);
+        }
+      }
+      .nft-rarity-text {
+        font-family: "Nunito", sans-serif;
+        font-size: 6.5px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: white;
+        text-transform: uppercase;
+      }
+      .nft-id-tag {
+        font-family: "Nunito", sans-serif;
+        font-size: 6.5px;
+        color: #74c0fc;
+        font-weight: 700;
+      }
+      /* Accent bar — matching Rare tier */
+      .nft-accent-bar {
+        height: 2px;
+        background: linear-gradient(90deg, #74c0fc, #228be6, #74c0fc);
+        border-radius: 99px;
+        margin-bottom: 6px;
+        position: relative;
+        z-index: 5;
+      }
+      /* Art — Rare tier style */
+      .nft-art {
+        position: relative;
+        z-index: 5;
+        border-radius: 9px;
+        overflow: hidden;
+        border: 1.5px solid rgba(116, 192, 252, 0.5);
+        flex-shrink: 0;
+        background: linear-gradient(135deg, #74c0fc, #4dabf7, #228be6);
+        width: 100%;
+        height: 88px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .nft-art img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        border-radius: 7px;
+      }
+      .nft-art-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          180deg,
+          transparent 60%,
+          rgba(14, 99, 189, 0.25) 100%
+        );
+        pointer-events: none;
+        z-index: 2;
+      }
+      .nft-art-badge {
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        background: rgba(34, 139, 230, 0.85);
+        border-radius: 4px;
+        font-family: "Nunito", sans-serif;
+        font-size: 5.5px;
+        font-weight: 800;
+        color: white;
+        padding: 1px 4px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        z-index: 3;
+      }
+      /* Info */
+      .nft-info {
+        padding-top: 5px;
+        position: relative;
+        z-index: 5;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      .nft-name {
+        font-family: "Caveat", cursive;
+        font-size: 13px;
+        font-weight: 700;
+        color: #1971c2;
+        line-height: 1.1;
+        margin-bottom: 4px;
+      }
+      .nft-stats {
+        display: flex;
+        gap: 3px;
+        margin-bottom: 4px;
+      }
+      .nft-stat {
+        flex: 1;
+        background: rgba(116, 192, 252, 0.2);
+        border: 1px solid rgba(116, 192, 252, 0.4);
+        border-radius: 4px;
+        padding: 2px;
+        text-align: center;
+      }
+      .nft-stat-val {
+        font-family: "Nunito", sans-serif;
+        font-size: 8px;
+        font-weight: 800;
+        color: #228be6;
+        display: block;
+        line-height: 1;
+      }
+      .nft-stat-lbl {
+        font-family: "Nunito", sans-serif;
+        font-size: 5px;
+        color: #74c0fc;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: block;
+        margin-top: 1px;
+      }
+      .nft-bottom {
+        position: relative;
+        z-index: 5;
+        margin-top: auto;
+      }
+      .nft-bar-wrap {
+        width: 100%;
+        height: 3px;
+        background: rgba(116, 192, 252, 0.25);
+        border-radius: 99px;
+        overflow: hidden;
+        margin-bottom: 4px;
+      }
+      .nft-bar {
+        height: 100%;
+        width: 30%;
+        background: linear-gradient(90deg, #74c0fc, #228be6);
+        border-radius: 99px;
+      }
+      .nft-footer-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .nft-label {
+        font-family: "Caveat", cursive;
+        font-size: 12px;
+        font-weight: 700;
+        color: #1971c2;
+      }
+      .nft-chain-badge {
+        font-family: "Nunito", sans-serif;
+        font-size: 6px;
+        font-weight: 800;
+        color: #74c0fc;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .ground-shadow {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 170px;
+        height: 22px;
+        background: radial-gradient(ellipse, #b87eff44 0%, transparent 72%);
+        border-radius: 50%;
+        pointer-events: none;
+        animation: shadowSync 5s ease-in-out infinite;
+      }
+      @keyframes shadowSync {
+        0%,
+        100% {
+          transform: translateX(-50%) scaleX(1);
+          opacity: 0.6;
+        }
+        50% {
+          transform: translateX(-50%) scaleX(0.72);
+          opacity: 0.25;
+        }
+      }
+
+      .sparkles {
+        position: absolute;
+        inset: -80px;
+        pointer-events: none;
+        z-index: 200;
+      }
+      .spark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        font-size: 20px;
+        opacity: 0;
+        transform: translate(-50%, -50%);
+      }
+      .box-wrapper.is-open .spark {
+        animation: sparkFly 1s ease forwards;
+      }
+      .spark:nth-child(1) {
+        --tx: -90px;
+        --ty: -85px;
+        animation-delay: 0.36s;
+      }
+      .spark:nth-child(2) {
+        --tx: 90px;
+        --ty: -85px;
+        animation-delay: 0.41s;
+      }
+      .spark:nth-child(3) {
+        --tx: -112px;
+        --ty: 5px;
+        animation-delay: 0.38s;
+      }
+      .spark:nth-child(4) {
+        --tx: 112px;
+        --ty: 5px;
+        animation-delay: 0.44s;
+      }
+      .spark:nth-child(5) {
+        --tx: -68px;
+        --ty: 100px;
+        animation-delay: 0.46s;
+      }
+      .spark:nth-child(6) {
+        --tx: 68px;
+        --ty: 100px;
+        animation-delay: 0.39s;
+      }
+      .spark:nth-child(7) {
+        --tx: 0;
+        --ty: -118px;
+        animation-delay: 0.34s;
+      }
+      @keyframes sparkFly {
+        0% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(0.4) rotate(0);
+        }
+        60% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty)))
+            scale(1.4) rotate(210deg);
+        }
+      }
+
+      @keyframes floatBox {
+        0%,
+        100% {
+          transform: rotateX(-22deg) rotateY(-38deg) translateY(0);
+        }
+        50% {
+          transform: rotateX(-22deg) rotateY(-38deg) translateY(-16px);
+        }
+      }
+      @keyframes shake {
+        0% {
+          transform: rotateX(-22deg) rotateY(-38deg) translate3d(0, 0, 0);
+        }
+        20%,
+        80% {
+          transform: rotateX(-22deg) rotateY(-38deg) translate3d(-7px, 0, 0);
+        }
+        40%,
+        60% {
+          transform: rotateX(-22deg) rotateY(-38deg) translate3d(9px, 0, 0);
+        }
+        100% {
+          transform: rotateX(-22deg) rotateY(-38deg) translate3d(0, 0, 0);
+        }
+      }
+      .box-wrapper.is-shaking {
+        animation: shake 0.48s cubic-bezier(0.36, 0.07, 0.19, 0.97) both !important;
+      }
+
+      @keyframes hintPulse {
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .hint-label {
+        font-family: "Caveat", cursive;
+        font-size: 21px;
+        color: #9a88c0;
+        animation: hintPulse 2.5s ease-in-out infinite;
+      }
+
+      /* ─── NFT RARITY CARDS ─── */
+      .nft-card {
+        position: relative;
+        border-radius: 20px;
+        overflow: hidden;
+        cursor: pointer;
+        transition:
+          transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+          box-shadow 0.35s ease;
+      }
+      .nft-card:hover {
+        transform: translateY(-10px) scale(1.03);
+      }
+
+      /* COMMON */
+      .nft-card-common {
+        background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+        border: 2px solid #dee2e6;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      }
+      .nft-card-common:hover {
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+      }
+      .nft-card-common .card-art {
+        background: linear-gradient(135deg, #e9ecef, #ced4da, #adb5bd);
+      }
+      .nft-card-common .card-badge {
+        background: #6c757d;
+        color: white;
+      }
+      .nft-card-common .card-border-accent {
+        background: linear-gradient(90deg, #adb5bd, #6c757d, #adb5bd);
+      }
+
+      /* RARE */
+      .nft-card-rare {
+        background: linear-gradient(145deg, #e8f4fd, #cce5ff);
+        border: 2px solid #74c0fc;
+        box-shadow: 0 4px 20px rgba(116, 192, 252, 0.3);
+      }
+      .nft-card-rare:hover {
+        box-shadow: 0 20px 50px rgba(116, 192, 252, 0.5);
+      }
+      .nft-card-rare .card-art {
+        background: linear-gradient(135deg, #74c0fc, #4dabf7, #228be6);
+      }
+      .nft-card-rare .card-badge {
+        background: linear-gradient(135deg, #228be6, #1971c2);
+        color: white;
+      }
+      .nft-card-rare .card-border-accent {
+        background: linear-gradient(90deg, #74c0fc, #228be6, #74c0fc);
+      }
+
+      /* SUPER RARE */
+      .nft-card-sr {
+        background: linear-gradient(145deg, #f3e8ff, #e9d5ff);
+        border: 2px solid #c084fc;
+        box-shadow: 0 4px 20px rgba(192, 132, 252, 0.35);
+      }
+      .nft-card-sr:hover {
+        box-shadow: 0 20px 50px rgba(192, 132, 252, 0.55);
+      }
+      .nft-card-sr .card-art {
+        background: linear-gradient(135deg, #c084fc, #a855f7, #7c3aed);
+      }
+      .nft-card-sr .card-badge {
+        background: linear-gradient(135deg, #9333ea, #6d28d9);
+        color: white;
+      }
+      .nft-card-sr .card-border-accent {
+        background: linear-gradient(90deg, #c084fc, #7c3aed, #c084fc);
+      }
+
+      /* SSR — deep dark purple/magenta with animated glow border */
+      .nft-card-ssr {
+        background: linear-gradient(145deg, #1a0524, #2d0a3e, #1a0524);
+        border: none;
+        box-shadow:
+          0 4px 30px rgba(192, 38, 211, 0.4),
+          0 0 0 1.5px rgba(232, 121, 249, 0.25);
+        position: relative;
+        overflow: visible !important;
+      }
+      .nft-card-ssr:hover {
+        box-shadow:
+          0 20px 60px rgba(192, 38, 211, 0.6),
+          0 0 0 1.5px rgba(232, 121, 249, 0.5),
+          0 0 80px rgba(192, 38, 211, 0.25);
+        transform: translateY(-10px) scale(1.03);
+      }
+      .nft-card-ssr .card-art {
+        background: linear-gradient(135deg, #3b0764, #7e22ce, #a855f7, #ec4899);
+        background-size: 300% 300%;
+        animation: ssrArtShift 3s ease infinite;
+        border: 1.5px solid rgba(232, 121, 249, 0.3);
+      }
+      @keyframes ssrArtShift {
+        0%,
+        100% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+      }
+      .nft-card-ssr .card-badge {
+        background: linear-gradient(135deg, #7e22ce, #a21caf, #be185d);
+        color: #f0abfc;
+        letter-spacing: 0.12em;
+        text-shadow: 0 0 8px rgba(240, 171, 252, 0.8);
+        border: 1px solid rgba(232, 121, 249, 0.3);
+      }
+      .nft-card-ssr .card-border-accent {
+        background: linear-gradient(
+          90deg,
+          transparent,
+          #e879f9,
+          #a855f7,
+          #e879f9,
+          transparent
+        );
+        box-shadow: 0 0 8px rgba(232, 121, 249, 0.7);
+        animation: ssrAccentPulse 2s ease-in-out infinite;
+      }
+      @keyframes ssrAccentPulse {
+        0%,
+        100% {
+          opacity: 0.6;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .nft-card-ssr .card-id {
+        color: rgba(232, 121, 249, 0.5);
+      }
+      .nft-card-ssr .card-percent {
+        background: linear-gradient(135deg, #f0abfc, #e879f9, #a855f7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 0 6px rgba(232, 121, 249, 0.6));
+      }
+      .nft-card-ssr .card-prob-bar {
+        background: rgba(232, 121, 249, 0.1);
+      }
+      .nft-card-ssr .card-prob-fill {
+        background: linear-gradient(90deg, #7e22ce, #e879f9, #a855f7);
+        box-shadow: 0 0 8px rgba(232, 121, 249, 0.9);
+        animation: ssrBarGlow 1.8s ease-in-out infinite;
+      }
+      @keyframes ssrBarGlow {
+        0%,
+        100% {
+          box-shadow: 0 0 4px rgba(232, 121, 249, 0.6);
+        }
+        50% {
+          box-shadow:
+            0 0 14px rgba(232, 121, 249, 1),
+            0 0 22px rgba(168, 85, 247, 0.5);
+        }
+      }
+      .nft-card-ssr .card-recycle {
+        color: rgba(232, 121, 249, 0.35);
+      }
+      /* animated gradient border around SSR */
+      .ssr-border {
+        position: absolute;
+        inset: -2px;
+        border-radius: 22px;
+        background: linear-gradient(
+          135deg,
+          #7e22ce,
+          #e879f9,
+          #a855f7,
+          #ec4899,
+          #7e22ce
+        );
+        background-size: 400% 400%;
+        animation: ssrBorderShift 3s ease infinite;
+        z-index: 0;
+        box-shadow: 0 0 20px rgba(232, 121, 249, 0.4);
+      }
+      @keyframes ssrBorderShift {
+        0%,
+        100% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+      }
+      /* star particles for SSR */
+      .ssr-stars {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 18px;
+        overflow: hidden;
+        background-image:
+          radial-gradient(
+            1px 1px at 10% 15%,
+            rgba(232, 121, 249, 0.9) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 85% 10%,
+            rgba(255, 255, 255, 0.5) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 45% 65%,
+            rgba(232, 121, 249, 0.8) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 92% 75%,
+            rgba(168, 85, 247, 0.7) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 20% 88%,
+            rgba(232, 121, 249, 0.6) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 65% 35%,
+            rgba(255, 255, 255, 0.4) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 35% 45%,
+            rgba(232, 121, 249, 0.5) 0%,
+            transparent 100%
+          );
+        z-index: 0;
+      }
+      /* holographic shimmer sweep */
+      .ssr-shine {
+        position: absolute;
+        inset: 0;
+        border-radius: 18px;
+        background: linear-gradient(
+          105deg,
+          transparent 30%,
+          rgba(232, 121, 249, 0.12) 50%,
+          transparent 70%
+        );
+        background-size: 200% 200%;
+        animation: ssrShimmer 2.5s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 1;
+      }
+      @keyframes ssrShimmer {
+        0%,
+        100% {
+          background-position: -100% 0;
+          opacity: 0.6;
+        }
+        50% {
+          background-position: 200% 0;
+          opacity: 1;
+        }
+      }
+      /* SSR icon glow */
+      .ssr-icon {
+        color: #f0abfc !important;
+        filter: drop-shadow(0 0 10px rgba(232, 121, 249, 0.9))
+          drop-shadow(0 0 20px rgba(168, 85, 247, 0.6)) !important;
+      }
+      /* SSR corner ornaments */
+      .ssr-corner {
+        position: absolute;
+        font-size: 8px;
+        color: rgba(232, 121, 249, 0.6);
+        pointer-events: none;
+        z-index: 5;
+      }
+      .ssr-corner.tl {
+        top: 6px;
+        left: 6px;
+      }
+      .ssr-corner.tr {
+        top: 6px;
+        right: 6px;
+      }
+      /* SSR animated text */
+      .ssr-animated-tag {
+        font-size: 8px;
+        color: rgba(232, 121, 249, 0.5);
+        text-align: center;
+        position: relative;
+        z-index: 2;
+        margin-top: 2px;
+        letter-spacing: 0.05em;
+        animation: ssrTagPulse 2s ease-in-out infinite;
+      }
+      @keyframes ssrTagPulse {
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 0.8;
+        }
+      }
+
+      /* ULTRA RARE */
+      /* ULTRA RARE — deep dark with electric gold */
+      .nft-card-ur {
+        background: linear-gradient(145deg, #0a0a0f, #0f0f1e, #0a0a14);
+        border: none;
+        box-shadow:
+          0 4px 30px rgba(251, 191, 36, 0.35),
+          0 0 0 1.5px rgba(251, 191, 36, 0.25);
+      }
+      .nft-card-ur:hover {
+        box-shadow:
+          0 20px 60px rgba(251, 191, 36, 0.55),
+          0 0 0 1.5px rgba(251, 191, 36, 0.5),
+          0 0 80px rgba(251, 191, 36, 0.2);
+        transform: translateY(-10px) scale(1.03);
+      }
+      .nft-card-ur .card-art {
+        background: linear-gradient(135deg, #1a1200, #3d2c00, #1a1200);
+        border: 1.5px solid rgba(251, 191, 36, 0.3);
+      }
+      .nft-card-ur .card-badge {
+        background: linear-gradient(135deg, #92400e, #78350f, #451a03);
+        color: #fbbf24;
+        border: 1px solid rgba(251, 191, 36, 0.4);
+        letter-spacing: 0.12em;
+        text-shadow: 0 0 8px rgba(251, 191, 36, 0.8);
+      }
+      .nft-card-ur .card-border-accent {
+        background: linear-gradient(
+          90deg,
+          transparent,
+          #fbbf24,
+          #f59e0b,
+          #fbbf24,
+          transparent
+        );
+        box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+        animation: urAccentPulse 2s ease-in-out infinite;
+      }
+      @keyframes urAccentPulse {
+        0%,
+        100% {
+          opacity: 0.7;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .nft-card-ur .card-id {
+        color: rgba(251, 191, 36, 0.5);
+      }
+      .nft-card-ur .card-percent {
+        background: linear-gradient(135deg, #fde68a, #f59e0b, #fbbf24);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
+      }
+      .nft-card-ur .card-prob-bar {
+        background: rgba(251, 191, 36, 0.1);
+      }
+      .nft-card-ur .card-prob-fill {
+        background: linear-gradient(90deg, #92400e, #fbbf24, #f59e0b);
+        box-shadow: 0 0 6px rgba(251, 191, 36, 0.8);
+        animation: urBarPulse 1.8s ease-in-out infinite;
+      }
+      @keyframes urBarPulse {
+        0%,
+        100% {
+          box-shadow: 0 0 4px rgba(251, 191, 36, 0.6);
+        }
+        50% {
+          box-shadow:
+            0 0 12px rgba(251, 191, 36, 1),
+            0 0 20px rgba(245, 158, 11, 0.5);
+        }
+      }
+      /* chance label */
+      .nft-card-ur .ur-chance-label {
+        color: rgba(251, 191, 36, 0.5);
+      }
+      .nft-card-ur .card-recycle {
+        color: rgba(251, 191, 36, 0.35);
+      }
+      /* corner star ornaments */
+      .ur-corner {
+        position: absolute;
+        font-size: 8px;
+        color: rgba(251, 191, 36, 0.5);
+        pointer-events: none;
+      }
+      .ur-corner.tl {
+        top: 6px;
+        left: 6px;
+      }
+      .ur-corner.tr {
+        top: 6px;
+        right: 6px;
+      }
+      /* particle stars bg */
+      .ur-stars {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 18px;
+        overflow: hidden;
+        background-image:
+          radial-gradient(
+            1px 1px at 15% 20%,
+            rgba(251, 191, 36, 0.7) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 80% 15%,
+            rgba(255, 255, 255, 0.4) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 50% 60%,
+            rgba(251, 191, 36, 0.8) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 90% 70%,
+            rgba(255, 255, 255, 0.3) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 25% 85%,
+            rgba(251, 191, 36, 0.5) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 70% 40%,
+            rgba(251, 191, 36, 0.6) 0%,
+            transparent 100%
+          );
+        z-index: 0;
+      }
+      /* shimmer sweep for UR */
+      .ur-shimmer {
+        position: absolute;
+        inset: 0;
+        border-radius: 18px;
+        background: linear-gradient(
+          105deg,
+          transparent 30%,
+          rgba(251, 191, 36, 0.08) 50%,
+          transparent 70%
+        );
+        background-size: 200% 200%;
+        animation: urShimmer 3s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 1;
+      }
+      @keyframes urShimmer {
+        0%,
+        100% {
+          background-position: -100% 0;
+        }
+        50% {
+          background-position: 200% 0;
+        }
+      }
+      /* spinning conic border */
+      .ur-glow {
+        position: absolute;
+        inset: -2px;
+        border-radius: 22px;
+        background: linear-gradient(
+          135deg,
+          #92400e,
+          #fbbf24,
+          #f59e0b,
+          #fde68a,
+          #f59e0b,
+          #fbbf24,
+          #92400e
+        );
+        background-size: 300% 300%;
+        animation: urGlowShift 3s ease infinite;
+        z-index: 0;
+        box-shadow:
+          0 0 20px rgba(251, 191, 36, 0.5),
+          0 0 40px rgba(245, 158, 11, 0.25);
+      }
+      @keyframes urGlowShift {
+        0%,
+        100% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+      }
+      /* icon glow on UR art */
+      .ur-icon {
+        color: #fbbf24 !important;
+        filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.9))
+          drop-shadow(0 0 20px rgba(245, 158, 11, 0.5)) !important;
+      }
+
+      /* ═══════════════════════════════════════
+         LEGEND RARE — full premium rebuild
+         ═══════════════════════════════════════ */
+      .nft-card-legend {
+        border: none;
+        animation: legendFloat 4s ease-in-out infinite;
+        position: relative;
+      }
+      /* Outer prismatic halo — extra ring outside the border */
+      .legend-halo {
+        position: absolute;
+        inset: -6px;
+        border-radius: 26px;
+        background: linear-gradient(
+          135deg,
+          #ff9de2,
+          #ffd6a5,
+          #caffbf,
+          #9bf6ff,
+          #a0c4ff,
+          #bdb2ff,
+          #ff9de2
+        );
+        background-size: 400% 400%;
+        animation: holographic 1.5s ease infinite;
+        filter: blur(6px);
+        opacity: 0.55;
+        z-index: 0;
+      }
+      /* Animated prismatic border */
+      .legend-rainbow-border {
+        position: absolute;
+        inset: -2.5px;
+        border-radius: 23px;
+        background: linear-gradient(
+          135deg,
+          #ff9de2,
+          #ffd6a5,
+          #caffbf,
+          #9bf6ff,
+          #a0c4ff,
+          #bdb2ff,
+          #ff9de2
+        );
+        background-size: 400% 400%;
+        animation: holographic 1.8s ease infinite;
+        z-index: 1;
+        box-shadow:
+          0 0 18px rgba(255, 157, 226, 0.7),
+          0 0 40px rgba(189, 178, 255, 0.4),
+          0 0 70px rgba(155, 246, 255, 0.3);
+      }
+      /* Deep void interior */
+      .legend-body {
+        position: absolute;
+        inset: 2.5px;
+        border-radius: 20px;
+        background: radial-gradient(
+          ellipse at 30% 20%,
+          #1a0a2e 0%,
+          #050510 50%,
+          #000308 100%
+        );
+        z-index: 2;
+        overflow: hidden;
+      }
+      /* Dense star field — 3 layers */
+      .legend-stars-deep {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 20px;
+        overflow: hidden;
+        background-image:
+          radial-gradient(
+            1px 1px at 8% 12%,
+            rgba(255, 255, 255, 1) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 88% 8%,
+            rgba(255, 255, 255, 0.9) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 52% 22%,
+            rgba(189, 178, 255, 1) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 18% 45%,
+            rgba(255, 255, 255, 0.7) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 75% 38%,
+            rgba(155, 246, 255, 0.9) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            2px 2px at 35% 68%,
+            rgba(255, 255, 255, 1) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 92% 55%,
+            rgba(255, 157, 226, 0.9) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 12% 78%,
+            rgba(189, 178, 255, 0.8) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 62% 85%,
+            rgba(255, 255, 255, 0.9) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 45% 92%,
+            rgba(155, 246, 255, 0.7) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 28% 30%,
+            rgba(255, 255, 255, 0.5) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 80% 72%,
+            rgba(255, 157, 226, 0.6) 0%,
+            transparent 100%
+          );
+        z-index: 1;
+      }
+      /* Twinkling animation */
+      .legend-stars-twinkle {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 20px;
+        background-image:
+          radial-gradient(
+            1px 1px at 22% 18%,
+            rgba(255, 255, 255, 0.9) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 68% 28%,
+            rgba(189, 178, 255, 0.9) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 42% 55%,
+            rgba(255, 157, 226, 0.8) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1px 1px at 85% 65%,
+            rgba(255, 255, 255, 0.7) 0%,
+            transparent 100%
+          ),
+          radial-gradient(
+            1.5px 1.5px at 15% 88%,
+            rgba(155, 246, 255, 0.9) 0%,
+            transparent 100%
+          );
+        animation: lgdTwinkle 2s ease-in-out infinite alternate;
+        z-index: 2;
+      }
+      @keyframes lgdTwinkle {
+        0% {
+          opacity: 0.3;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+      /* Nebula glow blobs */
+      .legend-nebula {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: 20px;
+        overflow: hidden;
+        background:
+          radial-gradient(
+            ellipse 60% 40% at 25% 30%,
+            rgba(255, 157, 226, 0.15) 0%,
+            transparent 70%
+          ),
+          radial-gradient(
+            ellipse 50% 50% at 75% 70%,
+            rgba(155, 246, 255, 0.12) 0%,
+            transparent 70%
+          ),
+          radial-gradient(
+            ellipse 40% 60% at 50% 50%,
+            rgba(189, 178, 255, 0.1) 0%,
+            transparent 70%
+          );
+        z-index: 3;
+      }
+      /* Prismatic shimmer sweep — 2 passes */
+      .legend-hologram {
+        position: absolute;
+        inset: 0;
+        border-radius: 20px;
+        overflow: hidden;
+        background: linear-gradient(
+          105deg,
+          transparent 20%,
+          rgba(255, 157, 226, 0.18) 38%,
+          rgba(155, 246, 255, 0.22) 50%,
+          rgba(189, 178, 255, 0.18) 62%,
+          transparent 80%
+        );
+        background-size: 200% 200%;
+        animation: lgdHoloSweep 2.2s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 4;
+      }
+      @keyframes lgdHoloSweep {
+        0%,
+        100% {
+          background-position: -120% 0;
+          opacity: 0.5;
+        }
+        50% {
+          background-position: 220% 0;
+          opacity: 1;
+        }
+      }
+      /* Second shimmer at different angle */
+      .legend-hologram2 {
+        position: absolute;
+        inset: 0;
+        border-radius: 20px;
+        overflow: hidden;
+        background: linear-gradient(
+          75deg,
+          transparent 25%,
+          rgba(160, 196, 255, 0.14) 45%,
+          rgba(255, 214, 165, 0.16) 55%,
+          transparent 75%
+        );
+        background-size: 200% 200%;
+        animation: lgdHoloSweep2 3s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 4;
+      }
+      @keyframes lgdHoloSweep2 {
+        0%,
+        100% {
+          background-position: 220% 0;
+          opacity: 0.4;
+        }
+        50% {
+          background-position: -120% 0;
+          opacity: 0.8;
+        }
+      }
+      /* Art area — prism animated gradient */
+      .nft-card-legend .card-art {
+        background: linear-gradient(135deg, #2d004d, #1a0030, #000820);
+        border: 1.5px solid transparent;
+        background-clip: padding-box;
+        position: relative;
+      }
+      .legend-art-prism {
+        position: absolute;
+        inset: 0;
+        border-radius: 10px;
+        background: linear-gradient(
+          135deg,
+          #ff9de2,
+          #ffd6a5,
+          #caffbf,
+          #9bf6ff,
+          #a0c4ff,
+          #bdb2ff,
+          #ff9de2
+        );
+        background-size: 400% 400%;
+        animation: holographic 1.5s ease infinite;
+        opacity: 0.18;
+        pointer-events: none;
+      }
+      /* Badge — prismatic text on dark */
+      .nft-card-legend .card-badge {
+        background: linear-gradient(135deg, #1a0030, #0a001a);
+        color: transparent;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        border: 1px solid rgba(255, 157, 226, 0.5);
+        position: relative;
+        overflow: hidden;
+      }
+      .legend-badge-text {
+        background: linear-gradient(
+          90deg,
+          #ff9de2,
+          #ffd6a5,
+          #caffbf,
+          #9bf6ff,
+          #bdb2ff,
+          #ff9de2
+        );
+        background-size: 300% 100%;
+        animation: holographic 1.8s linear infinite;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 900;
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      /* Accent bar — prismatic with glow */
+      .nft-card-legend .card-border-accent {
+        background: linear-gradient(
+          90deg,
+          #ff9de2,
+          #ffd6a5,
+          #caffbf,
+          #9bf6ff,
+          #bdb2ff,
+          #ff9de2
+        );
+        background-size: 400% 100%;
+        animation: holographic 1.5s linear infinite;
+        height: 2px;
+        box-shadow:
+          0 0 10px rgba(255, 157, 226, 0.8),
+          0 0 20px rgba(155, 246, 255, 0.4);
+      }
+      /* Percent — prismatic gradient text */
+      .nft-card-legend .card-percent {
+        background: linear-gradient(
+          135deg,
+          #ff9de2,
+          #ffd6a5,
+          #caffbf,
+          #9bf6ff,
+          #bdb2ff
+        );
+        background-size: 300% 300%;
+        animation: holographic 2s ease infinite;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 0 8px rgba(255, 157, 226, 0.7));
+        font-size: 30px;
+      }
+      /* Corner gems */
+      .lgd-corner {
+        position: absolute;
+        pointer-events: none;
+        z-index: 10;
+        font-size: 9px;
+        background: linear-gradient(135deg, #ff9de2, #9bf6ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: lgdTwinkle 1.5s ease-in-out infinite alternate;
+      }
+      .lgd-corner.tl {
+        top: 6px;
+        left: 6px;
+      }
+      .lgd-corner.tr {
+        top: 6px;
+        right: 6px;
+      }
+      .lgd-corner.bl {
+        bottom: 22px;
+        left: 6px;
+      }
+      .lgd-corner.br {
+        bottom: 22px;
+        right: 6px;
+      }
+      /* Edition tag */
+      .lgd-edition-tag {
+        font-size: 7px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-align: center;
+        position: relative;
+        z-index: 10;
+        margin-top: 2px;
+        background: linear-gradient(90deg, #ff9de2, #9bf6ff, #bdb2ff, #ff9de2);
+        background-size: 300% 100%;
+        animation: holographic 2s linear infinite;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: lgdEditionPulse 2.5s ease-in-out infinite;
+      }
+      @keyframes lgdEditionPulse {
+        0%,
+        100% {
+          opacity: 0.5;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      /* icon */
+      .lgd-icon {
+        color: white !important;
+        filter: drop-shadow(0 0 6px rgba(255, 157, 226, 1))
+          drop-shadow(0 0 14px rgba(155, 246, 255, 0.8))
+          drop-shadow(0 0 28px rgba(189, 178, 255, 0.6)) !important;
+        animation: lgdIconPulse 2s ease-in-out infinite;
+      }
+      @keyframes lgdIconPulse {
+        0%,
+        100% {
+          filter: drop-shadow(0 0 6px rgba(255, 157, 226, 1))
+            drop-shadow(0 0 14px rgba(155, 246, 255, 0.8));
+        }
+        50% {
+          filter: drop-shadow(0 0 12px rgba(255, 157, 226, 1))
+            drop-shadow(0 0 24px rgba(155, 246, 255, 1))
+            drop-shadow(0 0 40px rgba(189, 178, 255, 0.8));
+        }
+      }
+      /* prob bar */
+      .nft-card-legend .card-id {
+        color: rgba(155, 246, 255, 0.45);
+        letter-spacing: 0.1em;
+      }
+      .nft-card-legend .card-prob-bar {
+        background: rgba(255, 255, 255, 0.07);
+      }
+      .nft-card-legend .card-prob-fill {
+        background: linear-gradient(90deg, #ff9de2, #ffd6a5, #9bf6ff, #bdb2ff);
+        background-size: 400% 100%;
+        animation: holographic 1.5s linear infinite;
+        box-shadow:
+          0 0 10px rgba(255, 157, 226, 0.9),
+          0 0 20px rgba(155, 246, 255, 0.5);
+      }
+      .nft-card-legend .card-recycle {
+        color: rgba(155, 246, 255, 0.3);
+      }
+      @keyframes legendFloat {
+        0%,
+        100% {
+          transform: translateY(0) rotate(0.4deg);
+        }
+        50% {
+          transform: translateY(-5px) rotate(-0.4deg);
+        }
+      }
+
+      /* Card shared parts */
+      .card-art {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 12px;
+      }
+      .card-art-icon {
+        position: relative;
+        z-index: 2;
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+        transition: transform 0.3s ease;
+      }
+      .nft-card:hover .card-art-icon {
+        transform: scale(1.15) rotate(-5deg);
+      }
+      .card-art-shimmer {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.25) 0%,
+          transparent 50%,
+          rgba(255, 255, 255, 0.1) 100%
+        );
+        pointer-events: none;
+      }
+      .card-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 6px;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+        width: 100%;
+        text-align: center;
+      }
+      .card-border-accent {
+        height: 3px;
+        border-radius: 99px;
+        margin-bottom: 10px;
+      }
+      .card-id {
+        font-size: 9px;
+        color: #94a3b8;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        margin-bottom: 4px;
+      }
+      .card-percent {
+        font-family: "Caveat", cursive;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .card-prob-bar {
+        width: 100%;
+        height: 4px;
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 99px;
+        overflow: hidden;
+        margin-top: 6px;
+        margin-bottom: 8px;
+      }
+      .card-prob-fill {
+        height: 100%;
+        border-radius: 99px;
+      }
+      .card-recycle {
+        font-size: 9px;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .nft-card:hover .card-recycle {
+        opacity: 1;
+      }
+
+      /* Common specific */
+      .nft-card-common .card-percent {
+        color: #495057;
+      }
+      .nft-card-common .card-prob-fill {
+        background: linear-gradient(90deg, #adb5bd, #6c757d);
+      }
+
+      /* Rare specific */
+      .nft-card-rare .card-percent {
+        color: #1971c2;
+      }
+      .nft-card-rare .card-prob-fill {
+        background: linear-gradient(90deg, #74c0fc, #228be6);
+      }
+
+      /* SR specific */
+      .nft-card-sr .card-percent {
+        color: #7c3aed;
+      }
+      .nft-card-sr .card-prob-fill {
+        background: linear-gradient(90deg, #c084fc, #7c3aed);
+      }
+
+      /* SSR specific — overridden by new CSS above */
+      .nft-card-ssr .card-prob-fill {
+        background: linear-gradient(90deg, #7e22ce, #e879f9, #a855f7);
+      }
+
+      /* UR specific */
+      .nft-card-ur .card-percent {
+        color: #b45309;
+      }
+      .nft-card-ur .card-prob-fill {
+        background: linear-gradient(90deg, #fde68a, #f59e0b);
+      }
+
+      /* Legend specific */
+      .nft-card-legend .card-percent {
+        background: linear-gradient(135deg, #ff9de2, #bdb2ff, #9bf6ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .nft-card-legend .card-id {
+        color: rgba(255, 255, 255, 0.4);
+      }
+      .nft-card-legend .card-prob-bar {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .nft-card-legend .card-prob-fill {
+        background: linear-gradient(90deg, #ff9de2, #bdb2ff, #9bf6ff);
+        background-size: 300% 100%;
+        animation: holographic 2s linear infinite;
+      }
+      .nft-card-legend .card-recycle {
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      @keyframes legendFloat {
+        0%,
+        100% {
+          transform: translateY(0) rotate(0.5deg);
+        }
+        50% {
+          transform: translateY(-4px) rotate(-0.5deg);
+        }
+      }
+      .nft-card-legend {
+        animation: legendFloat 4s ease-in-out infinite;
+      }
+
+      /* ─── MINI GIFT BOX (How It Works) ─── */
+      .mini-scene {
+        perspective: 300px;
+        perspective-origin: 50% 30%;
+        width: 44px;
+        height: 44px;
+        position: relative;
+      }
+      .mini-box-wrapper {
+        position: absolute;
+        width: 32px;
+        height: 32px;
+        top: 6px;
+        left: 6px;
+        transform-style: preserve-3d;
+        transform: rotateX(-20deg) rotateY(-35deg);
+        animation: miniFloatBox 4s ease-in-out infinite;
+        will-change: transform;
+      }
+      .group:hover .mini-box-wrapper {
+        animation: miniShake 0.5s ease infinite;
+      }
+      @keyframes miniFloatBox {
+        0%,
+        100% {
+          transform: rotateX(-20deg) rotateY(-35deg) translateY(0);
+        }
+        50% {
+          transform: rotateX(-20deg) rotateY(-35deg) translateY(-4px);
+        }
+      }
+      @keyframes miniShake {
+        0% {
+          transform: rotateX(-20deg) rotateY(-35deg) translateX(0);
+        }
+        25% {
+          transform: rotateX(-20deg) rotateY(-35deg) translateX(-3px);
+        }
+        75% {
+          transform: rotateX(-20deg) rotateY(-35deg) translateX(3px);
+        }
+        100% {
+          transform: rotateX(-20deg) rotateY(-35deg) translateX(0);
+        }
+      }
+      .mini-body {
+        position: absolute;
+        inset: 0;
+        transform-style: preserve-3d;
+      }
+      .mini-face {
+        position: absolute;
+        width: 32px;
+        height: 32px;
+        border: 2px solid #1a1a1a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .mini-face-front {
+        transform: rotateY(0deg) translateZ(16px);
+        background: linear-gradient(160deg, #fffde8, #fff5b8);
+      }
+      .mini-face-back {
+        transform: rotateY(180deg) translateZ(16px);
+        background: linear-gradient(160deg, #d0edff, #b8eeff);
+      }
+      .mini-face-right {
+        transform: rotateY(90deg) translateZ(16px);
+        background: linear-gradient(160deg, #ffe0ef, #ffb8d9);
+      }
+      .mini-face-left {
+        transform: rotateY(-90deg) translateZ(16px);
+        background: linear-gradient(160deg, #d8fff0, #b8ffe8);
+      }
+      .mini-face-bottom {
+        transform: rotateX(-90deg) translateZ(16px);
+        background: linear-gradient(160deg, #fff5cc, #fffae0);
+      }
+      /* Lid */
+      .mini-lid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 32px;
+        height: 32px;
+        transform-style: preserve-3d;
+        transform: translateY(-32px);
+        transform-origin: 50% 100%;
+      }
+      .mini-lid-top {
+        position: absolute;
+        width: 32px;
+        height: 32px;
+        border: 2px solid #1a1a1a;
+        background: linear-gradient(145deg, #fffde8, #fff5b8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        transform: rotateX(90deg) translateZ(-11px);
+      }
+      .mini-lid-skirt {
+        position: absolute;
+        top: 27px;
+        width: 32px;
+        height: 5px;
+        border: 2px solid #1a1a1a;
+        overflow: hidden;
+      }
+      .mini-lid-sf {
+        transform: rotateY(0deg) translateZ(16px);
+        background: linear-gradient(180deg, #fffde8, #fff5b8);
+      }
+      .mini-lid-sb {
+        transform: rotateY(180deg) translateZ(16px);
+        background: linear-gradient(180deg, #d0edff, #b8eeff);
+      }
+      .mini-lid-sr {
+        transform: rotateY(90deg) translateZ(16px);
+        background: linear-gradient(180deg, #ffe0ef, #ffb8d9);
+      }
+      .mini-lid-sl {
+        transform: rotateY(-90deg) translateZ(16px);
+        background: linear-gradient(180deg, #d8fff0, #b8ffe8);
+      }
+      /* Mini ribbons */
+      .mini-rib-v {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 5px;
+        transform: translateX(-50%);
+        background: linear-gradient(to right, #ffb8e0, #ff3d9a, #ffb8e0);
+        border-left: 1px solid #c4006e;
+        border-right: 1px solid #c4006e;
+        z-index: 1;
+        pointer-events: none;
+      }
+      .mini-rib-h {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 5px;
+        transform: translateY(-50%);
+        background: linear-gradient(to bottom, #ffb8e0, #ff3d9a, #ffb8e0);
+        border-top: 1px solid #c4006e;
+        border-bottom: 1px solid #c4006e;
+        z-index: 1;
+        pointer-events: none;
+      }
+      /* Mini bow */
+      .mini-bow {
+        position: absolute;
+        width: 14px;
+        height: 9px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -60%);
+        z-index: 10;
+      }
+      .mini-bow-ear {
+        position: absolute;
+        width: 6px;
+        height: 5px;
+        background: linear-gradient(135deg, #ffb8e0, #ff3d9a);
+        border: 1px solid #c4006e;
+        top: 0;
+      }
+      .mini-bow-ear.L {
+        left: 0;
+        border-radius: 50% 0 50% 0;
+        transform: rotate(-26deg);
+        transform-origin: right center;
+      }
+      .mini-bow-ear.R {
+        right: 0;
+        border-radius: 0 50% 0 50%;
+        transform: rotate(26deg);
+        transform-origin: left center;
+      }
+      .mini-bow-knot {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background: #ff3d9a;
+        border: 1px solid #c4006e;
+        border-radius: 50%;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 6;
+      }
+
+      /* ─── RANDOM ROLL: spinning question box ─── */
+      .mini-spin-box {
+        animation: miniSpinRoll 3s linear infinite !important;
+      }
+      .group:hover .mini-spin-box {
+        animation: miniSpinRollFast 0.6s linear infinite !important;
+      }
+      @keyframes miniSpinRoll {
+        0% {
+          transform: rotateX(-20deg) rotateY(0deg);
+        }
+        100% {
+          transform: rotateX(-20deg) rotateY(360deg);
+        }
+      }
+      @keyframes miniSpinRollFast {
+        0% {
+          transform: rotateX(-20deg) rotateY(0deg);
+        }
+        100% {
+          transform: rotateX(-20deg) rotateY(360deg);
+        }
+      }
+
+      /* ─── GET YOUR NFT: mini floating card ─── */
+      .mini-nft-card {
+        position: relative;
+        width: 34px;
+        height: 46px;
+        animation: miniNftFloat 3s ease-in-out infinite;
+        flex-shrink: 0;
+      }
+      @keyframes miniNftFloat {
+        0%,
+        100% {
+          transform: translateY(0) rotate(-4deg);
+        }
+        50% {
+          transform: translateY(-4px) rotate(-4deg);
+        }
+      }
+      .group:hover .mini-nft-card {
+        animation: miniNftPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+      @keyframes miniNftPop {
+        to {
+          transform: translateY(-6px) rotate(3deg) scale(1.15);
+        }
+      }
+      .mini-nft-border {
+        position: absolute;
+        inset: -1.5px;
+        border-radius: 7px;
+        background: linear-gradient(135deg, #f9a8d4, #db2777, #f9a8d4);
+        background-size: 300% 300%;
+        animation: rareBorderShift 2s ease infinite;
+        box-shadow: 0 4px 14px rgba(244, 114, 182, 0.5);
+        z-index: 0;
+      }
+      .mini-nft-body {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        border-radius: 6px;
+        background: linear-gradient(145deg, #fdf2f8, #fce7f3);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 3px;
+        box-sizing: border-box;
+      }
+      .mini-nft-body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          105deg,
+          transparent 35%,
+          rgba(255, 255, 255, 0.55) 50%,
+          transparent 65%
+        );
+        background-size: 200% 200%;
+        animation: rareShimmer 2s ease-in-out infinite;
+        z-index: 5;
+        pointer-events: none;
+      }
+      .mini-nft-badge {
+        width: 100%;
+        background: linear-gradient(135deg, #db2777, #be185d);
+        border-radius: 3px;
+        padding: 1px 0;
+        text-align: center;
+        font-family: "Nunito", sans-serif;
+        font-size: 5px;
+        font-weight: 900;
+        color: white;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        position: relative;
+        z-index: 2;
+        margin-bottom: 2px;
+      }
+      .mini-nft-art {
+        width: 100%;
+        flex: 1;
+        background: linear-gradient(135deg, #f9a8d4, #f472b6, #db2777);
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 2px;
+        position: relative;
+        z-index: 2;
+        overflow: hidden;
+      }
+      .mini-nft-bar-wrap {
+        width: 100%;
+        height: 2px;
+        background: rgba(244, 114, 182, 0.2);
+        border-radius: 99px;
+        overflow: hidden;
+        margin-bottom: 2px;
+        position: relative;
+        z-index: 2;
+      }
+      .mini-nft-bar {
+        height: 100%;
+        width: 60%;
+        background: linear-gradient(90deg, #f9a8d4, #db2777);
+        border-radius: 99px;
+      }
+      .mini-nft-label {
+        font-family: "Caveat", cursive;
+        font-size: 8px;
+        font-weight: 700;
+        color: #db2777;
+        position: relative;
+        z-index: 2;
+        line-height: 1;
+      }
+    </style>
+  </head>
+  <body class="relative">
+    <div class="paper-texture"></div>
+
+    <!-- Parallax Background -->
+    <div
+      id="parallax-container"
+      class="fixed inset-0 overflow-hidden pointer-events-none z-0"
+    >
+      <div class="parallax-layer" data-depth="0.02">
+        <div
+          class="absolute top-20 left-10 w-64 h-64 bg-[#B8EEFF] rounded-full mix-blend-multiply filter blur-3xl opacity-60"
+        ></div>
+        <div
+          class="absolute top-1/2 right-20 w-96 h-96 bg-[#FFB8D9] rounded-full mix-blend-multiply filter blur-3xl opacity-50"
+        ></div>
+        <div
+          class="absolute bottom-20 left-1/3 w-72 h-72 bg-[#FFF5B8] rounded-full mix-blend-multiply filter blur-3xl opacity-60"
+        ></div>
+      </div>
+      <div class="parallax-layer" data-depth="0.05">
+        <div
+          class="absolute top-1/4 right-1/4 text-yellow-400 opacity-80 animate-wobble"
+        >
+          <iconify-icon icon="solar:star-bold" width="32"></iconify-icon>
+        </div>
+        <div
+          class="absolute bottom-1/3 left-20 text-pink-400 opacity-70"
+          style="animation-delay: 1s"
+        >
+          <iconify-icon
+            icon="solar:stars-minimalistic-bold"
+            width="24"
+          ></iconify-icon>
+        </div>
+        <div class="absolute top-32 left-1/2 text-blue-400 opacity-60">
+          <iconify-icon icon="solar:star-fall-bold" width="28"></iconify-icon>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav
+      class="fixed top-0 left-0 w-full z-50 backdrop-blur-md bg-white/70 border-b-2 border-slate-100/50 transition-all duration-300"
+      id="navbar"
+    >
+      <div
+        class="absolute top-0 left-0 h-1 bg-gradient-to-r from-pink-300 via-purple-300 to-blue-300 w-0 transition-all duration-100 ease-out"
+        id="scroll-progress"
+      ></div>
+      <div
+        class="max-w-7xl mx-auto px-4 md:px-6 h-20 flex items-center justify-between"
+      >
+        <a href="#" class="flex items-center gap-2 group">
+          <div class="relative">
+            <div class="absolute -top-1 -right-1 text-yellow-400 animate-pulse">
+              <iconify-icon icon="solar:star-bold" width="12"></iconify-icon>
+            </div>
+          </div>
+          <span
+            class="font-hand font-bold text-2xl tracking-tight relative top-1"
+            >GyateGyate</span
+          >
+        </a>
+        <div
+          class="hidden md:flex items-center gap-8 font-semibold text-slate-600 text-sm tracking-wide"
+        >
+          <a href="#how-it-works" class="hover:text-purple-600 relative group"
+            >How it Works<span
+              class="absolute -bottom-1 left-0 w-0 h-0.5 bg-purple-400 transition-all group-hover:w-full rounded-full"
+            ></span
+          ></a>
+          <a href="#rarities" class="hover:text-pink-600 relative group"
+            >Rarities<span
+              class="absolute -bottom-1 left-0 w-0 h-0.5 bg-pink-400 transition-all group-hover:w-full rounded-full"
+            ></span
+          ></a>
+          <a href="#marketplace" class="hover:text-blue-600 relative group"
+            >Marketplace<span
+              class="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-400 transition-all group-hover:w-full rounded-full"
+            ></span
+          ></a>
+          <a href="#roadmap" class="hover:text-yellow-600 relative group"
+            >Roadmap<span
+              class="absolute -bottom-1 left-0 w-0 h-0.5 bg-yellow-400 transition-all group-hover:w-full rounded-full"
+            ></span
+          ></a>
+          <a href="#team" class="hover:text-pink-600 relative group"
+            >Team<span
+              class="absolute -bottom-1 left-0 w-0 h-0.5 bg-pink-400 transition-all group-hover:w-full rounded-full"
+            ></span
+          ></a>
+        </div>
+        <button
+          class="bg-gradient-to-r from-purple-100 to-pink-100 text-slate-800 px-6 py-2.5 rounded-xl font-bold text-sm border-2 border-slate-800 shadow-[3px_3px_0px_#1a1a1a] hover:translate-y-0.5 hover:shadow-[1px_1px_0px_#1a1a1a] active:translate-y-1 active:shadow-none transition-all flex items-center gap-2"
+        >
+          <iconify-icon
+            icon="solar:wallet-linear"
+            stroke-width="2"
+            width="18"
+          ></iconify-icon>
+          Connect Wallet
+        </button>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="relative pt-32 pb-20 md:pt-40 md:pb-32 overflow-hidden z-10">
+      <div
+        class="max-w-7xl mx-auto px-4 md:px-6 grid md:grid-cols-2 gap-12 items-center"
+      >
+        <div
+          class="relative z-10 space-y-6 md:space-y-8 scroll-hidden"
+          id="hero-text"
+        >
+          <div
+            class="inline-block bg-yellow-100 border border-slate-800 px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase shadow-[2px_2px_0px_#1a1a1a]"
+          >
+            v1.0.0 Live on Sui Mainnet
+          </div>
+          <h1
+            class="text-6xl md:text-8xl font-bold leading-[0.9] tracking-tighter drop-shadow-sm"
+          >
+            Open Your <br />
+            <span
+              class="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-yellow-500 relative"
+            >
+              Fate
+              <svg
+                class="absolute w-full h-3 -bottom-1 left-0 text-purple-300 -z-10"
+                viewBox="0 0 100 10"
+                preserveAspectRatio="none"
+              >
+                <path
+                  d="M0 5 Q 50 10 100 5"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  fill="none"
+                ></path>
+              </svg>
+            </span>
+            ✦
+          </h1>
+          <p
+            class="text-lg md:text-xl text-slate-600 font-light max-w-md leading-relaxed"
+          >
+            Randomized GyateGyate NFTs on the Sui Blockchain. Six rarity tiers,
+            fully on-chain verifiable randomness, and a pity system that
+            guarantees your luck.
+          </p>
+          <div class="flex flex-wrap items-center gap-4 pt-4">
+            <button
+              onclick="triggerBox()"
+              class="bg-slate-900 text-white px-8 py-4 rounded-2xl font-bold text-lg border-2 border-slate-900 shadow-[4px_4px_0px_#C9B8FF] hover:-translate-y-1 hover:shadow-[6px_6px_0px_#C9B8FF] transition-all flex items-center gap-3"
+            >
+              Open a Lootbox
+              <iconify-icon
+                icon="solar:arrow-right-linear"
+                width="20"
+              ></iconify-icon>
+            </button>
+            <a
+              href="#marketplace"
+              class="text-slate-700 font-bold px-6 py-4 hover:bg-slate-100 rounded-2xl transition-colors flex items-center gap-2"
+            >
+              View Marketplace
+            </a>
+          </div>
+          <div
+            class="flex items-center gap-6 pt-8 text-xs font-semibold text-slate-500"
+          >
+            <div class="flex items-center gap-1">
+              <div
+                class="w-2 h-2 rounded-full bg-green-400 animate-pulse"
+              ></div>
+              10% Marketplace Fee
+            </div>
+            <div class="flex items-center gap-1">
+              <iconify-icon icon="solar:tag-horizontal-linear"></iconify-icon>
+              Kiosk-Enforced Royalties
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="relative flex items-center justify-center scroll-hidden"
+          style="transition-delay: 200ms; height: 420px"
+        >
+          <!-- SSR Floating Card -->
+          <div
+            class="absolute top-0 right-10 w-24 h-32 rounded-xl transform rotate-12 animate-float"
+            style="
+              animation-duration: 4s;
+              background: linear-gradient(145deg, #fdf2f8, #fce7f3);
+              border: 2px solid #f472b6;
+              box-shadow: 0 4px 20px rgba(244, 114, 182, 0.45);
+              opacity: 0.9;
+              overflow: hidden;
+            "
+          >
+            <div
+              style="
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(
+                  105deg,
+                  transparent 35%,
+                  rgba(255, 255, 255, 0.5) 50%,
+                  transparent 65%
+                );
+                background-size: 200% 200%;
+                animation: shineSSR 2.5s ease-in-out infinite;
+                z-index: 3;
+                pointer-events: none;
+              "
+            ></div>
+            <div
+              style="
+                position: absolute;
+                top: 5px;
+                left: 5px;
+                right: 5px;
+                background: linear-gradient(135deg, #db2777, #be185d);
+                border-radius: 5px;
+                padding: 2px 0;
+                text-align: center;
+                font-family: sans-serif;
+                font-size: 6px;
+                font-weight: 800;
+                color: white;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                z-index: 4;
+              "
+            >
+              SSR
+            </div>
+            <div
+              style="
+                position: absolute;
+                top: 22px;
+                left: 5px;
+                right: 5px;
+                height: 2px;
+                background: linear-gradient(90deg, #f9a8d4, #db2777, #f9a8d4);
+                border-radius: 99px;
+                z-index: 4;
+              "
+            ></div>
+            <img
+              src="https://copper-efficient-felidae-814.mypinata.cloud/ipfs/bafkreif7323zptn3vw4yjettkzdloakqwd5jhdysmf2yiqtltkm3sk5ove"
+              alt=""
+              style="
+                position: absolute;
+                top: 27px;
+                left: 5px;
+                width: calc(100% - 10px);
+                height: 62px;
+                object-fit: cover;
+                border-radius: 7px;
+                border: 1.5px solid rgba(244, 114, 182, 0.4);
+                z-index: 2;
+              "
+            />
+            <div
+              style="
+                position: absolute;
+                bottom: 5px;
+                left: 0;
+                right: 0;
+                text-align: center;
+                font-size: 11px;
+                font-weight: 700;
+                color: #db2777;
+                z-index: 4;
+              "
+            >
+              ✦ SSR
+            </div>
+          </div>
+
+          <!-- Legend Rare Floating Card -->
+          <div
+            class="absolute bottom-10 left-10 w-24 h-32 rounded-xl transform -rotate-6 animate-float"
+            style="
+              animation-duration: 5s;
+              opacity: 0.92;
+              overflow: visible;
+              position: absolute;
+            "
+          >
+            <div
+              style="
+                position: absolute;
+                inset: -2px;
+                border-radius: 16px;
+                background: linear-gradient(
+                  135deg,
+                  #ff9de2,
+                  #ffd6a5,
+                  #caffbf,
+                  #9bf6ff,
+                  #a0c4ff,
+                  #bdb2ff,
+                  #ff9de2
+                );
+                background-size: 400% 400%;
+                animation: holographic 2s ease infinite;
+                z-index: 0;
+              "
+            ></div>
+            <div
+              style="
+                position: absolute;
+                inset: 2px;
+                border-radius: 12px;
+                background: linear-gradient(145deg, #0d0d0d, #1a1a2e);
+                overflow: hidden;
+                z-index: 1;
+              "
+            >
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  background: linear-gradient(
+                    105deg,
+                    transparent 30%,
+                    rgba(255, 255, 255, 0.12) 50%,
+                    transparent 70%
+                  );
+                  background-size: 300% 300%;
+                  animation: holoShimmer 2s ease-in-out infinite;
+                  z-index: 3;
+                  pointer-events: none;
+                  border-radius: 12px;
+                "
+              ></div>
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  background-image:
+                    radial-gradient(
+                      1px 1px at 20% 25%,
+                      rgba(255, 255, 255, 0.8) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1px 1px at 75% 15%,
+                      rgba(255, 255, 255, 0.6) 0%,
+                      transparent 100%
+                    );
+                  pointer-events: none;
+                  z-index: 2;
+                "
+              ></div>
+              <div
+                style="
+                  position: absolute;
+                  top: 5px;
+                  left: 5px;
+                  right: 5px;
+                  background: linear-gradient(135deg, #ff9de2, #bdb2ff);
+                  border-radius: 5px;
+                  padding: 2px 0;
+                  text-align: center;
+                  font-family: sans-serif;
+                  font-size: 6px;
+                  font-weight: 900;
+                  color: #0d0d0d;
+                  letter-spacing: 0.08em;
+                  text-transform: uppercase;
+                  z-index: 5;
+                "
+              >
+                ★ Legend
+              </div>
+              <div
+                style="
+                  position: absolute;
+                  top: 22px;
+                  left: 5px;
+                  right: 5px;
+                  height: 2px;
+                  background: linear-gradient(90deg, #ff9de2, #bdb2ff, #9bf6ff);
+                  background-size: 400% 100%;
+                  animation: holographic 2s linear infinite;
+                  border-radius: 99px;
+                  z-index: 5;
+                "
+              ></div>
+              <img
+                src="https://copper-efficient-felidae-814.mypinata.cloud/ipfs/bafkreiarommzmxprjpmfduuotcuqdj3kealzqh4ta62z6w7kpm5nbilave"
+                alt=""
+                style="
+                  position: absolute;
+                  top: 27px;
+                  left: 5px;
+                  width: calc(100% - 10px);
+                  height: 62px;
+                  object-fit: cover;
+                  border-radius: 7px;
+                  border: 1.5px solid rgba(255, 157, 226, 0.4);
+                  z-index: 4;
+                "
+              />
+              <div
+                style="
+                  position: absolute;
+                  bottom: 5px;
+                  left: 0;
+                  right: 0;
+                  text-align: center;
+                  font-size: 11px;
+                  font-weight: 700;
+                  background: linear-gradient(135deg, #ff9de2, #bdb2ff);
+                  -webkit-background-clip: text;
+                  -webkit-text-fill-color: transparent;
+                  z-index: 5;
+                "
+              >
+                ✦ Legend
+              </div>
+            </div>
+          </div>
+
+          <div
+            style="display: flex; flex-direction: column; align-items: center"
+          >
+            <div class="scene">
+              <div class="ground-shadow"></div>
+              <div class="box-wrapper" id="box-demo">
+                <div class="sparkles">
+                  <span class="spark">✦</span><span class="spark">✧</span>
+                  <span class="spark">⭐</span><span class="spark">💫</span>
+                  <span class="spark">✨</span><span class="spark">🌸</span>
+                  <span class="spark">💎</span>
+                </div>
+                <div class="body-group">
+                  <div class="face face-front">
+                    <div class="rib-v"></div>
+                    <div class="rib-h"></div>
+                    <div
+                      style="
+                        position: relative;
+                        z-index: 2;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 4px;
+                      "
+                    >
+                      <div style="font-size: 40px; opacity: 0.15">❓</div>
+                      <span
+                        style="
+                          font-family: &quot;Caveat&quot;, cursive;
+                          font-size: 16px;
+                          font-weight: 700;
+                          color: #1a1a1a25;
+                        "
+                        >GYATE BOX</span
+                      >
+                    </div>
+                  </div>
+                  <div class="face face-back"></div>
+                  <div class="face face-right">
+                    <div class="rib-v"></div>
+                    <div class="rib-h"></div>
+                  </div>
+                  <div class="face face-left"></div>
+                  <div class="face face-bottom"></div>
+                </div>
+                <div class="lid-group">
+                  <div class="lid-top">
+                    <div class="lid-rib-v"></div>
+                    <div class="lid-rib-h"></div>
+                    <div class="bow">
+                      <div class="bow-ear L"></div>
+                      <div class="bow-ear R"></div>
+                      <div class="bow-knot"></div>
+                      <div class="bow-tail L"></div>
+                      <div class="bow-tail R"></div>
+                    </div>
+                  </div>
+                  <div class="lid-skirt lid-skirt-front">
+                    <div class="skirt-rib-v"></div>
+                  </div>
+                  <div class="lid-skirt lid-skirt-back"></div>
+                  <div class="lid-skirt lid-skirt-right">
+                    <div class="skirt-rib-v"></div>
+                  </div>
+                  <div class="lid-skirt lid-skirt-left"></div>
+                </div>
+                <div class="inner-nft">
+                  <div class="inner-nft-border"></div>
+                  <div class="inner-nft-body">
+                    <!-- Header -->
+                    <div class="nft-header">
+                      <div class="nft-rarity-pip">
+                        <div class="nft-rarity-dot"></div>
+                        <span class="nft-rarity-text">Rare</span>
+                      </div>
+                      <span class="nft-id-tag">#0342</span>
+                    </div>
+                    <div class="nft-accent-bar"></div>
+                    <!-- Art -->
+                    <div class="nft-art">
+                      <img
+                        src="https://copper-efficient-felidae-814.mypinata.cloud/ipfs/bafkreiarommzmxprjpmfduuotcuqdj3kealzqh4ta62z6w7kpm5nbilave"
+                        alt=""
+                      />
+                      <div class="nft-art-overlay"></div>
+                      <span class="nft-art-badge">SUI NFT</span>
+                    </div>
+                    <!-- Info -->
+                    <div class="nft-info">
+                      <div class="nft-name">Celestial Cat</div>
+                      <div class="nft-stats">
+                        <div class="nft-stat">
+                          <span class="nft-stat-val">72</span>
+                          <span class="nft-stat-lbl">PWR</span>
+                        </div>
+                        <div class="nft-stat">
+                          <span class="nft-stat-val">56</span>
+                          <span class="nft-stat-lbl">SPD</span>
+                        </div>
+                        <div class="nft-stat">
+                          <span class="nft-stat-val">88</span>
+                          <span class="nft-stat-lbl">LCK</span>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Bottom -->
+                    <div class="nft-bottom">
+                      <div class="nft-bar-wrap">
+                        <div class="nft-bar"></div>
+                      </div>
+                      <div class="nft-footer-row">
+                        <span class="nft-label">✦ Rare</span>
+                        <span class="nft-chain-badge">SUI</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="hint-label" id="box-hint">✦ click to open ✦</div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-60"
+      >
+        <span class="font-hand text-sm text-slate-500">scroll to discover</span>
+        <div
+          class="w-[1px] h-8 bg-gradient-to-b from-slate-300 to-transparent"
+        ></div>
+      </div>
+    </main>
+
+    <!-- How It Works -->
+    <section id="how-it-works" class="py-20 relative z-10">
+      <div class="max-w-6xl mx-auto px-4 md:px-6">
+        <div class="text-center mb-16 scroll-hidden">
+          <h2 class="text-4xl md:text-5xl font-bold mb-4 relative inline-block">
+            How It Works
+            <svg
+              class="absolute -bottom-2 left-0 w-full h-3 text-mint opacity-60"
+              viewBox="0 0 100 10"
+              preserveAspectRatio="none"
+            >
+              <path
+                d="M0 5 Q 50 15 100 5"
+                stroke="currentColor"
+                stroke-width="4"
+                fill="none"
+              ></path>
+            </svg>
+          </h2>
+        </div>
+        <div class="grid md:grid-cols-3 gap-8 relative">
+          <div class="group scroll-hidden" data-stagger="1">
+            <div
+              class="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-sm group-hover:shadow-[8px_8px_0px_#B8FFE8] group-hover:-translate-y-2 group-hover:border-slate-800 transition-all duration-300 text-center relative overflow-hidden"
+            >
+              <div
+                class="w-16 h-16 mx-auto bg-green-50 rounded-2xl flex items-center justify-center mb-6 relative"
+              >
+                <div class="mini-scene">
+                  <div
+                    class="mini-box-wrapper"
+                    style="animation-name: miniFloatBox"
+                  >
+                    <div class="mini-body">
+                      <div class="mini-face mini-face-front">
+                        <div class="mini-rib-v"></div>
+                        <div class="mini-rib-h"></div>
+                      </div>
+                      <div class="mini-face mini-face-back"></div>
+                      <div class="mini-face mini-face-right">
+                        <div class="mini-rib-v"></div>
+                        <div class="mini-rib-h"></div>
+                      </div>
+                      <div class="mini-face mini-face-left"></div>
+                      <div class="mini-face mini-face-bottom"></div>
+                    </div>
+                    <div class="mini-lid">
+                      <div class="mini-lid-top">
+                        <div class="mini-rib-v"></div>
+                        <div class="mini-rib-h"></div>
+                        <div class="mini-bow">
+                          <div class="mini-bow-ear L"></div>
+                          <div class="mini-bow-ear R"></div>
+                          <div class="mini-bow-knot"></div>
+                        </div>
+                      </div>
+                      <div class="mini-lid-skirt mini-lid-sf"></div>
+                      <div class="mini-lid-skirt mini-lid-sb"></div>
+                      <div class="mini-lid-skirt mini-lid-sr"></div>
+                      <div class="mini-lid-skirt mini-lid-sl"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <h3 class="text-2xl font-bold font-hand mb-2">Buy a Box</h3>
+              <p class="text-slate-500 text-sm leading-relaxed">
+                Pay in SUI. Your payment goes directly to the TreasuryPool via
+                the smart contract — no middlemen.
+              </p>
+              <div
+                class="absolute -top-6 -right-6 w-12 h-12 bg-mint rounded-full opacity-20"
+              ></div>
+            </div>
+          </div>
+          <div class="group scroll-hidden" data-stagger="2">
+            <div
+              class="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-sm group-hover:shadow-[8px_8px_0px_#FFF5B8] group-hover:-translate-y-2 group-hover:border-slate-800 transition-all duration-300 text-center relative overflow-hidden"
+            >
+              <div
+                class="w-16 h-16 mx-auto bg-yellow-50 rounded-2xl flex items-center justify-center mb-6 relative"
+              >
+                <!-- Mini 3D Spinning Random Box -->
+                <div class="mini-scene">
+                  <div class="mini-box-wrapper mini-spin-box">
+                    <div class="mini-body">
+                      <div
+                        class="mini-face mini-face-front"
+                        style="
+                          background: linear-gradient(160deg, #fffde8, #fff5b8);
+                        "
+                      >
+                        <span
+                          style="
+                            font-size: 11px;
+                            z-index: 2;
+                            position: relative;
+                            font-weight: 900;
+                            color: #b45309;
+                            opacity: 0.7;
+                          "
+                          >?</span
+                        >
+                      </div>
+                      <div
+                        class="mini-face mini-face-back"
+                        style="
+                          background: linear-gradient(160deg, #fef9c3, #fde68a);
+                        "
+                      >
+                        <span
+                          style="
+                            font-size: 11px;
+                            z-index: 2;
+                            position: relative;
+                            font-weight: 900;
+                            color: #b45309;
+                            opacity: 0.7;
+                          "
+                          >?</span
+                        >
+                      </div>
+                      <div
+                        class="mini-face mini-face-right"
+                        style="
+                          background: linear-gradient(160deg, #fef3c7, #fde68a);
+                        "
+                      >
+                        <span
+                          style="
+                            font-size: 9px;
+                            z-index: 2;
+                            position: relative;
+                            font-weight: 900;
+                            color: #b45309;
+                            opacity: 0.7;
+                          "
+                          >?</span
+                        >
+                      </div>
+                      <div
+                        class="mini-face mini-face-left"
+                        style="
+                          background: linear-gradient(160deg, #fffbeb, #fef3c7);
+                        "
+                      >
+                        <span
+                          style="
+                            font-size: 9px;
+                            z-index: 2;
+                            position: relative;
+                            font-weight: 900;
+                            color: #b45309;
+                            opacity: 0.7;
+                          "
+                          >?</span
+                        >
+                      </div>
+                      <div
+                        class="mini-face mini-face-bottom"
+                        style="
+                          background: linear-gradient(160deg, #fff5cc, #fffae0);
+                        "
+                      ></div>
+                      <div
+                        class="mini-face"
+                        style="
+                          transform: rotateX(90deg) translateZ(16px);
+                          background: linear-gradient(160deg, #fefce8, #fef9c3);
+                        "
+                      >
+                        <span
+                          style="
+                            font-size: 9px;
+                            z-index: 2;
+                            position: relative;
+                            font-weight: 900;
+                            color: #b45309;
+                            opacity: 0.7;
+                          "
+                          >?</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <h3 class="text-2xl font-bold font-hand mb-2">Random Roll</h3>
+              <p class="text-slate-500 text-sm leading-relaxed">
+                Sui's native on-chain Random module rolls your rarity tier and
+                variant. No server-side RNG — results are provable.
+              </p>
+              <div
+                class="absolute -top-6 -right-6 w-12 h-12 bg-yellow-200 rounded-full opacity-20"
+              ></div>
+            </div>
+          </div>
+          <div class="group scroll-hidden" data-stagger="3">
+            <div
+              class="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-sm group-hover:shadow-[8px_8px_0px_#FFB8D9] group-hover:-translate-y-2 group-hover:border-slate-800 transition-all duration-300 text-center relative overflow-hidden"
+            >
+              <div
+                class="w-16 h-16 mx-auto bg-pink-50 rounded-2xl flex items-center justify-center mb-6 relative overflow-visible"
+              >
+                <!-- Mini NFT Card -->
+                <div class="mini-nft-card">
+                  <div class="mini-nft-border"></div>
+                  <div class="mini-nft-body">
+                    <div class="mini-nft-badge">NFT</div>
+                    <div class="mini-nft-art">
+                      <iconify-icon
+                        icon="solar:cat-bold"
+                        style="
+                          font-size: 14px;
+                          color: #f472b6;
+                          filter: drop-shadow(0 0 4px rgba(244, 114, 182, 0.6));
+                        "
+                      ></iconify-icon>
+                    </div>
+                    <div class="mini-nft-bar-wrap">
+                      <div class="mini-nft-bar"></div>
+                    </div>
+                    <div class="mini-nft-label">✦ SSR</div>
+                  </div>
+                </div>
+              </div>
+              <h3 class="text-2xl font-bold font-hand mb-2">Get Your NFT</h3>
+              <p class="text-slate-500 text-sm leading-relaxed">
+                Your GyateNFT is minted straight into your Kiosk. List it on the
+                marketplace, trade it, or hold for future game rewards.
+              </p>
+              <div
+                class="absolute -top-6 -right-6 w-12 h-12 bg-pink-200 rounded-full opacity-20"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rarity Tiers — Redesigned NFT Cards -->
+    <section id="rarities" class="py-20 bg-white/50 relative z-10">
+      <div class="max-w-7xl mx-auto px-4 md:px-6">
+        <div class="text-center mb-14 scroll-hidden">
+          <h2 class="text-4xl md:text-5xl font-bold mb-3">
+            Six Tiers of Destiny
+          </h2>
+          <p class="text-slate-500 font-hand text-xl">
+            Fair probability distribution
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <!-- COMMON -->
+          <div class="scroll-hidden" style="transition-delay: 0ms">
+            <div class="nft-card nft-card-common p-4 h-full flex flex-col">
+              <span class="card-badge card-badge-common">Common</span>
+              <div class="card-border-accent"></div>
+              <div class="card-art-shimmer"></div>
+              <img
+                src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_T-t1f46JJ1OEmztkG7cjFe-QB9mUV5Wfig&s"
+                alt=""
+              />
+              <div class="card-id">SUI-CMN #???</div>
+              <div class="flex justify-between items-end">
+                <span class="card-percent">40%</span>
+                <span style="font-size: 9px; color: #94a3b8">Chance</span>
+              </div>
+              <div class="card-prob-bar">
+                <div class="card-prob-fill" style="width: 40%"></div>
+              </div>
+              <div class="card-recycle">
+                <iconify-icon icon="solar:restart-circle-linear"></iconify-icon>
+                Recycle: 0.01 SUI
+              </div>
+            </div>
+          </div>
+
+          <!-- RARE -->
+          <div class="scroll-hidden" style="transition-delay: 100ms">
+            <div class="nft-card nft-card-rare p-4 h-full flex flex-col">
+              <span class="card-badge">Rare</span>
+              <div class="card-border-accent"></div>
+              <div class="card-art-shimmer"></div>
+              <img
+                src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTcSlCQ7h5F1OG5VGDLBY8UHU4mZETZhwFUwg&s"
+                alt=""
+              />
+              <div class="card-id" style="color: #74c0fc">SUI-RAR #???</div>
+              <div class="flex justify-between items-end">
+                <span class="card-percent">30%</span>
+                <span style="font-size: 9px; color: #94a3b8">Chance</span>
+              </div>
+              <div class="card-prob-bar">
+                <div class="card-prob-fill" style="width: 30%"></div>
+              </div>
+              <div class="card-recycle">
+                <iconify-icon icon="solar:restart-circle-linear"></iconify-icon>
+                Recycle: 0.03 SUI
+              </div>
+            </div>
+          </div>
+
+          <!-- SUPER RARE -->
+          <div class="scroll-hidden" style="transition-delay: 200ms">
+            <div class="nft-card nft-card-sr p-4 h-full flex flex-col">
+              <span class="card-badge">Super Rare</span>
+              <div class="card-border-accent"></div>
+              <div class="card-art-shimmer"></div>
+              <img
+                src="https://i.pinimg.com/236x/ee/3b/ae/ee3bae29f332b0cd8ab0b6dc84c7b2ea.jpg"
+                alt=""
+              />
+              <div class="card-id" style="color: #c084fc">SUI-SR #???</div>
+              <div class="flex justify-between items-end">
+                <span class="card-percent">15%</span>
+                <span style="font-size: 9px; color: #94a3b8">Chance</span>
+              </div>
+              <div class="card-prob-bar">
+                <div class="card-prob-fill" style="width: 15%"></div>
+              </div>
+              <div class="card-recycle">
+                <iconify-icon icon="solar:restart-circle-linear"></iconify-icon>
+                Recycle: 0.05 SUI
+              </div>
+            </div>
+          </div>
+
+          <!-- SSR -->
+          <div class="scroll-hidden" style="transition-delay: 300ms">
+            <div style="position: relative; border-radius: 22px">
+              <div class="ssr-border"></div>
+              <div
+                class="nft-card nft-card-ssr p-4 h-full flex flex-col"
+                style="
+                  position: relative;
+                  z-index: 1;
+                  border-radius: 20px;
+                  overflow: hidden;
+                "
+              >
+                <div class="ssr-stars"></div>
+                <div class="ssr-shine"></div>
+                <span class="ssr-corner tl">✦</span>
+                <span class="ssr-corner tr">✦</span>
+                <span class="card-badge" style="position: relative; z-index: 2"
+                  >💫 SSR</span
+                >
+                <div
+                  class="card-border-accent"
+                  style="position: relative; z-index: 2"
+                ></div>
+                <div class="card-art-shimmer"></div>
+                <img
+                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRaB_-Dl2XjgXajEn_kdAHB2iFSDRm1cM-_rQ&s"
+                  alt=""
+                />
+                <div class="card-id" style="position: relative; z-index: 2">
+                  GYATE-SSR #???
+                </div>
+                <div
+                  class="flex justify-between items-end"
+                  style="position: relative; z-index: 2"
+                >
+                  <span class="card-percent">9%</span>
+                  <span style="font-size: 9px; color: rgba(232, 121, 249, 0.5)"
+                    >Chance</span
+                  >
+                </div>
+                <div
+                  class="card-prob-bar"
+                  style="position: relative; z-index: 2"
+                >
+                  <div class="card-prob-fill" style="width: 9%"></div>
+                </div>
+                <div class="ssr-animated-tag">✦ ANIMATED VARIANT</div>
+                <div
+                  class="card-recycle"
+                  style="position: relative; z-index: 2"
+                >
+                  <iconify-icon
+                    icon="solar:restart-circle-linear"
+                  ></iconify-icon>
+                  Recycle: 0.08 SUI
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ULTRA RARE -->
+          <div class="scroll-hidden" style="transition-delay: 400ms">
+            <div style="position: relative; border-radius: 22px">
+              <div class="ur-glow"></div>
+              <div
+                class="nft-card nft-card-ur p-4 h-full flex flex-col"
+                style="
+                  position: relative;
+                  z-index: 1;
+                  border-radius: 20px;
+                  overflow: hidden;
+                "
+              >
+                <!-- bg stars + shimmer -->
+                <div class="ur-stars"></div>
+                <div class="ur-shimmer"></div>
+                <!-- corner ornaments -->
+                <span class="ur-corner tl">✦</span>
+                <span class="ur-corner tr">✦</span>
+                <!-- badge -->
+                <span class="card-badge" style="position: relative; z-index: 2"
+                  >⚡ Ultra Rare</span
+                >
+                <div
+                  class="card-border-accent"
+                  style="position: relative; z-index: 2"
+                ></div>
+                <!-- art -->
+                <div class="card-art-shimmer"></div>
+                <img
+                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1_WgzH_i2AMY0-3F88wo6IHxgwTx0v6Mkzw&s"
+                  alt=""
+                  srcset=""
+                />
+                <!-- id -->
+                <div class="card-id" style="position: relative; z-index: 2">
+                  GYATE-UR #042
+                </div>
+                <!-- percent -->
+                <div
+                  class="flex justify-between items-end"
+                  style="position: relative; z-index: 2"
+                >
+                  <span class="card-percent">5%</span>
+                  <span style="font-size: 9px; color: rgba(251, 191, 36, 0.5)"
+                    >Chance</span
+                  >
+                </div>
+                <!-- bar -->
+                <div
+                  class="card-prob-bar"
+                  style="position: relative; z-index: 2"
+                >
+                  <div class="card-prob-fill" style="width: 5%"></div>
+                </div>
+                <!-- sequential ID note -->
+                <div
+                  style="
+                    font-size: 8px;
+                    color: rgba(251, 191, 36, 0.45);
+                    text-align: center;
+                    position: relative;
+                    z-index: 2;
+                    margin-top: 2px;
+                    letter-spacing: 0.05em;
+                  "
+                >
+                  SEQUENTIAL ID TRACKED
+                </div>
+                <div
+                  class="card-recycle"
+                  style="position: relative; z-index: 2"
+                >
+                  <iconify-icon
+                    icon="solar:restart-circle-linear"
+                  ></iconify-icon>
+                  Recycle: 0.15 SUI
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LEGEND RARE -->
+          <div class="scroll-hidden" style="transition-delay: 500ms">
+            <div style="position: relative">
+              <div
+                class="legend-rainbow-border"
+                style="
+                  position: absolute;
+                  inset: -2px;
+                  border-radius: 22px;
+                  background: linear-gradient(
+                    135deg,
+                    #ff9de2,
+                    #ffd6a5,
+                    #caffbf,
+                    #9bf6ff,
+                    #a0c4ff,
+                    #bdb2ff,
+                    #ff9de2
+                  );
+                  background-size: 400% 400%;
+                  animation: holographic 2s ease infinite;
+                  z-index: 0;
+                "
+              ></div>
+              <div
+                class="nft-card nft-card-legend p-4 h-full flex flex-col"
+                style="
+                  position: relative;
+                  z-index: 1;
+                  background: linear-gradient(145deg, #0d0d0d, #1a1a2e);
+                  border-radius: 20px;
+                "
+              >
+                <div class="legend-hologram"></div>
+                <div class="legend-stars"></div>
+                <span
+                  class="card-badge"
+                  style="
+                    background: linear-gradient(135deg, #ff9de2, #bdb2ff);
+                    color: #0d0d0d;
+                    font-weight: 900;
+                    position: relative;
+                    z-index: 2;
+                  "
+                  >★ Legend Rare</span
+                >
+                <div
+                  class="card-border-accent"
+                  style="
+                    background: linear-gradient(
+                      90deg,
+                      #ff9de2,
+                      #bdb2ff,
+                      #9bf6ff,
+                      #ff9de2
+                    );
+                    background-size: 400% 100%;
+                    animation: holographic 2s linear infinite;
+                  "
+                ></div>
+                <div class="card-art-shimmer"></div>
+                <img
+                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSPKSQUAUsjgz4CDWa2oT1CK7ymSXcwqvnijQ&s"
+                  alt=""
+                  srcset=""
+                />
+                <div
+                  class="card-id"
+                  style="
+                    color: rgba(255, 255, 255, 0.4);
+                    position: relative;
+                    z-index: 2;
+                  "
+                >
+                  SUI-LGD #???
+                </div>
+                <div
+                  class="flex justify-between items-end"
+                  style="position: relative; z-index: 2"
+                >
+                  <span
+                    class="card-percent"
+                    style="
+                      background: linear-gradient(
+                        135deg,
+                        #ff9de2,
+                        #bdb2ff,
+                        #9bf6ff
+                      );
+                      -webkit-background-clip: text;
+                      -webkit-text-fill-color: transparent;
+                    "
+                    >1%</span
+                  >
+                  <span style="font-size: 9px; color: rgba(255, 255, 255, 0.4)"
+                    >Chance</span
+                  >
+                </div>
+                <div
+                  class="card-prob-bar"
+                  style="
+                    background: rgba(255, 255, 255, 0.1);
+                    position: relative;
+                    z-index: 2;
+                  "
+                >
+                  <div
+                    class="card-prob-fill"
+                    style="
+                      width: 1%;
+                      background: linear-gradient(
+                        90deg,
+                        #ff9de2,
+                        #bdb2ff,
+                        #9bf6ff
+                      );
+                      background-size: 300% 100%;
+                      animation: holographic 2s linear infinite;
+                    "
+                  ></div>
+                </div>
+                <div
+                  class="card-recycle"
+                  style="
+                    color: rgba(255, 255, 255, 0.35);
+                    position: relative;
+                    z-index: 2;
+                    opacity: 0;
+                    transition: opacity 0.2s;
+                  "
+                >
+                  <iconify-icon
+                    icon="solar:restart-circle-linear"
+                  ></iconify-icon>
+                  Recycle: 0.5 SUI
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparison V1 vs V2 -->
+    <section class="py-20 relative z-10">
+      <div class="max-w-4xl mx-auto px-4 md:px-6">
+        <div class="doodle-box p-8 md:p-12 relative bg-white">
+          <div
+            class="absolute -top-6 left-1/2 -translate-x-1/2 bg-yellow-300 border-2 border-slate-800 px-6 py-2 rounded-full font-bold shadow-[2px_2px_0px_#1a1a1a]"
+          >
+            Open With or Without Pity
+          </div>
+          <div class="grid md:grid-cols-2 gap-12 mt-4">
+            <div
+              class="text-center opacity-60 hover:opacity-100 transition-opacity"
+            >
+              <h3 class="font-hand text-3xl font-bold mb-4 text-slate-400">
+                Standard Open
+              </h3>
+              <ul class="space-y-3 text-sm text-slate-500 mb-6">
+                <li class="flex items-center justify-center gap-2">
+                  <iconify-icon icon="solar:close-circle-linear"></iconify-icon
+                  >No pity counter tracking
+                </li>
+                <li class="flex items-center justify-center gap-2">
+                  <iconify-icon icon="solar:close-circle-linear"></iconify-icon
+                  >Pure RNG every roll
+                </li>
+                <li class="flex items-center justify-center gap-2">
+                  <iconify-icon icon="solar:close-circle-linear"></iconify-icon
+                  >No guaranteed escalation
+                </li>
+              </ul>
+              <button
+                class="w-full border-2 border-slate-800 text-slate-700 py-2 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+              >
+                Open Without Pity
+              </button>
+            </div>
+            <div class="text-center relative">
+              <div class="absolute -right-4 -top-4 text-yellow-500">
+                <iconify-icon
+                  icon="solar:star-bold-duotone"
+                  width="32"
+                ></iconify-icon>
+              </div>
+              <h3 class="font-hand text-3xl font-bold mb-4 text-purple-600">
+                Pity Open ✦
+              </h3>
+              <ul class="space-y-3 text-sm text-slate-600 mb-6 font-semibold">
+                <li class="flex items-center justify-center gap-2">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500"
+                  ></iconify-icon
+                  >Pity counter tracks your pulls
+                </li>
+                <li class="flex items-center justify-center gap-2">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500"
+                  ></iconify-icon
+                  >Guaranteed UR/SR/Rare at thresholds
+                </li>
+                <li class="flex items-center justify-center gap-2">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500"
+                  ></iconify-icon
+                  >Non-transferable — tied to your wallet
+                </li>
+              </ul>
+              <button
+                class="w-full bg-slate-800 text-white py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-slate-700 transition-colors"
+              >
+                Open a GyateBox ✦
+              </button>
+            </div>
+          </div>
+          <div
+            class="hidden md:block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-4/5 w-[2px] bg-slate-100"
+          ></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Marketplace -->
+    <section
+      id="marketplace"
+      class="py-20 bg-slate-50 relative z-10 border-t-2 border-slate-100 border-dashed"
+    >
+      <div class="max-w-7xl mx-auto px-4 md:px-6">
+        <div class="flex justify-between items-end mb-10 scroll-hidden">
+          <div>
+            <h2 class="text-4xl font-bold mb-2 font-hand">Gyate Marketplace</h2>
+            <p class="text-sm text-slate-500">
+              Kiosk-enforced royalties · 10% fee on every trade
+            </p>
+          </div>
+          <div class="text-right hidden md:block">
+            <span
+              class="bg-white border border-slate-200 px-3 py-1 rounded-lg text-xs font-bold text-slate-500 shadow-sm"
+              >Fee: 10% (enforced)</span
+            >
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div
+            class="bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-800 hover:shadow-lg transition-all scroll-hidden group"
+          >
+            <div
+              class="aspect-[4/3] bg-pink-50 rounded-xl mb-4 relative overflow-hidden"
+            >
+              <div
+                class="absolute inset-0 flex items-center justify-center text-pink-200 group-hover:scale-110 transition-transform duration-500"
+              >
+                <img
+                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSPKSQUAUsjgz4CDWa2oT1CK7ymSXcwqvnijQ&s"
+                  alt=""
+                />
+              </div>
+              <span
+                class="absolute top-2 left-2 bg-white/80 backdrop-blur px-2 py-0.5 rounded text-[10px] font-bold"
+                >#4829</span
+              >
+            </div>
+            <div class="flex justify-between items-center">
+              <div>
+                <h4 class="font-bold text-sm">GyateGyate Classic</h4>
+                <p class="text-xs text-slate-400">Seller: 0x2a...9f</p>
+              </div>
+              <button
+                class="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+              >
+                12 SUI
+              </button>
+            </div>
+          </div>
+          <div
+            class="bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-800 hover:shadow-lg transition-all scroll-hidden group"
+            style="transition-delay: 100ms"
+          >
+            <div
+              class="aspect-[4/3] bg-purple-50 rounded-xl mb-4 relative overflow-hidden"
+            >
+              <div
+                class="absolute inset-0 flex items-center justify-center text-purple-200 group-hover:scale-110 transition-transform duration-500"
+              >
+                <img
+                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSPKSQUAUsjgz4CDWa2oT1CK7ymSXcwqvnijQ&s"
+                  alt=""
+                />
+              </div>
+              <span
+                class="absolute top-2 left-2 bg-white/80 backdrop-blur px-2 py-0.5 rounded text-[10px] font-bold"
+                >#1022</span
+              >
+            </div>
+            <div class="flex justify-between items-center">
+              <div>
+                <h4 class="font-bold text-sm">GyateGyate Shiny</h4>
+                <p class="text-xs text-slate-400">Seller: 0x8b...2c</p>
+              </div>
+              <button
+                class="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+              >
+                45 SUI
+              </button>
+            </div>
+          </div>
+          <div
+            class="bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-800 hover:shadow-lg transition-all scroll-hidden group"
+            style="transition-delay: 200ms"
+          >
+            <div
+              class="aspect-[4/3] bg-yellow-50 rounded-xl mb-4 relative overflow-hidden"
+            >
+              <div
+                class="absolute inset-0 flex items-center justify-center text-yellow-200 group-hover:scale-110 transition-transform duration-500"
+              >
+                <img
+                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSPKSQUAUsjgz4CDWa2oT1CK7ymSXcwqvnijQ&s"
+                  alt=""
+                />
+              </div>
+              <span
+                class="absolute top-2 left-2 bg-white/80 backdrop-blur px-2 py-0.5 rounded text-[10px] font-bold"
+                >#9999</span
+              >
+            </div>
+            <div class="flex justify-between items-center">
+              <div>
+                <h4 class="font-bold text-sm">GyateGyate Holo</h4>
+                <p class="text-xs text-slate-400">Seller: 0xff...00</p>
+              </div>
+              <button
+                class="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+              >
+                250 SUI
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Roadmap -->
+    <section id="roadmap" class="py-20 relative z-10">
+      <div class="max-w-5xl mx-auto px-4 md:px-6">
+        <div class="text-center mb-14 scroll-hidden">
+          <h2 class="text-4xl md:text-5xl font-bold mb-3">Roadmap</h2>
+          <p class="text-slate-500 font-hand text-xl">
+            Three phases to a full on-chain game ecosystem
+          </p>
+        </div>
+
+        <div class="relative">
+          <!-- Vertical spine line -->
+          <div
+            class="hidden md:block absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2"
+            style="
+              background: linear-gradient(to bottom, #b8ffe8, #c9b8ff, #ffb8d9);
+              opacity: 0.4;
+            "
+          ></div>
+
+          <!-- Phase 1 — COMPLETE -->
+          <div
+            class="scroll-hidden relative flex flex-col md:flex-row items-center gap-8 mb-16"
+          >
+            <!-- Left: content -->
+            <div class="md:w-1/2 md:pr-12 md:text-right">
+              <div
+                class="inline-flex items-center gap-2 bg-green-50 border border-green-200 px-3 py-1 rounded-full mb-3 text-xs font-bold text-green-600 uppercase tracking-wider"
+              >
+                <div
+                  class="w-2 h-2 rounded-full bg-green-400 animate-pulse"
+                ></div>
+                Complete
+              </div>
+              <h3 class="text-3xl font-hand font-bold mb-3 text-slate-800">
+                Phase 1 — Backend
+              </h3>
+              <p class="text-sm text-slate-500 leading-relaxed mb-4">
+                All four Move modules deployed and tested on Sui. The full smart
+                contract layer is live and mainnet-ready.
+              </p>
+              <ul
+                class="space-y-2 text-sm text-slate-600 md:flex md:flex-col md:items-end"
+              >
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500 flex-shrink-0"
+                  ></iconify-icon
+                  >nft.move — GyateNFT struct &amp; mint logic
+                </li>
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500 flex-shrink-0"
+                  ></iconify-icon
+                  >pool.move — TreasuryPool &amp; revenue flows
+                </li>
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500 flex-shrink-0"
+                  ></iconify-icon
+                  >lootbox.move — Variant system &amp; pity tracker
+                </li>
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500 flex-shrink-0"
+                  ></iconify-icon
+                  >marketplace.move — Kiosk + 10% enforced fee
+                </li>
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:check-circle-bold"
+                    class="text-green-500 flex-shrink-0"
+                  ></iconify-icon
+                  >Global registry &amp; on-chain stats
+                </li>
+              </ul>
+            </div>
+            <!-- Center dot -->
+            <div
+              class="hidden md:flex w-12 h-12 rounded-full items-center justify-center flex-shrink-0 relative z-10 text-xl"
+              style="
+                background: linear-gradient(135deg, #b8ffe8, #4ade80);
+                border: 3px solid white;
+                box-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+              "
+            >
+              ✓
+            </div>
+            <!-- Right: visual card -->
+            <div class="md:w-1/2 md:pl-12">
+              <div
+                class="bg-white rounded-2xl border-2 border-green-100 p-5 shadow-sm"
+                style="box-shadow: 6px 6px 0px #b8ffe8"
+              >
+                <div class="flex items-center gap-3 mb-3">
+                  <div
+                    class="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-green-500 text-xl"
+                  >
+                    <iconify-icon
+                      icon="solar:code-square-bold-duotone"
+                    ></iconify-icon>
+                  </div>
+                  <div>
+                    <div class="font-bold text-sm text-slate-800">
+                      Smart Contract Layer
+                    </div>
+                    <div class="text-xs text-slate-400">
+                      Sui Mainnet-Ready · Move 2024
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="bg-green-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-green-600">
+                      4 Modules
+                    </div>
+                    <div class="text-[10px] text-slate-400">Deployed</div>
+                  </div>
+                  <div class="bg-green-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-green-600">
+                      6 Rarities
+                    </div>
+                    <div class="text-[10px] text-slate-400">On-chain</div>
+                  </div>
+                  <div class="bg-green-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-green-600">
+                      Pity System
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      Non-transferable
+                    </div>
+                  </div>
+                  <div class="bg-green-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-green-600">10% Fee</div>
+                    <div class="text-[10px] text-slate-400">
+                      Enforced structurally
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Phase 2 — FRONTEND -->
+          <div
+            class="scroll-hidden relative flex flex-col md:flex-row-reverse items-center gap-8 mb-16"
+            style="transition-delay: 150ms"
+          >
+            <!-- Right: content -->
+            <div class="md:w-1/2 md:pl-12 md:text-left">
+              <div
+                class="inline-flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1 rounded-full mb-3 text-xs font-bold text-purple-600 uppercase tracking-wider"
+              >
+                <div
+                  class="w-2 h-2 rounded-full bg-purple-400"
+                  style="animation: hintPulse 1.5s ease-in-out infinite"
+                ></div>
+                In Progress
+              </div>
+              <h3 class="text-3xl font-hand font-bold mb-3 text-slate-800">
+                Phase 2 — Frontend
+              </h3>
+              <p class="text-sm text-slate-500 leading-relaxed mb-4">
+                Full Next.js + Tailwind interface with animated lootbox opening,
+                wallet integration, marketplace UI, and admin dashboard.
+              </p>
+              <ul class="space-y-2 text-sm text-slate-600">
+                <li class="flex items-center gap-2">
+                  <iconify-icon
+                    icon="solar:clock-circle-bold-duotone"
+                    class="text-purple-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Sui Wallet adapter (Sui Wallet, Phantom, Suiet)
+                </li>
+                <li class="flex items-center gap-2">
+                  <iconify-icon
+                    icon="solar:clock-circle-bold-duotone"
+                    class="text-purple-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Animated lootbox opening sequence
+                </li>
+                <li class="flex items-center gap-2">
+                  <iconify-icon
+                    icon="solar:clock-circle-bold-duotone"
+                    class="text-purple-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Collection viewer &amp; marketplace UI
+                </li>
+                <li class="flex items-center gap-2">
+                  <iconify-icon
+                    icon="solar:clock-circle-bold-duotone"
+                    class="text-purple-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Admin dashboard for lootbox management
+                </li>
+                <li class="flex items-center gap-2">
+                  <iconify-icon
+                    icon="solar:clock-circle-bold-duotone"
+                    class="text-purple-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Pity counter progress bar per user
+                </li>
+              </ul>
+            </div>
+            <!-- Center dot -->
+            <div
+              class="hidden md:flex w-12 h-12 rounded-full items-center justify-center flex-shrink-0 relative z-10 text-xl"
+              style="
+                background: linear-gradient(135deg, #e9d5ff, #c084fc);
+                border: 3px solid white;
+                box-shadow: 0 0 20px rgba(192, 132, 252, 0.5);
+              "
+            >
+              2
+            </div>
+            <!-- Left: visual card -->
+            <div class="md:w-1/2 md:pr-12">
+              <div
+                class="bg-white rounded-2xl border-2 border-purple-100 p-5 shadow-sm"
+                style="box-shadow: 6px 6px 0px #e9d5ff"
+              >
+                <div class="flex items-center gap-3 mb-3">
+                  <div
+                    class="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-500 text-xl"
+                  >
+                    <iconify-icon
+                      icon="solar:palette-bold-duotone"
+                    ></iconify-icon>
+                  </div>
+                  <div>
+                    <div class="font-bold text-sm text-slate-800">
+                      User Interface
+                    </div>
+                    <div class="text-xs text-slate-400">
+                      Next.js · Tailwind · Sui SDK
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="bg-purple-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-purple-600">
+                      Wallet Connect
+                    </div>
+                    <div class="text-[10px] text-slate-400">Multi-provider</div>
+                  </div>
+                  <div class="bg-purple-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-purple-600">
+                      Box Opening
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      Animated reveal
+                    </div>
+                  </div>
+                  <div class="bg-purple-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-purple-600">
+                      Marketplace
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      List &amp; trade
+                    </div>
+                  </div>
+                  <div class="bg-purple-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-purple-600">
+                      Admin Panel
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      Manage lootboxes
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Phase 3 — GAME LAYER -->
+          <div
+            class="scroll-hidden relative flex flex-col md:flex-row items-center gap-8"
+            style="transition-delay: 300ms"
+          >
+            <!-- Left: content -->
+            <div class="md:w-1/2 md:pr-12 md:text-right">
+              <div
+                class="inline-flex items-center gap-2 bg-yellow-50 border border-yellow-200 px-3 py-1 rounded-full mb-3 text-xs font-bold text-yellow-600 uppercase tracking-wider"
+              >
+                <iconify-icon
+                  icon="solar:star-bold"
+                  style="font-size: 10px"
+                ></iconify-icon>
+                Future
+              </div>
+              <h3 class="text-3xl font-hand font-bold mb-3 text-slate-800">
+                Phase 3 — Game Layer
+              </h3>
+              <p class="text-sm text-slate-500 leading-relaxed mb-4">
+                GyateNFT metadata is intentionally game-ready. Rarity maps to
+                character tier, variant_multiplier maps to stat bonuses, and
+                each NFT has a unique sequential ID.
+              </p>
+              <ul
+                class="space-y-2 text-sm text-slate-600 md:flex md:flex-col md:items-end"
+              >
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:star-bold-duotone"
+                    class="text-yellow-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Turn-based or idle game using GyateNFTs as characters
+                </li>
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:star-bold-duotone"
+                    class="text-yellow-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Rarity &amp; variant determine base stats &amp; abilities
+                </li>
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:star-bold-duotone"
+                    class="text-yellow-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Seasonal event NFTs unlock limited game content
+                </li>
+                <li class="flex items-center gap-2 md:flex-row-reverse">
+                  <iconify-icon
+                    icon="solar:star-bold-duotone"
+                    class="text-yellow-400 flex-shrink-0"
+                  ></iconify-icon
+                  >Potential $GYATE token for staking &amp; governance
+                </li>
+              </ul>
+            </div>
+            <!-- Center dot -->
+            <div
+              class="hidden md:flex w-12 h-12 rounded-full items-center justify-center flex-shrink-0 relative z-10 text-lg"
+              style="
+                background: linear-gradient(135deg, #fff5b8, #fbbf24);
+                border: 3px solid white;
+                box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+              "
+            >
+              ⭐
+            </div>
+            <!-- Right: visual card -->
+            <div class="md:w-1/2 md:pl-12">
+              <div
+                class="bg-white rounded-2xl border-2 border-yellow-100 p-5 shadow-sm"
+                style="box-shadow: 6px 6px 0px #fff5b8"
+              >
+                <div class="flex items-center gap-3 mb-3">
+                  <div
+                    class="w-10 h-10 bg-yellow-50 rounded-xl flex items-center justify-center text-yellow-500 text-xl"
+                  >
+                    <iconify-icon
+                      icon="solar:gamepad-bold-duotone"
+                    ></iconify-icon>
+                  </div>
+                  <div>
+                    <div class="font-bold text-sm text-slate-800">
+                      GyateGyate Game
+                    </div>
+                    <div class="text-xs text-slate-400">
+                      NFTs as playable characters
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="bg-yellow-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-yellow-600">
+                      Rarity = Tier
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      Character power
+                    </div>
+                  </div>
+                  <div class="bg-yellow-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-yellow-600">
+                      Variant = Stats
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      Bonus multiplier
+                    </div>
+                  </div>
+                  <div class="bg-yellow-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-yellow-600">
+                      Seasonal NFTs
+                    </div>
+                    <div class="text-[10px] text-slate-400">Unlock content</div>
+                  </div>
+                  <div class="bg-yellow-50 rounded-lg p-2 text-center">
+                    <div class="text-xs font-bold text-yellow-600">
+                      $GYATE Token
+                    </div>
+                    <div class="text-[10px] text-slate-400">
+                      Stake &amp; govern
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Team -->
+    <section id="team" class="py-20 relative z-10">
+      <div class="max-w-4xl mx-auto px-4 md:px-6">
+        <div class="text-center mb-14 scroll-hidden">
+          <h2 class="text-4xl md:text-5xl font-bold mb-3">Meet the Team</h2>
+          <p class="text-slate-500 font-hand text-xl">
+            The people building GyateGyate
+          </p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto">
+          <!-- Raven Caguioa — Backend -->
+          <div class="scroll-hidden group" style="transition-delay: 0ms">
+            <div
+              class="relative rounded-3xl p-6 text-center overflow-hidden transition-all duration-300 group-hover:-translate-y-2"
+              style="
+                background: linear-gradient(145deg, #0a0a14, #0f0f1e);
+                border: 2px solid rgba(251, 191, 36, 0.2);
+                box-shadow: 0 4px 24px rgba(251, 191, 36, 0.12);
+              "
+            >
+              <!-- bg stars -->
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  border-radius: 22px;
+                  background-image:
+                    radial-gradient(
+                      1px 1px at 15% 20%,
+                      rgba(251, 191, 36, 0.6) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1px 1px at 80% 15%,
+                      rgba(255, 255, 255, 0.3) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1.5px 1.5px at 50% 65%,
+                      rgba(251, 191, 36, 0.5) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1px 1px at 90% 70%,
+                      rgba(255, 255, 255, 0.2) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1px 1px at 25% 85%,
+                      rgba(251, 191, 36, 0.4) 0%,
+                      transparent 100%
+                    );
+                  pointer-events: none;
+                  z-index: 0;
+                "
+              ></div>
+              <!-- shimmer -->
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  border-radius: 22px;
+                  background: linear-gradient(
+                    105deg,
+                    transparent 30%,
+                    rgba(251, 191, 36, 0.06) 50%,
+                    transparent 70%
+                  );
+                  background-size: 200% 200%;
+                  animation: urShimmer 3s ease-in-out infinite;
+                  pointer-events: none;
+                  z-index: 1;
+                "
+              ></div>
+              <!-- glow border -->
+              <div
+                style="
+                  position: absolute;
+                  inset: -2px;
+                  border-radius: 24px;
+                  background: linear-gradient(
+                    135deg,
+                    #92400e,
+                    #fbbf24,
+                    #f59e0b,
+                    #fde68a,
+                    #f59e0b,
+                    #fbbf24,
+                    #92400e
+                  );
+                  background-size: 300% 300%;
+                  animation: urGlowShift 3s ease infinite;
+                  z-index: 0;
+                  opacity: 0.6;
+                "
+              ></div>
+              <!-- inner wrap -->
+              <div style="position: relative; z-index: 2">
+                <!-- avatar circle -->
+                <div
+                  class="mx-auto mb-4 flex items-center justify-center"
+                  style="
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 50%;
+                    background: linear-gradient(
+                      135deg,
+                      #92400e,
+                      #fbbf24,
+                      #f59e0b
+                    );
+                    border: 3px solid rgba(251, 191, 36, 0.5);
+                    box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+                  "
+                >
+                  <iconify-icon
+                    icon="solar:code-square-bold-duotone"
+                    style="
+                      font-size: 32px;
+                      color: #fbbf24;
+                      filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.8));
+                    "
+                  ></iconify-icon>
+                </div>
+                <!-- role badge -->
+                <div
+                  class="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3"
+                  style="
+                    background: linear-gradient(135deg, #92400e, #78350f);
+                    color: #fbbf24;
+                    border: 1px solid rgba(251, 191, 36, 0.3);
+                    letter-spacing: 0.1em;
+                    text-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
+                  "
+                >
+                  ⚡ Backend Developer
+                </div>
+                <!-- name -->
+                <h3
+                  class="text-2xl font-hand font-bold mb-1"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #fde68a,
+                      #f59e0b,
+                      #fbbf24
+                    );
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                    filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4));
+                  "
+                >
+                  Raven Caguioa
+                </h3>
+                <!-- desc -->
+                <p
+                  class="text-sm leading-relaxed mb-4"
+                  style="color: rgba(251, 191, 36, 0.5)"
+                >
+                  Architected all four Move modules — nft, pool, lootbox, and
+                  marketplace. Built the pity system, variant engine, and Kiosk
+                  enforcement on Sui.
+                </p>
+                <!-- tech tags -->
+                <div class="flex flex-wrap gap-2 justify-center">
+                  <span
+                    class="px-2 py-1 rounded-md text-xs font-bold"
+                    style="
+                      background: rgba(251, 191, 36, 0.1);
+                      color: rgba(251, 191, 36, 0.7);
+                      border: 1px solid rgba(251, 191, 36, 0.2);
+                    "
+                    >Move 2024</span
+                  >
+                  <span
+                    class="px-2 py-1 rounded-md text-xs font-bold"
+                    style="
+                      background: rgba(251, 191, 36, 0.1);
+                      color: rgba(251, 191, 36, 0.7);
+                      border: 1px solid rgba(251, 191, 36, 0.2);
+                    "
+                    >Sui Blockchain</span
+                  >
+                  <span
+                    class="px-2 py-1 rounded-md text-xs font-bold"
+                    style="
+                      background: rgba(251, 191, 36, 0.1);
+                      color: rgba(251, 191, 36, 0.7);
+                      border: 1px solid rgba(251, 191, 36, 0.2);
+                    "
+                    >Smart Contracts</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clarence Vince Razo — Frontend -->
+          <div class="scroll-hidden group" style="transition-delay: 150ms">
+            <div
+              class="relative rounded-3xl p-6 text-center overflow-hidden transition-all duration-300 group-hover:-translate-y-2"
+              style="
+                background: linear-gradient(145deg, #1a0524, #2d0a3e, #1a0524);
+                border: 2px solid rgba(232, 121, 249, 0.2);
+                box-shadow: 0 4px 24px rgba(192, 38, 211, 0.15);
+              "
+            >
+              <!-- bg stars -->
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  border-radius: 22px;
+                  background-image:
+                    radial-gradient(
+                      1px 1px at 10% 15%,
+                      rgba(232, 121, 249, 0.7) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1px 1px at 85% 10%,
+                      rgba(255, 255, 255, 0.3) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1.5px 1.5px at 45% 65%,
+                      rgba(232, 121, 249, 0.6) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1px 1px at 90% 72%,
+                      rgba(168, 85, 247, 0.5) 0%,
+                      transparent 100%
+                    ),
+                    radial-gradient(
+                      1px 1px at 20% 88%,
+                      rgba(232, 121, 249, 0.4) 0%,
+                      transparent 100%
+                    );
+                  pointer-events: none;
+                  z-index: 0;
+                "
+              ></div>
+              <!-- shimmer -->
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  border-radius: 22px;
+                  background: linear-gradient(
+                    105deg,
+                    transparent 30%,
+                    rgba(232, 121, 249, 0.07) 50%,
+                    transparent 70%
+                  );
+                  background-size: 200% 200%;
+                  animation: ssrShimmer 2.5s ease-in-out infinite;
+                  pointer-events: none;
+                  z-index: 1;
+                "
+              ></div>
+              <!-- glow border -->
+              <div
+                style="
+                  position: absolute;
+                  inset: -2px;
+                  border-radius: 24px;
+                  background: linear-gradient(
+                    135deg,
+                    #7e22ce,
+                    #e879f9,
+                    #a855f7,
+                    #ec4899,
+                    #7e22ce
+                  );
+                  background-size: 400% 400%;
+                  animation: ssrBorderShift 3s ease infinite;
+                  z-index: 0;
+                  opacity: 0.6;
+                "
+              ></div>
+              <!-- inner wrap -->
+              <div style="position: relative; z-index: 2">
+                <!-- avatar circle -->
+                <div
+                  class="mx-auto mb-4 flex items-center justify-center"
+                  style="
+                    width: 72px;
+                    height: 72px;
+                    border-radius: 50%;
+                    background: linear-gradient(
+                      135deg,
+                      #7e22ce,
+                      #a855f7,
+                      #e879f9
+                    );
+                    border: 3px solid rgba(232, 121, 249, 0.4);
+                    box-shadow: 0 0 20px rgba(232, 121, 249, 0.4);
+                  "
+                >
+                  <iconify-icon
+                    icon="solar:palette-bold-duotone"
+                    style="
+                      font-size: 32px;
+                      color: #f0abfc;
+                      filter: drop-shadow(0 0 8px rgba(232, 121, 249, 0.9));
+                    "
+                  ></iconify-icon>
+                </div>
+                <!-- role badge -->
+                <div
+                  class="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3"
+                  style="
+                    background: linear-gradient(135deg, #7e22ce, #a21caf);
+                    color: #f0abfc;
+                    border: 1px solid rgba(232, 121, 249, 0.3);
+                    letter-spacing: 0.1em;
+                    text-shadow: 0 0 6px rgba(232, 121, 249, 0.6);
+                  "
+                >
+                  💫 Frontend Developer
+                </div>
+                <!-- name -->
+                <h3
+                  class="text-2xl font-hand font-bold mb-1"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #f0abfc,
+                      #e879f9,
+                      #a855f7
+                    );
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                    filter: drop-shadow(0 0 4px rgba(232, 121, 249, 0.4));
+                  "
+                >
+                  Clarence Vince Razo
+                </h3>
+                <!-- desc -->
+                <p
+                  class="text-sm leading-relaxed mb-4"
+                  style="color: rgba(232, 121, 249, 0.5)"
+                >
+                  Crafting the full user experience — animated lootbox reveals,
+                  wallet integration, marketplace UI, and the admin dashboard
+                  for GyateGyate.
+                </p>
+                <!-- tech tags -->
+                <div class="flex flex-wrap gap-2 justify-center">
+                  <span
+                    class="px-2 py-1 rounded-md text-xs font-bold"
+                    style="
+                      background: rgba(232, 121, 249, 0.1);
+                      color: rgba(232, 121, 249, 0.7);
+                      border: 1px solid rgba(232, 121, 249, 0.2);
+                    "
+                    >Next.js</span
+                  >
+                  <span
+                    class="px-2 py-1 rounded-md text-xs font-bold"
+                    style="
+                      background: rgba(232, 121, 249, 0.1);
+                      color: rgba(232, 121, 249, 0.7);
+                      border: 1px solid rgba(232, 121, 249, 0.2);
+                    "
+                    >Tailwind CSS</span
+                  >
+                  <span
+                    class="px-2 py-1 rounded-md text-xs font-bold"
+                    style="
+                      background: rgba(232, 121, 249, 0.1);
+                      color: rgba(232, 121, 249, 0.7);
+                      border: 1px solid rgba(232, 121, 249, 0.2);
+                    "
+                    >Sui SDK</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Stats -->
+    <section class="py-16 relative z-10">
+      <div class="max-w-7xl mx-auto px-4 md:px-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div
+            class="bg-white p-6 rounded-2xl border-2 border-slate-100 text-center scroll-hidden"
+          >
+            <p
+              class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2"
+            >
+              Status
+            </p>
+            <h3 class="text-3xl font-hand font-bold text-slate-800">Live</h3>
+          </div>
+          <div
+            class="bg-white p-6 rounded-2xl border-2 border-slate-100 text-center scroll-hidden"
+            style="transition-delay: 100ms"
+          >
+            <p
+              class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2"
+            >
+              Rarity Tiers
+            </p>
+            <h3 class="text-3xl font-hand font-bold text-slate-800">6 Tiers</h3>
+          </div>
+          <div
+            class="bg-white p-6 rounded-2xl border-2 border-slate-100 text-center scroll-hidden"
+            style="transition-delay: 200ms"
+          >
+            <p
+              class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2"
+            >
+              Randomness
+            </p>
+            <h3 class="text-3xl font-hand font-bold text-slate-800">
+              On-Chain
+            </h3>
+          </div>
+          <div
+            class="bg-white p-6 rounded-2xl border-2 border-slate-100 text-center scroll-hidden"
+            style="transition-delay: 300ms"
+          >
+            <p
+              class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2"
+            >
+              Pity System
+            </p>
+            <h3 class="text-3xl font-hand font-bold text-slate-800">Pity ✦</h3>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="relative z-10 pt-20 pb-10 overflow-hidden">
+      <div class="max-w-4xl mx-auto px-4 mb-20 text-center scroll-hidden">
+        <h2
+          class="text-5xl md:text-7xl font-hand font-bold mb-6 text-slate-800"
+        >
+          Ready to open your fate?
+        </h2>
+        <div class="flex flex-col md:flex-row justify-center gap-4">
+          <button
+            class="bg-black text-white px-8 py-3 rounded-xl font-bold border-2 border-black hover:bg-slate-800 transition-all hover:scale-105"
+          >
+            Connect Wallet
+          </button>
+          <button
+            class="bg-white text-black px-8 py-3 rounded-xl font-bold border-2 border-slate-200 hover:border-black transition-all"
+          >
+            Read Docs
+          </button>
+        </div>
+      </div>
+      <div
+        class="max-w-7xl mx-auto px-4 md:px-6 border-t-2 border-slate-100 pt-10 flex flex-col md:flex-row justify-between items-center gap-6"
+      >
+        <div class="flex items-center gap-2">
+          <iconify-icon
+            icon="solar:box-bold-duotone"
+            class="text-2xl text-slate-400"
+          ></iconify-icon>
+          <span class="font-hand font-bold text-xl text-slate-600"
+            >GyateGyate</span
+          >
+        </div>
+        <div class="flex gap-6 text-sm text-slate-500 font-semibold">
+          <a href="#" class="hover:text-black transition-colors">Twitter</a>
+          <a href="#" class="hover:text-black transition-colors">Discord</a>
+          <a href="#" class="hover:text-black transition-colors">Docs</a>
+        </div>
+        <div
+          class="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full border border-blue-100"
+        >
+          <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+          <span class="text-xs font-bold text-blue-600 uppercase tracking-wide"
+            >Built on Sui</span
+          >
+        </div>
+      </div>
+      <div
+        class="absolute bottom-0 left-0 w-full h-2 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIxMCIgdmlld0JveD0iMCAwIDIwIDEwIiBmaWxsPSJub25lIiBzdHJva2U9IiNlMmU4ZjAiIHN0cm9rZS13aWR0aD0iMiI+PHBhdGggZD0iTTAgMTBRNSAwIDEwIDEwVDEwIDEwVDIwIDEwIiAvPjwvc3ZnPg==')] opacity-50"
+      ></div>
+    </footer>
+
+    <script>
+      // Parallax
+      const lerp = (s, e, f) => s + (e - s) * f;
+      let mouseX = 0,
+        mouseY = 0,
+        lerpX = 0,
+        lerpY = 0;
+      let isMobile = window.innerWidth < 768;
+      window.addEventListener("resize", () => {
+        isMobile = window.innerWidth < 768;
+      });
+      if (!isMobile) {
+        document.addEventListener("mousemove", (e) => {
+          mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+          mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+        });
+        const updateParallax = () => {
+          lerpX = lerp(lerpX, mouseX, 0.08);
+          lerpY = lerp(lerpY, mouseY, 0.08);
+          document.querySelectorAll(".parallax-layer").forEach((layer) => {
+            const depth = parseFloat(layer.getAttribute("data-depth"));
+            layer.style.transform = `translate3d(${lerpX * depth * 100}px,${lerpY * depth * 100}px,0)`;
+          });
+          requestAnimationFrame(updateParallax);
+        };
+        requestAnimationFrame(updateParallax);
+      }
+
+      // Scroll Animations
+      const scrollObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("scroll-visible");
+              scrollObserver.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.15, rootMargin: "0px 0px -50px 0px" },
+      );
+      document
+        .querySelectorAll(".scroll-hidden")
+        .forEach((el) => scrollObserver.observe(el));
+
+      // Scroll progress
+      window.addEventListener("scroll", () => {
+        const winScroll =
+          document.body.scrollTop || document.documentElement.scrollTop;
+        const height =
+          document.documentElement.scrollHeight -
+          document.documentElement.clientHeight;
+        document.getElementById("scroll-progress").style.width =
+          (winScroll / height) * 100 + "%";
+        const nav = document.getElementById("navbar");
+        winScroll > 50
+          ? nav.classList.add("shadow-sm")
+          : nav.classList.remove("shadow-sm");
+      });
+
+      // Legend card recycle hover fix
+      document.querySelectorAll(".nft-card-legend").forEach((card) => {
+        card.addEventListener("mouseenter", () => {
+          card.querySelector(".card-recycle").style.opacity = "1";
+        });
+        card.addEventListener("mouseleave", () => {
+          card.querySelector(".card-recycle").style.opacity = "0";
+        });
+      });
+
+      // Lootbox interaction
+      const box = document.getElementById("box-demo");
+      const hint = document.getElementById("box-hint");
+      let busy = false;
+
+      function triggerBox() {
+        if (busy) return;
+        box.click();
+      }
+
+      box.addEventListener("click", () => {
+        if (busy) return;
+        busy = true;
+        hint.style.opacity = "0";
+        box.style.animation = "none";
+        void box.offsetWidth;
+        box.classList.add("is-shaking");
+        setTimeout(() => {
+          box.classList.remove("is-shaking");
+          box.classList.add("is-open");
+          setTimeout(() => {
+            box.classList.remove("is-open");
+            hint.style.opacity = "";
+            setTimeout(() => {
+              box.style.animation = "";
+              busy = false;
+            }, 900);
+          }, 3200);
+        }, 480);
+      });
+    </script>
+  </body>
+</html>
