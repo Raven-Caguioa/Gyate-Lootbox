@@ -140,19 +140,21 @@ export function useAdminData() {
           pity_enabled:       fields.pity_enabled,
           multi_open_enabled: fields.multi_open_enabled,
           multi_open_size:    fields.multi_open_size,
-          total_opens:        fields.total_opens        ?? "0",
-          total_revenue_mist: fields.total_revenue_mist ?? "0",
-          total_gyate_spent:  fields.total_gyate_spent  ?? "0",
-          common_configs:     fields.common_configs.map((c: any) => ({ ...c.fields, rarity: 0 })),
-          rare_configs:       fields.rare_configs.map((c: any) => ({ ...c.fields, rarity: 1 })),
-          super_rare_configs: fields.super_rare_configs.map((c: any) => ({ ...c.fields, rarity: 2 })),
-          ssr_configs:        fields.ssr_configs.map((c: any) => ({ ...c.fields, rarity: 3 })),
-          ultra_rare_configs: fields.ultra_rare_configs.map((c: any) => ({ ...c.fields, rarity: 4 })),
-          legend_rare_configs:fields.legend_rare_configs.map((c: any) => ({ ...c.fields, rarity: 5 })),
+          // FIX: Move uses `total_opened`, not `total_opens`
+          total_opens:        fields.total_opened        ?? "0",
+          total_revenue_mist: fields.total_revenue_mist  ?? "0",
+          total_gyate_spent:  fields.total_gyate_spent   ?? "0",
+          common_configs:     (fields.common_configs      ?? []).map((c: any) => ({ ...c.fields, rarity: 0 })),
+          rare_configs:       (fields.rare_configs        ?? []).map((c: any) => ({ ...c.fields, rarity: 1 })),
+          super_rare_configs: (fields.super_rare_configs  ?? []).map((c: any) => ({ ...c.fields, rarity: 2 })),
+          ssr_configs:        (fields.ssr_configs         ?? []).map((c: any) => ({ ...c.fields, rarity: 3 })),
+          ultra_rare_configs: (fields.ultra_rare_configs  ?? []).map((c: any) => ({ ...c.fields, rarity: 4 })),
+          legend_rare_configs:(fields.legend_rare_configs ?? []).map((c: any) => ({ ...c.fields, rarity: 5 })),
         });
       }
     } catch (err) {
       console.error("Failed to fetch full box data:", err);
+      setter(null);
     } finally {
       setLoading?.(false);
     }
@@ -166,27 +168,30 @@ export function useAdminData() {
         id: LOOTBOX_REGISTRY,
         options: { showContent: true },
       });
-      const allIds = (registryObj.data?.content as any)?.fields?.all_ids || [];
+      const allIds = (registryObj.data?.content as any)?.fields?.all_ids ?? [];
       if (allIds.length === 0) { setMyLootboxes([]); return; }
 
       const boxesData = await suiClient.multiGetObjects({ ids: allIds, options: { showContent: true } });
-      const boxes: LootboxOption[] = boxesData.map((obj: any) => {
-        const f = obj.data?.content?.fields;
-        return {
-          id:               obj.data?.objectId,
-          name:             f?.name             || "Unnamed Box",
-          isSetup:          f?.is_setup_mode    || false,
-          isActive:         f?.is_active        || false,
-          price:            f?.price            || "0",
-          gyatePrice:       f?.gyate_price      || "0",
-          totalOpens:       f?.total_opens      ?? "0",
-          totalRevenueMist: f?.total_revenue_mist ?? "0",
-          totalGyateSpent:  f?.total_gyate_spent  ?? "0",
-          pityEnabled:      f?.pity_enabled     || false,
-          multiOpenEnabled: f?.multi_open_enabled || false,
-          multiOpenSize:    f?.multi_open_size  || "10",
-        };
-      });
+      const boxes: LootboxOption[] = boxesData
+        .filter((obj: any) => obj.data?.content?.fields)
+        .map((obj: any) => {
+          const f = obj.data.content.fields;
+          return {
+            id:               obj.data.objectId,
+            name:             f.name              ?? "Unnamed Box",
+            isSetup:          f.is_setup_mode     ?? false,
+            isActive:         f.is_active         ?? false,
+            price:            f.price             ?? "0",
+            gyatePrice:       f.gyate_price       ?? "0",
+            // FIX: Move field is `total_opened`, not `total_opens`
+            totalOpens:       f.total_opened      ?? "0",
+            totalRevenueMist: f.total_revenue_mist ?? "0",
+            totalGyateSpent:  f.total_gyate_spent  ?? "0",
+            pityEnabled:      f.pity_enabled      ?? false,
+            multiOpenEnabled: f.multi_open_enabled ?? false,
+            multiOpenSize:    f.multi_open_size   ?? "10",
+          };
+        });
       setMyLootboxes(boxes);
     } catch (err) {
       console.error("Failed to fetch boxes:", err);
@@ -214,17 +219,26 @@ export function useAdminData() {
 
       if (allDynFields.length === 0) { setAchievements([]); return; }
 
-      const defObjects = await suiClient.multiGetObjects({ ids: allDynFields.map(f => f.objectId), options: { showContent: true } });
+      const defObjects = await suiClient.multiGetObjects({
+        ids: allDynFields.map(f => f.objectId),
+        options: { showContent: true },
+      });
+
       const parsed: AchievementDef[] = defObjects
         .map((obj: any) => {
           const f = obj.data?.content?.fields?.value?.fields ?? obj.data?.content?.fields;
           if (!f) return null;
           return {
-            id: String(f.id), name: f.name, description: f.description,
-            badge_image_url: f.badge_image_url, gyate_reward: f.gyate_reward,
-            requirement_type: Number(f.requirement_type), requirement_value: f.requirement_value,
-            requirement_rarity: Number(f.requirement_rarity), enabled: f.enabled,
-            total_claimed: f.total_claimed ?? "0",
+            id:                  String(f.id),
+            name:                f.name,
+            description:         f.description,
+            badge_image_url:     f.badge_image_url,
+            gyate_reward:        f.gyate_reward,
+            requirement_type:    Number(f.requirement_type),
+            requirement_value:   f.requirement_value,
+            requirement_rarity:  Number(f.requirement_rarity),
+            enabled:             f.enabled,
+            total_claimed:       f.total_claimed ?? "0",
           } as AchievementDef;
         })
         .filter((a): a is AchievementDef => a !== null);
@@ -245,8 +259,11 @@ export function useAdminData() {
       const fields = (obj.data?.content as any)?.fields;
       if (fields) {
         setTreasuryStats({
-          balance: fields.balance, totalFromLootboxes: fields.total_from_lootboxes,
-          totalFromMarketplace: fields.total_from_marketplace, totalWithdrawn: fields.total_withdrawn,
+          // Treasury balance is nested: fields.balance.fields.value
+          balance:               fields.balance?.fields?.value ?? fields.balance ?? "0",
+          totalFromLootboxes:    fields.total_from_lootboxes   ?? "0",
+          totalFromMarketplace:  fields.total_from_marketplace  ?? "0",
+          totalWithdrawn:        fields.total_withdrawn         ?? "0",
         });
       }
     } catch (err) {

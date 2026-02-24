@@ -592,7 +592,7 @@ function MiniNftCard() {
 const RARITIES = [
   { key:"common",  label:"Common",      emoji:"", chance:"40%", barW:"40%", img:"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_T-t1f46JJ1OEmztkG7cjFe-QB9mUV5Wfig&s",  recycle:"0.01" },
   { key:"rare",    label:"Rare",        emoji:"", chance:"30%", barW:"30%", img:"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTcSlCQ7h5F1OG5VGDLBY8UHU4mZETZhwFUwg&s", recycle:"0.03" },
-  { key:"sr",      label:"Super Rare",  emoji:"", chance:"15%", barW:"15%", img:"https://i.pinimg.com/236x/ee/3b/ae/ee3bae29f332b0cd8ab0b6dc84c7b2ea.jpg",                        recycle:"0.05" },
+  { key:"sr",      label:"Super Rare",  emoji:"", chance:"15%", barW:"15%", img:"https://copper-efficient-felidae-814.mypinata.cloud/ipfs/bafkreiarommzmxprjpmfduuotcuqdj3kealzqh4ta62z6w7kpm5nbilave",                        recycle:"0.05" },
   { key:"ssr",     label:"💫 SSR",      emoji:"", chance:"9%",  barW:"9%",  img:"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRaB_-Dl2XjgXajEn_kdAHB2iFSDRm1cM-_rQ&s",  recycle:"0.08" },
   { key:"ur",      label:"⚡ Ultra Rare",emoji:"",chance:"5%",  barW:"5%",  img:"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR1_WgzH_i2AMY0-3F88wo6IHxgwTx0v6Mkzw&s",  recycle:"0.15" },
   { key:"legend",  label:"★ Legend",   emoji:"", chance:"1%",  barW:"1%",  img:"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSPKSQUAUsjgz4CDWa2oT1CK7ymSXcwqvnijQ&s", recycle:"0.50" },

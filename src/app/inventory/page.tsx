@@ -566,7 +566,7 @@ export default function InventoryPage() {
         nft={selectedNft} open={!!selectedNft} onOpenChange={open => !open && setSelectedNft(null)}
         isInventory={true} onBurn={() => selectedNft && handleBurnNft(selectedNft)} isBurning={isBurning}
       />
-
+      
       {/* List dialog */}
       {listDialogOpen && (
         <div className="list-dialog-overlay" onClick={() => setListDialogOpen(false)}>
