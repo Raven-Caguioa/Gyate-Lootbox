@@ -1,6 +1,6 @@
 "use client";
 
-import { NFT, BURN_REWARDS } from "@/lib/mock-data";
+import { NFT } from "@/lib/mock-data";
 import {
   Dialog,
   DialogContent,
@@ -84,7 +84,7 @@ const DIALOG_STYLES = `
     pointer-events: none;
   }
 
-  /* Rarity ribbon — mirrors .group-card-count style pill */
+  /* Rarity ribbon */
   .nd-rarity-pill {
     position: absolute; top: 10px; left: 10px;
     font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
@@ -122,7 +122,7 @@ const DIALOG_STYLES = `
     background: white;
   }
 
-  /* Name — mirrors .group-card-name */
+  /* Name */
   .nd-name {
     font-family: 'Caveat', cursive;
     font-size: 36px; font-weight: 700;
@@ -130,7 +130,7 @@ const DIALOG_STYLES = `
     margin-bottom: 14px;
   }
 
-  /* Divider — matches inventory gradient dividers */
+  /* Divider */
   .nd-divider {
     width: 100%; height: 2px;
     background: linear-gradient(90deg, #c9b8ff, #ffb8d9, #b8ffe8);
@@ -139,7 +139,7 @@ const DIALOG_STYLES = `
     opacity: 0.5;
   }
 
-  /* Stats grid — mirrors .token-stats style but as cards */
+  /* Stats grid */
   .nd-stats-row {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
     margin-bottom: 2px;
@@ -165,7 +165,7 @@ const DIALOG_STYLES = `
   .nd-stat-bar-wrap { width: 100%; height: 3px; background: #f1f5f9; border-radius: 99px; overflow: hidden; margin-top: 5px; }
   .nd-stat-bar { height: 100%; border-radius: 99px; }
 
-  /* Metadata box — mirrors .token-row style */
+  /* Metadata box */
   .nd-meta {
     background: #fafafa;
     border: 2px solid #e2e8f0;
@@ -181,7 +181,7 @@ const DIALOG_STYLES = `
   .nd-meta-text { font-size: 12px; color: #64748b; line-height: 1.6; }
   .nd-meta-text strong { color: #1a1a1a; font-weight: 800; }
 
-  /* Burn box — mirrors .inv-btn.danger style */
+  /* Burn box */
   .nd-burn {
     background: #fff0f0;
     border: 2px solid #fca5a5;
@@ -205,7 +205,7 @@ const DIALOG_STYLES = `
   .nd-burn-desc { font-size: 11px; color: #94a3b8; margin-bottom: 12px; line-height: 1.5; }
   .nd-burn-desc strong { color: #ef4444; font-weight: 800; }
 
-  /* Burn button — mirrors .inv-btn.danger */
+  /* Burn button */
   .nd-burn-btn {
     width: 100%; padding: 10px 14px;
     border-radius: 15px 255px 15px 225px / 225px 15px 255px 15px;
@@ -238,9 +238,12 @@ export function NFTDetailDialog({
 }: NFTDetailDialogProps) {
   if (!nft) return null;
 
-  const rarity     = Math.min(nft.rarity ?? 0, 5);
-  const color      = RARITY_DOODLE_COLORS[rarity];
-  const burnReward = BURN_REWARDS[rarity] || 0;
+  const rarity = Math.min(nft.rarity ?? 0, 5);
+  const color  = RARITY_DOODLE_COLORS[rarity];
+
+  // Use burn_gyate_value stamped on the NFT at mint time — on-chain source of truth.
+  // Falls back to 0 if somehow not set (shouldn't happen for new mints).
+  const burnReward = nft.burnGyateValue ?? 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -252,7 +255,7 @@ export function NFTDetailDialog({
         </VisuallyHidden>
 
         <div className="nd-wrap">
-          {/* Offset shadow — same as group card */}
+          {/* Offset shadow */}
           <div className="nd-shadow" style={{ background: color.shadow }} />
 
           <div className="nd-card" style={{ borderColor: color.border }}>
@@ -267,7 +270,6 @@ export function NFTDetailDialog({
               <Image src={nft.image} alt={nft.name} fill className="object-cover" />
               <div className="nd-img-fade" />
 
-              {/* Rarity pill — mirrors .rarity-badge */}
               <div
                 className="nd-rarity-pill"
                 style={{ background: color.bg, borderColor: color.border, color: color.text }}
@@ -275,10 +277,8 @@ export function NFTDetailDialog({
                 {RARITY_LABELS[rarity]}
               </div>
 
-              {/* Global ID */}
               <div className="nd-global-id">#{String(nft.globalId).padStart(4, "0")}</div>
 
-              {/* Variant */}
               {nft.variantType && nft.variantType !== "Normal" && (
                 <div className="nd-variant-pill">{nft.variantType}</div>
               )}
@@ -289,7 +289,6 @@ export function NFTDetailDialog({
 
               <div className="nd-name">{nft.name}</div>
 
-              {/* Stats — mirrors .token-stats but as visual cards */}
               <div className="nd-stats-row">
                 <StatCard
                   icon={<Shield size={10} className="text-blue-400" />}
@@ -310,7 +309,6 @@ export function NFTDetailDialog({
 
               <div className="nd-divider" />
 
-              {/* Metadata */}
               <div className="nd-meta">
                 <div className="nd-meta-label">Protocol Metadata</div>
                 <div className="nd-meta-text">
@@ -323,7 +321,6 @@ export function NFTDetailDialog({
                 </div>
               </div>
 
-              {/* Burn */}
               {isInventory && (
                 <>
                   <div className="nd-divider" />

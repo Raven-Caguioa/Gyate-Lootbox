@@ -289,20 +289,8 @@ function normalizeSuiId(id: string | any): string {
 }
 function shortenId(id: string): string { return `${id.slice(0, 6)}...${id.slice(-4)}`; }
 
-/**
- * Resolve a player's PlayerStats shared-object ID from the StatsRegistry table.
- *
- * StatsRegistry holds a NESTED Table<address, ID> called stats_by_owner.
- * That inner table has its own object ID (table.fields.id.id).
- * We must fetch the registry first to get the inner table ID, THEN
- * call getDynamicFieldObject on that inner table ID — NOT on STATS_REGISTRY directly.
- *
- * Wrong:  getDynamicFieldObject(STATS_REGISTRY, address)      ← was broken
- * Correct: getDynamicFieldObject(innerTableId,   address)      ← fixed
- */
 async function resolveStatsId(suiClient: any, playerAddress: string): Promise<string | null> {
   try {
-    // Step 1: get the StatsRegistry object to find the inner table's own ID
     const registryObj = await suiClient.getObject({
       id: STATS_REGISTRY,
       options: { showContent: true },
@@ -312,14 +300,10 @@ async function resolveStatsId(suiClient: any, playerAddress: string): Promise<st
       console.error("resolveStatsId: could not find inner table ID in StatsRegistry");
       return null;
     }
-
-    // Step 2: query the inner table for this player's entry
     const field = await suiClient.getDynamicFieldObject({
       parentId: tableId,
       name: { type: "address", value: playerAddress },
     });
-
-    // Step 3: the value IS the PlayerStats object ID
     const rawId = (field?.data?.content as any)?.fields?.value;
     if (!rawId) return null;
     return typeof rawId === "string" ? rawId : rawId?.id ?? null;
@@ -405,6 +389,7 @@ export default function InventoryPage() {
           image: f.image_url || "https://images.unsplash.com/photo-1743355694962-40376ef681da?q=80&w=400",
           hp: parseInt(f.hp ?? "0"), atk: parseInt(f.atk ?? "0"), spd: parseInt(f.spd ?? "0"),
           baseValue: parseInt(f.base_value ?? "0"), actualValue: parseInt(f.actual_value ?? "0"),
+          burnGyateValue: parseInt(f.burn_gyate_value ?? "0"),
           lootboxSource: f.lootbox_source ?? "", globalId: parseInt(f.global_sequential_id ?? "0"),
           kioskId, kioskCapId, isListed: listedNftIds.has(objectId),
         } as NFTWithListed;
@@ -441,21 +426,24 @@ export default function InventoryPage() {
     return groups.find(g => g.name === expandedGroup)?.items ?? [];
   }, [expandedGroup, groups]);
 
+  // ── Auto-navigate back when the expanded group is emptied ────────────
+  useEffect(() => {
+    if (expandedGroup && !groups.find(g => g.name === expandedGroup)) {
+      setExpandedGroup(null);
+    }
+  }, [groups, expandedGroup]);
+
   // ── Burn ─────────────────────────────────────────────────────────────
   const handleBurnNft = async (nft: NFT) => {
     if (!account || !nft.kioskId) return;
-    // Snapshot signer address immediately — account.address can change mid-async
-    // if the user switches wallets, causing a wrong-wallet object in the tx.
     const signerAddress = account.address;
     setIsBurning(true);
     try {
-      // ── Re-fetch KioskOwnerCap fresh at burn time ─────────────────────────
       const capsRes = await suiClient.getOwnedObjects({
         owner: signerAddress,
         filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
         options: { showContent: true },
       });
-      // Match the cap to the specific kiosk this NFT lives in
       const freshCap = capsRes.data.find(
         (c) => (c.data?.content as any)?.fields?.for === nft.kioskId
       );
@@ -469,7 +457,6 @@ export default function InventoryPage() {
       }
       const freshCapId = freshCap.data.objectId;
 
-      // ── PlayerStats (SHARED object — resolve via StatsRegistry) ──────────
       const statsId = await resolveStatsId(suiClient, signerAddress);
       if (!statsId) {
         toast({
@@ -485,7 +472,7 @@ export default function InventoryPage() {
         target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
         arguments: [
           txb.object(nft.kioskId),
-          txb.object(freshCapId),  // ← always fresh, always owned by current signer
+          txb.object(freshCapId),
           txb.object(GATEKEEPER_CAP),
           txb.object(statsId),
           txb.pure.id(nft.id),
@@ -494,7 +481,10 @@ export default function InventoryPage() {
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
           toast({ title: "Hero Sacrificed 🔥", description: "You received $GYATE tokens." });
-          setIsBurning(false); setSelectedNft(null); setTimeout(fetchUserNfts, 3000);
+          setIsBurning(false);
+          setSelectedNft(null);
+          // Delay to let the node index the burn before re-fetching
+          setTimeout(fetchUserNfts, 3000);
         },
         onError: (err) => {
           toast({ variant: "destructive", title: "Burn failed", description: err.message });
@@ -511,7 +501,6 @@ export default function InventoryPage() {
 
   const handleListNft = async () => {
     if (!listingNft || !account || !listingNft.kioskId || !listingNft.kioskCapId) return;
-    const signerAddress = account.address; // snapshot before any await
     const priceFloat = parseFloat(listPriceSui);
     if (isNaN(priceFloat) || priceFloat <= 0) { toast({ variant: "destructive", title: "Enter a valid price" }); return; }
     const priceMist = BigInt(Math.round(priceFloat * 1_000_000_000));
@@ -540,7 +529,6 @@ export default function InventoryPage() {
 
   const handleDelistNft = async (nft: NFT) => {
     if (!account || !nft.kioskId || !nft.kioskCapId) return;
-    const signerAddress = account.address; // snapshot before any await
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.DELIST_NFT}`,
@@ -609,7 +597,7 @@ export default function InventoryPage() {
           </div>
         ) : expandedGroup ? (
           <ExpandedGroupView
-            group={groups.find(g => g.name === expandedGroup)!}
+            group={groups.find(g => g.name === expandedGroup)}
             items={expandedItems}
             onBack={() => setExpandedGroup(null)}
             onSelectNft={setSelectedNft}
@@ -723,9 +711,16 @@ function DoodleGroupCard({ group, onClick }: { group: NFTGroup; onClick: () => v
 // ─────────────────────────────────────────────
 
 function ExpandedGroupView({ group, items, onBack, onSelectNft, onList, onDelist }: {
-  group: NFTGroup; items: NFTWithListed[]; onBack: () => void;
-  onSelectNft: (nft: NFT) => void; onList: (nft: NFT) => void; onDelist: (nft: NFT) => void;
+  group: NFTGroup | undefined;
+  items: NFTWithListed[];
+  onBack: () => void;
+  onSelectNft: (nft: NFT) => void;
+  onList: (nft: NFT) => void;
+  onDelist: (nft: NFT) => void;
 }) {
+  // Guard: group was emptied (last NFT burned) — parent useEffect will navigate back
+  if (!group) return null;
+
   const color = RARITY_DOODLE_COLORS[group.rarity] ?? RARITY_DOODLE_COLORS[0];
   const listedCount = items.filter(i => i.isListed).length;
 
