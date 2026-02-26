@@ -1,16 +1,22 @@
 export const SUI_NETWORK = 'testnet';
 
-export const PACKAGE_ID         = "0xba75b672a6667d618922dec437c2de3b43f082232390fae1fdb2f7cbc7d9a94e";
-export const PUBLISHER          = "0x7d3f380518b701671820e9caca3d0193f972fdd04f4e7a6f3a14481d635a55c7";
-export const TREASURY_CAP       = "0x8b614e740d2516c877befda35a0db8c16304b9862c6b842918cda8bd34d2f183";
-export const COIN_METADATA      = "0x09064d8786310ffd08e366db9f2001db89fb1f5150bc5c2273b3d8cbcf58576f";
-export const NFT_DISPLAY        = "0x45a0f0fbcc24c6372bc91fcd6e1afad2dd711facbd0d5dcc422995abfbe7b6f2";
-export const LOOTBOX_REGISTRY   = "0x1507d0d2fc9ada2c76ed46fe4fa333891592842fbc66a019f45bb78e737c0e72";
-export const TREASURY_POOL      = "0x5041954fec0603127c38f6d4443d668eb898a8822e664f231bdc364037bd30f8";
-export const KIOSK_REGISTRY     = "0xf28807c3456d57004b62c2e64995dc3ae6f7497af434e1ebd30100716a844598";
-export const ACHIEVEMENT_REGISTRY = "0x7316d0c2e5333f4572286764d1fcfcf77fb2c0a52058ee088f5ee842d7ba4174";
-export const POLICY_ADMIN       = "0x5418f3f4d057e0f3033a3017971b12d5e1ab589416b44580b0f9189402a10c2d";
-export const RANDOM_STATE       = "0x8";
+// ─────────────────────────────────────────────────────────────────────────────
+// DEPLOYMENT — tx: 3fhwNrrf9jv8KjBRjsxbH2u2Qju3t5D7bw6kffKmqKre
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const PACKAGE_ID           = "0x7537db862cfc78cfd8961a8a92ada168d01c9c243c81d30baf110267d76fa332";
+export const PUBLISHER            = "0x36650c7078424507c14e0900314f4d54614063b0594264938c3ebe52ecbd07d4";
+export const TREASURY_CAP         = "0x890c4974f33a781cae053c9cba5b9abcd413f7965b4b3ac65be7dad2bd5f04bc";
+export const COIN_METADATA        = "0x08c5af663868e52c39ea0f828f2a6189705dbc26023467676188a87acc0345bf";
+export const NFT_DISPLAY          = "0xbe4524dee24024ec5f79518bef2b4bd552712fc0d6163bfe151853d2c0c0fec3";
+export const LOOTBOX_REGISTRY     = "0x8b2bdc8e2292ddc64c14494cdf2f07f90fb0fdbabb331fba7ed263d9c11c9a37";
+export const TREASURY_POOL        = "0x0d4390b99f15430414157d0f2190b49bc6c8ba38b1314417e6ff80585a148abd";
+export const KIOSK_REGISTRY       = "0x3fae276b9177b0f97c622957ac0ba99e954d5505b7379c6d386e70cc01b1f22c";
+export const ACHIEVEMENT_REGISTRY = "0xea10f2b80f404727cdd1ae804b2cc2d874e9c72af3221934cef4b3a98a9e61c3";
+export const STATS_REGISTRY       = "0xcaa1758f37410694b4632f215e90cbb779ea82f7e7a0e1bfe335383a5bcecee2";
+export const POLICY_ADMIN         = "0xe611aba748a837725401f003d99573b7a7e8844a23950a3ed16e8b28f9ba01b6";
+export const UPGRADE_CAP          = "0x40aef07817a3f701a3b8bf28a23995212c9f17e858f57788fd190b431ce6bb6d";
+export const RANDOM_STATE         = "0x8";
 
 /**
  * TransferPolicy<GyateNFT> — shared object for marketplace trades.
@@ -18,23 +24,21 @@ export const RANDOM_STATE       = "0x8";
  *
  * Command:
  *   sui client switch --address 0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a
- *   sui client call `
- *     --package 0xba75b672a6667d618922dec437c2de3b43f082232390fae1fdb2f7cbc7d9a94e `
- *     --module marketplace `
- *     --function create_transfer_policy `
- *     --args 0x7d3f380518b701671820e9caca3d0193f972fdd04f4e7a6f3a14481d635a55c7 `
+ *   sui client call \
+ *     --package 0x7537db862cfc78cfd8961a8a92ada168d01c9c243c81d30baf110267d76fa332 \
+ *     --module marketplace \
+ *     --function create_transfer_policy \
+ *     --args 0x36650c7078424507c14e0900314f4d54614063b0594264938c3ebe52ecbd07d4 \
  *     --gas-budget 10000000
  */
 export const TRANSFER_POLICY = "TODO_run_create_transfer_policy";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OBJECT_IDS — grouped reference used by profile page + achievements tab
-// Mirrors the individual exports above so you can use either style:
-//   import { TREASURY_CAP } from "@/lib/sui-constants"
-//   import { OBJECT_IDS } from "@/lib/sui-constants" → OBJECT_IDS.TREASURY_CAP
+// OBJECT_IDS — grouped reference
 // ─────────────────────────────────────────────────────────────────────────────
 export const OBJECT_IDS = {
   ACHIEVEMENT_REGISTRY,
+  STATS_REGISTRY,
   LOOTBOX_REGISTRY,
   TREASURY_POOL,
   TREASURY_CAP,
@@ -95,9 +99,10 @@ export const FUNCTIONS = {
   BURN:       'burn',
 
   // Achievement
-  INITIALIZE_STATS:   'initialize_stats',
-  CLAIM_ACHIEVEMENT:  'claim_achievement',
-  CREATE_ACHIEVEMENT: 'create_achievement',
+  INITIALIZE_STATS:      'initialize_stats',
+  CLAIM_ACHIEVEMENT:     'claim_achievement',
+  CREATE_ACHIEVEMENT:    'create_achievement',
+  ADMIN_GRANT_ACHIEVEMENT: 'admin_grant_achievement',
 
   // Collection
   CREATE_COLLECTION_SET:              'create_collection_set',
