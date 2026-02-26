@@ -443,11 +443,34 @@ export default function InventoryPage() {
 
   // ── Burn ─────────────────────────────────────────────────────────────
   const handleBurnNft = async (nft: NFT) => {
-    if (!account || !nft.kioskId || !nft.kioskCapId) return;
+    if (!account || !nft.kioskId) return;
     setIsBurning(true);
     try {
+      // ── Re-fetch KioskOwnerCap fresh at burn time ─────────────────────────
+      // The cap stored on the NFT object at load time may be stale or belong
+      // to a previously-connected wallet. Always query fresh owned objects for
+      // the CURRENT signer right before building the tx, so the cap is
+      // guaranteed to be owned by account.address and matches this kiosk.
+      const capsRes = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
+        options: { showContent: true },
+      });
+      // Match the cap to the specific kiosk this NFT lives in
+      const freshCap = capsRes.data.find(
+        (c) => (c.data?.content as any)?.fields?.for === nft.kioskId
+      );
+      if (!freshCap?.data?.objectId) {
+        toast({
+          variant: "destructive",
+          title: "Kiosk cap not found",
+          description: "Could not find the KioskOwnerCap for your kiosk. Try refreshing.",
+        });
+        setIsBurning(false); return;
+      }
+      const freshCapId = freshCap.data.objectId;
+
       // ── PlayerStats (SHARED object — resolve via StatsRegistry) ──────────
-      // PlayerStats is a shared object; it won't show in getOwnedObjects.
       const statsId = await resolveStatsId(suiClient, account.address);
       if (!statsId) {
         toast({
@@ -463,9 +486,9 @@ export default function InventoryPage() {
         target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
         arguments: [
           txb.object(nft.kioskId),
-          txb.object(nft.kioskCapId),
+          txb.object(freshCapId),  // ← always fresh, always owned by current signer
           txb.object(TREASURY_CAP),
-          txb.object(statsId),   // shared PlayerStats — pass by ID
+          txb.object(statsId),
           txb.pure.id(nft.id),
         ],
       });

@@ -16,9 +16,6 @@ import { useToast } from "@/hooks/use-toast";
 import { RARITY_LABELS } from "@/lib/mock-data";
 import type { AchievementDef } from "../_hooks/use-admin-data";
 
-// NOTE: Add STATS_REGISTRY to your sui-constants.ts:
-// export const STATS_REGISTRY = "0x..."; // the StatsRegistry shared object ID from deployment
-
 const REQ_LABELS: Record<number, string> = {
   0: "Open Count", 1: "Burn Count", 2: "Rarity Mint", 3: "GYATE Spent", 4: "Admin Granted",
 };
@@ -49,8 +46,23 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
   const [resolveError, setResolveError]         = useState<string | null>(null);
 
   // ── Resolve player stats ID from StatsRegistry ─────────────────────────────
-  // Uses getDynamicFieldObject: StatsRegistry stores Table<address, ID>,
-  // which Sui exposes as dynamic fields keyed by address.
+  //
+  // StatsRegistry layout on-chain:
+  //   StatsRegistry {
+  //     id: UID,
+  //     stats_by_owner: Table<address, ID>,  ← this Table has its OWN object ID
+  //     total_players: u64,
+  //   }
+  //
+  // A Sui Table<K,V> is stored as a dynamic-field bag whose parent is the
+  // Table's own UID (at stats_by_owner.fields.id.id), NOT the parent object's ID.
+  //
+  // Wrong: getDynamicFieldObject(STATS_REGISTRY, address)   ← was broken
+  // Correct:
+  //   Step 1 → getObject(STATS_REGISTRY)  →  extract stats_by_owner.fields.id.id
+  //   Step 2 → getDynamicFieldObject(innerTableId, address)
+  //   Step 3 → result.data.objectId  is the PlayerStats shared object ID
+  //
   const resolveStatsId = async (address: string) => {
     if (!address || address.length < 10) return;
     setIsResolving(true);
@@ -58,21 +70,44 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
     setResolveError(null);
 
     try {
-      const result = await suiClient.getDynamicFieldObject({
-        parentId: STATS_REGISTRY,
-        name: { type: "address", value: address },
+      // Step 1: fetch StatsRegistry to get the inner table's own object ID
+      const registryObj = await suiClient.getObject({
+        id: STATS_REGISTRY,
+        options: { showContent: true },
       });
 
-      if (!result.data) {
-        setResolveError("Player has not initialized stats yet.");
-        setIsResolving(false);
+      const tableId =
+        (registryObj.data?.content as any)?.fields?.stats_by_owner?.fields?.id?.id;
+
+      if (!tableId) {
+        setResolveError("Could not read StatsRegistry — check STATS_REGISTRY constant.");
         return;
       }
 
-      // The dynamic field value is the PlayerStats object ID
-      const statsId = result.data.objectId;
+      // Step 2: query the inner table for this player's entry
+      const field = await suiClient.getDynamicFieldObject({
+        parentId: tableId,
+        name: { type: "address", value: address },
+      });
+
+      if (!field.data) {
+        setResolveError("Player has not initialized stats yet.");
+        return;
+      }
+
+      // Step 3: extract the PlayerStats object ID from the field value
+      const rawId = (field.data?.content as any)?.fields?.value;
+      const statsId: string | null =
+        typeof rawId === "string" ? rawId : rawId?.id ?? null;
+
+      if (!statsId) {
+        setResolveError("Could not parse PlayerStats ID from registry entry.");
+        return;
+      }
+
       setResolvedStatsId(statsId);
     } catch (err: any) {
+      // getDynamicFieldObject throws when the key doesn't exist
       setResolveError("Player has not initialized stats yet.");
     } finally {
       setIsResolving(false);
@@ -112,7 +147,6 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
   };
 
   // ── Admin grant ─────────────────────────────────────────────────────────────
-  // No manual ID entry needed — resolvedStatsId comes from StatsRegistry lookup.
   const handleAdminGrant = async () => {
     if (!grantTarget || !selectedGrantAch || !resolvedStatsId) return;
     setIsPending(true);
@@ -122,7 +156,7 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
       target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::admin_grant_achievement`,
       arguments: [
         txb.object(ACHIEVEMENT_REGISTRY),
-        txb.object(resolvedStatsId),          // shared PlayerStats — no ownership error
+        txb.object(resolvedStatsId),
         txb.pure.u64(BigInt(selectedGrantAch)),
         txb.object(TREASURY_CAP),
         txb.pure.address(grantTarget.trim()),
