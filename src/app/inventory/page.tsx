@@ -9,7 +9,7 @@ import {
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
-import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_CAP, STATS_REGISTRY } from "@/lib/sui-constants";
+import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, GATEKEEPER_CAP, STATS_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { NFT } from "@/lib/mock-data";
 import { Transaction } from "@mysten/sui/transactions";
@@ -444,15 +444,14 @@ export default function InventoryPage() {
   // ── Burn ─────────────────────────────────────────────────────────────
   const handleBurnNft = async (nft: NFT) => {
     if (!account || !nft.kioskId) return;
+    // Snapshot signer address immediately — account.address can change mid-async
+    // if the user switches wallets, causing a wrong-wallet object in the tx.
+    const signerAddress = account.address;
     setIsBurning(true);
     try {
       // ── Re-fetch KioskOwnerCap fresh at burn time ─────────────────────────
-      // The cap stored on the NFT object at load time may be stale or belong
-      // to a previously-connected wallet. Always query fresh owned objects for
-      // the CURRENT signer right before building the tx, so the cap is
-      // guaranteed to be owned by account.address and matches this kiosk.
       const capsRes = await suiClient.getOwnedObjects({
-        owner: account.address,
+        owner: signerAddress,
         filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
         options: { showContent: true },
       });
@@ -471,7 +470,7 @@ export default function InventoryPage() {
       const freshCapId = freshCap.data.objectId;
 
       // ── PlayerStats (SHARED object — resolve via StatsRegistry) ──────────
-      const statsId = await resolveStatsId(suiClient, account.address);
+      const statsId = await resolveStatsId(suiClient, signerAddress);
       if (!statsId) {
         toast({
           variant: "destructive",
@@ -487,7 +486,7 @@ export default function InventoryPage() {
         arguments: [
           txb.object(nft.kioskId),
           txb.object(freshCapId),  // ← always fresh, always owned by current signer
-          txb.object(TREASURY_CAP),
+          txb.object(GATEKEEPER_CAP),
           txb.object(statsId),
           txb.pure.id(nft.id),
         ],
@@ -512,6 +511,7 @@ export default function InventoryPage() {
 
   const handleListNft = async () => {
     if (!listingNft || !account || !listingNft.kioskId || !listingNft.kioskCapId) return;
+    const signerAddress = account.address; // snapshot before any await
     const priceFloat = parseFloat(listPriceSui);
     if (isNaN(priceFloat) || priceFloat <= 0) { toast({ variant: "destructive", title: "Enter a valid price" }); return; }
     const priceMist = BigInt(Math.round(priceFloat * 1_000_000_000));
@@ -540,6 +540,7 @@ export default function InventoryPage() {
 
   const handleDelistNft = async (nft: NFT) => {
     if (!account || !nft.kioskId || !nft.kioskCapId) return;
+    const signerAddress = account.address; // snapshot before any await
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.DELIST_NFT}`,

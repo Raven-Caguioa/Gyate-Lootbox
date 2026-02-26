@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { SuiProvider } from "@/components/sui-provider";
 
 export const metadata: Metadata = {
-  title: 'GyateGyate Platform - On-Chain Lootboxes & NFTs',
+  title: 'GyateGyate Gacha',
   description: 'Purchase lootboxes, mint rare NFTs, and trade on the integrated marketplace. Fully on-chain randomness and fair play.',
 };
 

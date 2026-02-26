@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, TREASURY_CAP, STATS_REGISTRY } from "@/lib/sui-constants";
+import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, GATEKEEPER_CAP, STATS_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -330,16 +330,22 @@ export default function ShopPage() {
 
   const handleSummon = async (box: LootboxData, mode: 'single' | 'multi' | 'pity' = 'single') => {
     if (!account) { toast({ variant: "destructive", title: "Wallet required" }); return; }
+
+    // ── Snapshot the signer address immediately ───────────────────────────────
+    // account.address from useCurrentAccount() can change mid-async if the user
+    // switches wallets. Capture it once here so every subsequent async call uses
+    // the same address that will actually sign the transaction. This prevents
+    // object ownership mismatches (e.g. KioskOwnerCap from a different wallet
+    // ending up in a tx signed by the current wallet).
+    const signerAddress = account.address;
+
     const totalChars = box.common_count + box.rare_count + box.super_rare_count + box.ssr_count + box.ultra_rare_count + box.legend_rare_count;
     if (totalChars === 0) { toast({ variant: "destructive", title: "Empty Protocol", description: "This lootbox has no character types registered yet." }); return; }
     setIsPending(true);
     try {
       // ── Kiosk ──────────────────────────────────────────────────────────────
-      // Always fetch with showContent: true so objectId and fields are present.
-      // Using data[0] without showContent silently returns objectId as undefined,
-      // causing the tx to reference a stale or wrong-wallet cap object.
       const ownedCaps = await suiClient.getOwnedObjects({
-        owner: account.address,
+        owner: signerAddress,
         filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
         options: { showContent: true },
       });
@@ -358,7 +364,7 @@ export default function ShopPage() {
       // PlayerStats is NOT owned by the player. It's a shared object registered
       // in StatsRegistry.stats_by_owner (Table<address, ID>). We fetch it via
       // getDynamicFieldObject so we get its on-chain object ID.
-      const statsId = await resolveStatsId(suiClient, account.address);
+      const statsId = await resolveStatsId(suiClient, signerAddress);
       if (!statsId) {
         toast({
           variant: "destructive",
@@ -391,7 +397,7 @@ export default function ShopPage() {
         paymentCoin = coin;
       } else {
         const gyateType = `${PACKAGE_ID}::${MODULE_NAMES.GYATE_COIN}::GYATE_COIN`;
-        const coins = await suiClient.getCoins({ owner: account.address, coinType: gyateType });
+        const coins = await suiClient.getCoins({ owner: signerAddress, coinType: gyateType });
         if (coins.data.length === 0) throw new Error("No $GYATE tokens found in wallet.");
         const [mainCoin, ...otherCoins] = coins.data.map((c: any) => c.coinObjectId);
         if (otherCoins.length > 0) txb.mergeCoins(txb.object(mainCoin), otherCoins.map((c: string) => txb.object(c)));
@@ -402,7 +408,7 @@ export default function ShopPage() {
       let progressId: string | null = null;
       if (mode === 'pity') {
         const progressObjects = await suiClient.getOwnedObjects({
-          owner: account.address,
+          owner: signerAddress,
           filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::UserProgress` },
           options: { showContent: true },
         });
@@ -417,7 +423,7 @@ export default function ShopPage() {
       const callArgs = [
         txb.object(box.id),
         txb.object(LOOTBOX_REGISTRY),
-        paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(TREASURY_CAP),
+        paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(GATEKEEPER_CAP),
       ];
       if (mode === 'pity' && progressId) callArgs.push(txb.object(progressId));
       callArgs.push(

@@ -1,21 +1,26 @@
 export const SUI_NETWORK = 'testnet';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DEPLOYMENT — tx: 3fhwNrrf9jv8KjBRjsxbH2u2Qju3t5D7bw6kffKmqKre
+// DEPLOYMENT — tx: 2ufiE29Spf8zjYRmvZ4tPsWVqxqphFxz1uTNhvTQn69f
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const PACKAGE_ID           = "0x7537db862cfc78cfd8961a8a92ada168d01c9c243c81d30baf110267d76fa332";
-export const PUBLISHER            = "0x36650c7078424507c14e0900314f4d54614063b0594264938c3ebe52ecbd07d4";
-export const TREASURY_CAP         = "0x890c4974f33a781cae053c9cba5b9abcd413f7965b4b3ac65be7dad2bd5f04bc";
-export const COIN_METADATA        = "0x08c5af663868e52c39ea0f828f2a6189705dbc26023467676188a87acc0345bf";
-export const NFT_DISPLAY          = "0xbe4524dee24024ec5f79518bef2b4bd552712fc0d6163bfe151853d2c0c0fec3";
-export const LOOTBOX_REGISTRY     = "0x8b2bdc8e2292ddc64c14494cdf2f07f90fb0fdbabb331fba7ed263d9c11c9a37";
-export const TREASURY_POOL        = "0x0d4390b99f15430414157d0f2190b49bc6c8ba38b1314417e6ff80585a148abd";
-export const KIOSK_REGISTRY       = "0x3fae276b9177b0f97c622957ac0ba99e954d5505b7379c6d386e70cc01b1f22c";
-export const ACHIEVEMENT_REGISTRY = "0xea10f2b80f404727cdd1ae804b2cc2d874e9c72af3221934cef4b3a98a9e61c3";
-export const STATS_REGISTRY       = "0xcaa1758f37410694b4632f215e90cbb779ea82f7e7a0e1bfe335383a5bcecee2";
-export const POLICY_ADMIN         = "0xe611aba748a837725401f003d99573b7a7e8844a23950a3ed16e8b28f9ba01b6";
-export const UPGRADE_CAP          = "0x40aef07817a3f701a3b8bf28a23995212c9f17e858f57788fd190b431ce6bb6d";
+export const PACKAGE_ID           = "0xb90ec9144cb92d9c6f0cd1650a35e47856fbe9cbe3fceaaca2738eb236999649";
+export const PUBLISHER            = "0x3652061274824b49465d4b74e94066e7494615f12a7892b7bd5ba04949b304dc";
+
+// CHANGED: replaces the old TREASURY_CAP (0x890c...).
+// GatekeeperCap wraps TreasuryCap inside a SHARED object so any player
+// transaction can pass it as &mut without the chain rejecting for wrong signer.
+export const GATEKEEPER_CAP       = "0x853b74cd71014b80faf2508ce74eb27ab449bc657b9b08d073b23dd69b5d1fd6";
+
+export const COIN_METADATA        = "0x284195496466fbc0064e2aa7907e85f34f670c7a6c6fd2c377a00f2401e2c0bb";
+export const NFT_DISPLAY          = "0x06bf45f75bfb901fce18a0bf1489ca682726f2af19a8d33659f36368bdf9d2bd";
+export const LOOTBOX_REGISTRY     = "0x849b557c6e1fb182247ab25ac1b837664abfe1b499edffc5070fefb53ea614a3";
+export const TREASURY_POOL        = "0xdf9719742f42f7574d5c13afa203d5b03884cffb3713168a7003e1f999b800e5";
+export const KIOSK_REGISTRY       = "0x027dc6fb30d4e3c7063eb3102c1ddb13f102559bfaa466124a66c06aee98cd7d";
+export const ACHIEVEMENT_REGISTRY = "0x23fc8583b262f6d3c8a0afb955236aa3d0186206d62dbd7d9daa9bb680107ac7";
+export const STATS_REGISTRY       = "0x3944a1862eb13bd69aa690d2763eb30e9e97f013b1b75cd0d27e03f048567d85";
+export const POLICY_ADMIN         = "0xb333efc89495fed7c0d16ee5c039b399bf775505ad965b03c7d13ab8302c8d2f";
+export const UPGRADE_CAP          = "0x42224f77ce7fdc728d534b935fdf5dfb4e57ee253bd5f6ccee37ee3c8e99bb0d";
 export const RANDOM_STATE         = "0x8";
 
 /**
@@ -25,10 +30,10 @@ export const RANDOM_STATE         = "0x8";
  * Command:
  *   sui client switch --address 0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a
  *   sui client call \
- *     --package 0x7537db862cfc78cfd8961a8a92ada168d01c9c243c81d30baf110267d76fa332 \
+ *     --package 0xb90ec9144cb92d9c6f0cd1650a35e47856fbe9cbe3fceaaca2738eb236999649 \
  *     --module marketplace \
  *     --function create_transfer_policy \
- *     --args 0x36650c7078424507c14e0900314f4d54614063b0594264938c3ebe52ecbd07d4 \
+ *     --args 0x3652061274824b49465d4b74e94066e7494615f12a7892b7bd5ba04949b304dc \
  *     --gas-budget 10000000
  */
 export const TRANSFER_POLICY = "TODO_run_create_transfer_policy";
@@ -41,7 +46,7 @@ export const OBJECT_IDS = {
   STATS_REGISTRY,
   LOOTBOX_REGISTRY,
   TREASURY_POOL,
-  TREASURY_CAP,
+  GATEKEEPER_CAP,
   KIOSK_REGISTRY,
   TRANSFER_POLICY,
   POLICY_ADMIN,
@@ -96,12 +101,13 @@ export const FUNCTIONS = {
 
   // Gyate Coin
   ADMIN_MINT: 'admin_mint',
-  BURN:       'burn',
+  USER_BURN:  'user_burn',
+  ADMIN_BURN: 'admin_burn',
 
   // Achievement
-  INITIALIZE_STATS:      'initialize_stats',
-  CLAIM_ACHIEVEMENT:     'claim_achievement',
-  CREATE_ACHIEVEMENT:    'create_achievement',
+  INITIALIZE_STATS:        'initialize_stats',
+  CLAIM_ACHIEVEMENT:       'claim_achievement',
+  CREATE_ACHIEVEMENT:      'create_achievement',
   ADMIN_GRANT_ACHIEVEMENT: 'admin_grant_achievement',
 
   // Collection

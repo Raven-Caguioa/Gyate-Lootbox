@@ -14,8 +14,15 @@ import { ArrowUpRight, RefreshCw } from "lucide-react";
 import { PACKAGE_ID, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { ProtocolInspector } from "./protocol-inspector";
+import { ImagePickerField } from "@/components/ImagePickerField";
 import type { LootboxOption, LootboxFullData } from "../_hooks/use-admin-data";
 import { RARITY_LABELS } from "@/lib/mock-data";
+
+// ── Set this to the Pinata group ID you want the image picker to read from ───
+// Falls back to PINATA_VARIANT_GROUP_ID (server) but here we pass a dedicated
+// group for source NFT art (PINATA_NFT_IMAGE_GROUP_ID).
+// You can also hard-code the group ID string here if you prefer.
+const NFT_IMAGE_GROUP_ID = process.env.NEXT_PUBLIC_NFT_IMAGE_GROUP_ID ?? undefined;
 
 interface LootboxFactoryTabProps {
   draftBoxes: LootboxOption[];
@@ -46,8 +53,8 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
   const [nftRarity, setNftRarity]       = useState("0");
   const [nftName, setNftName]           = useState("");
   const [nftValue, setNftValue]         = useState("1000000000");
-  const [nftImage, setNftImage]         = useState("");
-  const [burnGyateValue, setBurnGyateValue] = useState("0"); // 0 = use rarity default
+  const [nftImage, setNftImage]         = useState("");        // ← managed by ImagePickerField
+  const [burnGyateValue, setBurnGyateValue] = useState("0");
   const [stats, setStats] = useState({
     minHp: "100", maxHp: "200",
     minAtk: "10",  maxAtk: "20",
@@ -56,7 +63,8 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
 
   useEffect(() => {
     fetchFullBoxData(targetBoxId, setContentBoxData, setIsFetchingFullData);
-  }, [targetBoxId, fetchFullBoxData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetBoxId]); // intentionally omit fetchFullBoxData — new ref every render
 
   const handleCreateDraft = async () => {
     if (!newBoxName || !newBoxPrice) return;
@@ -113,7 +121,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
         txb.pure.u64(BigInt(stats.maxAtk || "0")),
         txb.pure.u64(BigInt(stats.minSpd || "0")),
         txb.pure.u64(BigInt(stats.maxSpd || "0")),
-        txb.pure.u64(BigInt(burnGyateValue || "0")), // ← burn_gyate_value (0 = use rarity default)
+        txb.pure.u64(BigInt(burnGyateValue || "0")),
       ],
     });
     signAndExecute({ transaction: txb }, {
@@ -121,8 +129,10 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
         toast({ title: "NFT Type Added", description: `${nftName} added to ${RARITY_LABELS[parseInt(nftRarity) as keyof typeof RARITY_LABELS]} tier.` });
         setIsPending(false);
         setNftName("");
+        setNftImage("");
         setBurnGyateValue("0");
-        fetchFullBoxData(targetBoxId, setContentBoxData, setIsFetchingFullData);
+        // Delay to allow the node to index the new object before re-fetching
+        setTimeout(() => fetchFullBoxData(targetBoxId, setContentBoxData, setIsFetchingFullData), 2000);
       },
       onError: (err) => {
         toast({ variant: "destructive", title: "Addition Failed", description: err.message });
@@ -287,16 +297,18 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-2">
-                  <Label>Base Value (MIST)</Label>
-                  <Input type="number" value={nftValue} onChange={(e) => setNftValue(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Image URL</Label>
-                  <Input value={nftImage} onChange={(e) => setNftImage(e.target.value)} placeholder="IPFS link" />
-                </div>
+              <div className="space-y-2">
+                <Label>Base Value (MIST)</Label>
+                <Input type="number" value={nftValue} onChange={(e) => setNftValue(e.target.value)} />
               </div>
+
+              {/* ── Image picker (replaces plain URL input) ────────── */}
+              <ImagePickerField
+                value={nftImage}
+                onChange={setNftImage}
+                groupId={NFT_IMAGE_GROUP_ID}
+                label="NFT Image"
+              />
 
               {/* Burn GYATE value */}
               <div className="space-y-2">

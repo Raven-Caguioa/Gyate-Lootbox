@@ -11,10 +11,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trophy, Gift, Image as ImageIcon, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import Image from "next/image";
-import { PACKAGE_ID, ACHIEVEMENT_REGISTRY, STATS_REGISTRY, TREASURY_CAP, MODULE_NAMES } from "@/lib/sui-constants";
+import { PACKAGE_ID, ACHIEVEMENT_REGISTRY, STATS_REGISTRY, GATEKEEPER_CAP, MODULE_NAMES } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { RARITY_LABELS } from "@/lib/mock-data";
+import { ImagePickerField } from "@/components/ImagePickerField";
 import type { AchievementDef } from "../_hooks/use-admin-data";
+
+const ACHIEVEMENT_IMAGE_GROUP_ID = process.env.NEXT_PUBLIC_ACHIEVEMENT_IMAGE_GROUP_ID ?? undefined;
 
 const REQ_LABELS: Record<number, string> = {
   0: "Open Count", 1: "Burn Count", 2: "Rarity Mint", 3: "GYATE Spent", 4: "Admin Granted",
@@ -45,76 +48,45 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
   const [isResolving, setIsResolving]           = useState(false);
   const [resolveError, setResolveError]         = useState<string | null>(null);
 
-  // ── Resolve player stats ID from StatsRegistry ─────────────────────────────
-  //
-  // StatsRegistry layout on-chain:
-  //   StatsRegistry {
-  //     id: UID,
-  //     stats_by_owner: Table<address, ID>,  ← this Table has its OWN object ID
-  //     total_players: u64,
-  //   }
-  //
-  // A Sui Table<K,V> is stored as a dynamic-field bag whose parent is the
-  // Table's own UID (at stats_by_owner.fields.id.id), NOT the parent object's ID.
-  //
-  // Wrong: getDynamicFieldObject(STATS_REGISTRY, address)   ← was broken
-  // Correct:
-  //   Step 1 → getObject(STATS_REGISTRY)  →  extract stats_by_owner.fields.id.id
-  //   Step 2 → getDynamicFieldObject(innerTableId, address)
-  //   Step 3 → result.data.objectId  is the PlayerStats shared object ID
-  //
   const resolveStatsId = async (address: string) => {
     if (!address || address.length < 10) return;
     setIsResolving(true);
     setResolvedStatsId(null);
     setResolveError(null);
-
     try {
-      // Step 1: fetch StatsRegistry to get the inner table's own object ID
       const registryObj = await suiClient.getObject({
         id: STATS_REGISTRY,
         options: { showContent: true },
       });
-
       const tableId =
         (registryObj.data?.content as any)?.fields?.stats_by_owner?.fields?.id?.id;
-
       if (!tableId) {
         setResolveError("Could not read StatsRegistry — check STATS_REGISTRY constant.");
         return;
       }
-
-      // Step 2: query the inner table for this player's entry
       const field = await suiClient.getDynamicFieldObject({
         parentId: tableId,
         name: { type: "address", value: address },
       });
-
       if (!field.data) {
         setResolveError("Player has not initialized stats yet.");
         return;
       }
-
-      // Step 3: extract the PlayerStats object ID from the field value
       const rawId = (field.data?.content as any)?.fields?.value;
       const statsId: string | null =
         typeof rawId === "string" ? rawId : rawId?.id ?? null;
-
       if (!statsId) {
         setResolveError("Could not parse PlayerStats ID from registry entry.");
         return;
       }
-
       setResolvedStatsId(statsId);
     } catch (err: any) {
-      // getDynamicFieldObject throws when the key doesn't exist
       setResolveError("Player has not initialized stats yet.");
     } finally {
       setIsResolving(false);
     }
   };
 
-  // ── Create achievement ──────────────────────────────────────────────────────
   const handleCreateAchievement = async () => {
     if (!newAch.name || !newAch.description || !account) return;
     setIsPending(true);
@@ -136,8 +108,8 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
       onSuccess: () => {
         toast({ title: "Achievement Created" });
         setIsPending(false);
-        setNewAch({ ...newAch, name: "", description: "" });
-        fetchAchievements();
+        setNewAch({ ...newAch, name: "", description: "", imageUrl: "" });
+        setTimeout(fetchAchievements, 2000);
       },
       onError: (err) => {
         toast({ variant: "destructive", title: "Creation Failed", description: err.message });
@@ -146,11 +118,9 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
     });
   };
 
-  // ── Admin grant ─────────────────────────────────────────────────────────────
   const handleAdminGrant = async () => {
     if (!grantTarget || !selectedGrantAch || !resolvedStatsId) return;
     setIsPending(true);
-
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::admin_grant_achievement`,
@@ -158,11 +128,10 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
         txb.object(ACHIEVEMENT_REGISTRY),
         txb.object(resolvedStatsId),
         txb.pure.u64(BigInt(selectedGrantAch)),
-        txb.object(TREASURY_CAP),
+        txb.object(GATEKEEPER_CAP),
         txb.pure.address(grantTarget.trim()),
       ],
     });
-
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
         toast({
@@ -209,10 +178,15 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
               <Label>Description</Label>
               <Input value={newAch.description} onChange={(e) => setNewAch({ ...newAch, description: e.target.value })} />
             </div>
-            <div className="space-y-2">
-              <Label>Badge Image URL</Label>
-              <Input value={newAch.imageUrl} onChange={(e) => setNewAch({ ...newAch, imageUrl: e.target.value })} />
-            </div>
+
+            {/* ── Badge image picker ── */}
+            <ImagePickerField
+              value={newAch.imageUrl}
+              onChange={(url) => setNewAch({ ...newAch, imageUrl: url })}
+              groupId={ACHIEVEMENT_IMAGE_GROUP_ID}
+              label="Badge Image"
+            />
+
             <div className="pt-4 border-t border-white/5 grid md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Req Type</Label>
@@ -262,8 +236,6 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
             <CardDescription>Award a badge directly to a player wallet</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-
-            {/* Address input + auto-resolve */}
             <div className="space-y-2">
               <Label>Target Player Address</Label>
               <div className="flex gap-2">
@@ -290,8 +262,6 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
                   }
                 </Button>
               </div>
-
-              {/* Resolution feedback */}
               {resolvedStatsId && (
                 <div className="flex items-center gap-2 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
@@ -308,8 +278,6 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
                 </div>
               )}
             </div>
-
-            {/* Achievement select */}
             <div className="space-y-2">
               <Label>Select Achievement</Label>
               <Select value={selectedGrantAch} onValueChange={setSelectedGrantAch}>
@@ -323,7 +291,6 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
                 </SelectContent>
               </Select>
             </div>
-
             <Button
               variant="secondary"
               className="w-full bg-accent/20 hover:bg-accent/40 text-accent h-12"
