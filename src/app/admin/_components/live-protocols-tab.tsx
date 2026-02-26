@@ -1,21 +1,20 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Area, AreaChart,
 } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
-  Activity, Pause, Play, RefreshCw, TrendingUp, Package,
-  Coins, Sparkles, ToggleLeft, ToggleRight, DollarSign, Zap, Eye,
-  Layers, Loader2, AlertTriangle, BarChart2, ChevronDown, ChevronUp,
+  Pause, Play, RefreshCw, Package,
+  Coins, Sparkles, ToggleLeft, ToggleRight, DollarSign, Zap,
+  Layers, Loader2, AlertTriangle, BarChart2, ChevronDown, ChevronUp, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGE_ID, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
@@ -35,46 +34,144 @@ interface DailyPoint {
   opens: number;
   revenue: number;
   gyate: number;
+  // raw epoch stored for deduplication
+  epochMs: number;
 }
 
 // ─────────────────────────────────────────────
-// Mock event data generator
-// Replace with real Sui event queries in production:
-// query NFTMintedEvent filtered by lootbox_name, group by timestamp epoch → date
+// Real event fetcher
+// Queries NFTMintedEvent (opens + revenue) and queries lootbox fields
+// for gyate. Groups everything by calendar day (UTC).
 // ─────────────────────────────────────────────
 
-function generateMockHistory(boxes: LootboxOption[]): DailyPoint[] {
-  const totalOpens = boxes.reduce((a, b) => a + parseInt(b.totalOpens || "0"), 0);
-  const totalRev   = boxes.reduce((a, b) => a + parseInt(b.totalRevenueMist || "0"), 0);
-  const totalGyate = boxes.reduce((a, b) => a + parseInt(b.totalGyateSpent || "0"), 0);
-
-  const days = 14;
+/**
+ * Build an empty 14-day skeleton keyed by "MMM D" label.
+ * Index 0 = 13 days ago, index 13 = today.
+ */
+function buildDaySkeleton(): DailyPoint[] {
   const points: DailyPoint[] = [];
-  let cumOpens = 0, cumRev = 0, cumGyate = 0;
-
-  for (let i = days - 1; i >= 0; i--) {
+  for (let i = 13; i >= 0; i--) {
     const d = new Date();
-    d.setDate(d.getDate() - i);
-    const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-    // Distribute totals with some variance across days
-    const weight = Math.random() * 0.12 + (i === 0 ? 0.15 : 0.04);
-    const dayOpens = i === 0
-      ? Math.max(0, totalOpens - cumOpens)
-      : Math.floor(totalOpens * weight);
-    const dayRev = i === 0
-      ? Math.max(0, totalRev - cumRev)
-      : Math.floor(totalRev * weight);
-    const dayGyate = i === 0
-      ? Math.max(0, totalGyate - cumGyate)
-      : Math.floor(totalGyate * weight);
-
-    cumOpens += dayOpens;
-    cumRev   += dayRev;
-    cumGyate += dayGyate;
-
-    points.push({ date: label, opens: dayOpens, revenue: dayRev, gyate: dayGyate });
+    d.setUTCDate(d.getUTCDate() - i);
+    d.setUTCHours(0, 0, 0, 0);
+    points.push({
+      date: d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+      opens: 0,
+      revenue: 0,
+      gyate: 0,
+      epochMs: d.getTime(),
+    });
   }
+  return points;
+}
+
+/**
+ * Fetch real NFTMintedEvents for the given lootbox IDs and
+ * return 14 daily data points.
+ *
+ * NFTMintedEvent fields used:
+ *   - timestamp_ms  → maps event to a calendar day
+ *   - lootbox_name  → used to filter (we already have the box IDs, but
+ *                     the event only exposes name; we use all events then
+ *                     filter by the names of our boxes)
+ *
+ * Revenue per open = box.price (SUI).  We store cumulative price per box
+ * in total_revenue_mist on the LootboxConfig, but the event stream gives
+ * us per-open timestamps.  So we multiply each open event by its box's
+ * price to get daily revenue.
+ *
+ * GYATE opens are separate events (same NFTMintedEvent but triggered via
+ * open_lootbox_with_gyate). We can't distinguish them from the event alone,
+ * so we approximate daily GYATE by distributing total_gyate_spent
+ * proportionally to that day's open share.
+ */
+async function fetchRealHistory(
+  suiClient: any,
+  boxes: LootboxOption[],
+  nftType: string
+): Promise<DailyPoint[]> {
+  const points = buildDaySkeleton();
+  if (boxes.length === 0) return points;
+
+  // Map box name → price (mist) for revenue calc
+  const priceByName: Record<string, number> = {};
+  for (const b of boxes) {
+    priceByName[b.name] = parseInt(b.price || "0");
+  }
+
+  // Aggregate totals used for GYATE distribution
+  const totalOpensAllBoxes   = boxes.reduce((a, b) => a + parseInt(b.totalOpens || "0"), 0);
+  const totalGyateAllBoxes   = boxes.reduce((a, b) => a + parseInt(b.totalGyateSpent || "0"), 0);
+
+  try {
+    // ── Fetch NFTMintedEvent pages ──────────────────────────────────────
+    // We fetch up to 1000 events (most recent first) and filter to last 14 days.
+    const cutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+
+    let cursor: string | null = null;
+    let keepGoing = true;
+    const eventType = `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::NFTMintedEvent`;
+
+    while (keepGoing) {
+      const page: any = await suiClient.queryEvents({
+        query: { MoveEventType: eventType },
+        cursor: cursor ?? undefined,
+        limit: 50,
+        order: "descending",
+      });
+
+      for (const ev of page.data) {
+        const tsMs: number =
+          typeof ev.timestampMs === "string"
+            ? parseInt(ev.timestampMs)
+            : ev.timestampMs ?? 0;
+
+        // Stop if we've gone past our 14-day window
+        if (tsMs < cutoffMs) { keepGoing = false; break; }
+
+        const parsed = ev.parsedJson as any;
+        const boxName: string = parsed?.lootbox_name ?? "";
+
+        // Only count events from our boxes
+        if (!priceByName.hasOwnProperty(boxName)) continue;
+
+        // Find the matching day bucket (UTC date comparison)
+        const evDate = new Date(tsMs);
+        evDate.setUTCHours(0, 0, 0, 0);
+        const evDateMs = evDate.getTime();
+
+        for (const pt of points) {
+          if (pt.epochMs === evDateMs) {
+            pt.opens += 1;
+            pt.revenue += priceByName[boxName] ?? 0;
+            break;
+          }
+        }
+      }
+
+      if (!page.hasNextPage || !keepGoing) break;
+      cursor = page.nextCursor ?? null;
+      if (!cursor) break;
+    }
+
+    // ── Distribute GYATE proportionally to daily open share ────────────
+    // We don't have per-open GYATE data from the event, so we distribute
+    // the total_gyate_spent across days weighted by opens.
+    if (totalOpensAllBoxes > 0 && totalGyateAllBoxes > 0) {
+      const totalObservedOpens = points.reduce((s, p) => s + p.opens, 0);
+      if (totalObservedOpens > 0) {
+        for (const pt of points) {
+          pt.gyate = Math.round(
+            (pt.opens / totalObservedOpens) * totalGyateAllBoxes
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error("fetchRealHistory error:", err);
+    // Return the skeleton (all zeros) on error rather than crashing
+  }
+
   return points;
 }
 
@@ -117,15 +214,13 @@ const STAT_CONFIG: Record<StatKey, {
   icon: any;
   color: string;
   stroke: string;
-  gradient: [string, string];
-  format: (v: number, boxes: LootboxOption[]) => string;
+  format: (v: number) => string;
 }> = {
   opens: {
     label: "Total Opens",
     icon: BarChart2,
     color: "text-violet-600",
     stroke: "#7c3aed",
-    gradient: ["#7c3aed33", "#7c3aed00"],
     format: (v) => v.toLocaleString(),
   },
   revenue: {
@@ -133,7 +228,6 @@ const STAT_CONFIG: Record<StatKey, {
     icon: Coins,
     color: "text-emerald-600",
     stroke: "#059669",
-    gradient: ["#05966933", "#05966900"],
     format: (v) => `${mistToSui(v)} SUI`,
   },
   gyate: {
@@ -141,7 +235,6 @@ const STAT_CONFIG: Record<StatKey, {
     icon: Zap,
     color: "text-pink-600",
     stroke: "#db2777",
-    gradient: ["#db277733", "#db277700"],
     format: (v) => v.toLocaleString(),
   },
 };
@@ -159,7 +252,7 @@ function ChartTooltip({ active, payload, label, activeMetric }: any) {
     <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-xs">
       <p className="text-slate-400 font-medium mb-1">{label}</p>
       <p className={cn("font-bold text-sm", cfg.color)}>
-        {activeMetric === "revenue" ? `${mistToSui(val)} SUI` : val.toLocaleString()}
+        {cfg.format(val)}
       </p>
     </div>
   );
@@ -170,13 +263,12 @@ function ChartTooltip({ active, payload, label, activeMetric }: any) {
 // ─────────────────────────────────────────────
 
 function StatCard({
-  statKey, value, isActive, onClick, boxes,
+  statKey, value, isActive, onClick,
 }: {
   statKey: StatKey;
   value: number;
   isActive: boolean;
   onClick: () => void;
-  boxes: LootboxOption[];
 }) {
   const cfg = STAT_CONFIG[statKey];
   const Icon = cfg.icon;
@@ -191,8 +283,10 @@ function StatCard({
       )}
     >
       {isActive && (
-        <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-          style={{ background: STAT_CONFIG[statKey].stroke }} />
+        <span
+          className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
+          style={{ background: cfg.stroke }}
+        />
       )}
       <div className="flex items-center gap-2">
         <div className={cn(
@@ -201,22 +295,45 @@ function StatCard({
         )}>
           <Icon className={cn("w-3.5 h-3.5", isActive ? "text-white" : "text-slate-500")} />
         </div>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{cfg.label}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+          {cfg.label}
+        </span>
       </div>
       <span className={cn("text-2xl font-bold tracking-tight", cfg.color)}>
-        {cfg.format(value, boxes)}
+        {cfg.format(value)}
       </span>
     </button>
   );
 }
 
 // ─────────────────────────────────────────────
-// Analytics Panel
+// Analytics Panel  — fetches real event data
 // ─────────────────────────────────────────────
 
 function AnalyticsPanel({ boxes }: { boxes: LootboxOption[] }) {
+  const suiClient = useSuiClient();
   const [activeMetric, setActiveMetric] = useState<StatKey>("opens");
-  const history = useMemo(() => generateMockHistory(boxes), [boxes]);
+  const [history, setHistory]           = useState<DailyPoint[]>(buildDaySkeleton);
+  const [isFetchingChart, setIsFetchingChart] = useState(false);
+
+  const nftType = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
+
+  // Fetch real event history whenever boxes change
+  useEffect(() => {
+    if (boxes.length === 0) {
+      setHistory(buildDaySkeleton());
+      return;
+    }
+    let cancelled = false;
+    setIsFetchingChart(true);
+    fetchRealHistory(suiClient, boxes, nftType).then((pts) => {
+      if (!cancelled) {
+        setHistory(pts);
+        setIsFetchingChart(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [suiClient, boxes, nftType]);
 
   const totalOpens   = boxes.reduce((a, b) => a + parseInt(b.totalOpens || "0"), 0);
   const totalRevenue = boxes.reduce((a, b) => a + parseInt(b.totalRevenueMist || "0"), 0);
@@ -225,6 +342,13 @@ function AnalyticsPanel({ boxes }: { boxes: LootboxOption[] }) {
   const pausedCount  = boxes.length - activeCount;
 
   const cfg = STAT_CONFIG[activeMetric];
+
+  // Summary value shown above the graph (from on-chain totals, not chart window)
+  const summaryValue = activeMetric === "opens"
+    ? totalOpens
+    : activeMetric === "revenue"
+      ? totalRevenue
+      : totalGyate;
 
   return (
     <div className="space-y-5">
@@ -243,7 +367,7 @@ function AnalyticsPanel({ boxes }: { boxes: LootboxOption[] }) {
         </span>
       </div>
 
-      {/* Main panel: graph + stats */}
+      {/* Main panel */}
       <div className="grid grid-cols-[1fr_220px] gap-4">
 
         {/* Graph */}
@@ -254,15 +378,15 @@ function AnalyticsPanel({ boxes }: { boxes: LootboxOption[] }) {
                 {cfg.label}
               </p>
               <p className={cn("text-xl font-bold mt-0.5", cfg.color)}>
-                {activeMetric === "opens"
-                  ? totalOpens.toLocaleString()
-                  : activeMetric === "revenue"
-                    ? `${mistToSui(totalRevenue)} SUI`
-                    : totalGyate.toLocaleString()
-                }
+                {cfg.format(summaryValue)}
               </p>
             </div>
-            <div className="text-[10px] text-slate-400">Last 14 days</div>
+            <div className="flex items-center gap-2">
+              {isFetchingChart && (
+                <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+              )}
+              <div className="text-[10px] text-slate-400">Last 14 days</div>
+            </div>
           </div>
 
           <div className="h-[180px] px-2 pb-3">
@@ -270,7 +394,7 @@ function AnalyticsPanel({ boxes }: { boxes: LootboxOption[] }) {
               <AreaChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={cfg.stroke} stopOpacity={0.2} />
+                    <stop offset="5%"  stopColor={cfg.stroke} stopOpacity={0.2} />
                     <stop offset="95%" stopColor={cfg.stroke} stopOpacity={0} />
                   </linearGradient>
                 </defs>
@@ -310,11 +434,11 @@ function AnalyticsPanel({ boxes }: { boxes: LootboxOption[] }) {
           </div>
         </div>
 
-        {/* Stat cards — clickable to switch graph */}
+        {/* Stat cards */}
         <div className="flex flex-col gap-2.5">
-          <StatCard statKey="opens"   value={totalOpens}   isActive={activeMetric === "opens"}   onClick={() => setActiveMetric("opens")}   boxes={boxes} />
-          <StatCard statKey="revenue" value={totalRevenue} isActive={activeMetric === "revenue"} onClick={() => setActiveMetric("revenue")} boxes={boxes} />
-          <StatCard statKey="gyate"   value={totalGyate}   isActive={activeMetric === "gyate"}   onClick={() => setActiveMetric("gyate")}   boxes={boxes} />
+          <StatCard statKey="opens"   value={totalOpens}   isActive={activeMetric === "opens"}   onClick={() => setActiveMetric("opens")} />
+          <StatCard statKey="revenue" value={totalRevenue} isActive={activeMetric === "revenue"} onClick={() => setActiveMetric("revenue")} />
+          <StatCard statKey="gyate"   value={totalGyate}   isActive={activeMetric === "gyate"}   onClick={() => setActiveMetric("gyate")} />
         </div>
       </div>
     </div>
@@ -378,9 +502,7 @@ function VariantToggleRow({
         disabled={isPending}
         className={cn(
           "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all",
-          enabled
-            ? "text-emerald-600 hover:bg-emerald-50"
-            : "text-red-500 hover:bg-red-100"
+          enabled ? "text-emerald-600 hover:bg-emerald-50" : "text-red-500 hover:bg-red-100"
         )}
       >
         {isPending
@@ -408,11 +530,11 @@ function BoxCard({
   onPauseToggle: (boxId: string, currentlyActive: boolean) => void;
   isPending: boolean;
 }) {
-  const [expanded, setExpanded]       = useState(false);
-  const [showInspect, setShowInspect] = useState(false);
+  const [expanded, setExpanded]         = useState(false);
+  const [showInspect, setShowInspect]   = useState(false);
   const [showVariants, setShowVariants] = useState(false);
-  const [showPrice, setShowPrice]     = useState(false);
-  const [newSuiPrice, setNewSuiPrice] = useState("");
+  const [showPrice, setShowPrice]       = useState(false);
+  const [newSuiPrice, setNewSuiPrice]   = useState("");
   const [newGyatePrice, setNewGyatePrice] = useState("");
   const [isPriceUpdating, setIsPriceUpdating] = useState(false);
 
@@ -479,15 +601,13 @@ function BoxCard({
       "rounded-2xl border bg-white transition-all duration-200",
       box.isActive ? "border-slate-200" : "border-orange-200 bg-orange-50/30"
     )}>
-      {/* ── Header row ── */}
+      {/* Header row */}
       <div className="flex items-center gap-4 px-5 py-4">
-        {/* Status dot */}
         <span className={cn(
           "w-2 h-2 rounded-full flex-shrink-0",
           box.isActive ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-orange-400"
         )} />
 
-        {/* Name + badges */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-slate-800 truncate">{box.name}</span>
@@ -508,7 +628,6 @@ function BoxCard({
               </span>
             )}
           </div>
-          {/* Inline mini stats */}
           <div className="flex items-center gap-4 mt-1">
             <span className="text-[10px] text-slate-400">
               <span className="font-semibold text-slate-600">{parseInt(box.totalOpens || "0").toLocaleString()}</span> opens
@@ -525,7 +644,6 @@ function BoxCard({
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <Button
             variant="ghost"
@@ -553,19 +671,15 @@ function BoxCard({
             }}
             className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:border-slate-300 hover:text-slate-600 transition-all"
           >
-            {expanded
-              ? <ChevronUp className="w-3.5 h-3.5" />
-              : <ChevronDown className="w-3.5 h-3.5" />
-            }
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>
 
-      {/* ── Expanded content ── */}
+      {/* Expanded content */}
       {expanded && (
         <div className="border-t border-slate-100 px-5 py-4 space-y-4">
 
-          {/* Rarity inventory */}
           {fullData && (
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
@@ -588,7 +702,6 @@ function BoxCard({
             </div>
           )}
 
-          {/* Action tabs */}
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => { setShowInspect(!showInspect); if (!fullData && !isFetching) onRefreshFull(); }}
@@ -637,7 +750,6 @@ function BoxCard({
             </button>
           </div>
 
-          {/* Price edit */}
           {showPrice && (
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
               {box.isActive && (
@@ -668,7 +780,6 @@ function BoxCard({
             </div>
           )}
 
-          {/* Variants */}
           {showVariants && fullData && (
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
@@ -690,7 +801,6 @@ function BoxCard({
             </div>
           )}
 
-          {/* Inspector */}
           {showInspect && (
             <ProtocolInspector data={fullData} isFetching={isFetching} title={`${box.name} Contents`} />
           )}
@@ -722,8 +832,8 @@ export function LiveProtocolsTab({
   const { toast } = useToast();
   const [isPending, setIsPending] = useState(false);
 
-  const [boxFullData, setBoxFullData]   = useState<Record<string, LootboxFullData | null>>({});
-  const [boxFetching, setBoxFetching]   = useState<Record<string, boolean>>({});
+  const [boxFullData, setBoxFullData] = useState<Record<string, LootboxFullData | null>>({});
+  const [boxFetching, setBoxFetching] = useState<Record<string, boolean>>({});
 
   const refreshBox = useCallback((id: string) => {
     setBoxFetching(prev => ({ ...prev, [id]: true }));
@@ -756,13 +866,10 @@ export function LiveProtocolsTab({
 
   return (
     <div className="space-y-8">
-
-      {/* Analytics section */}
       {!isLoadingBoxes && liveBoxes.length > 0 && (
         <AnalyticsPanel boxes={liveBoxes} />
       )}
 
-      {/* Divider */}
       {liveBoxes.length > 0 && (
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-slate-100" />
@@ -773,7 +880,6 @@ export function LiveProtocolsTab({
         </div>
       )}
 
-      {/* Box list */}
       {isLoadingBoxes ? (
         <div className="flex items-center justify-center py-20 text-sm text-slate-400 gap-2">
           <RefreshCw className="w-4 h-4 animate-spin" /> Loading protocols...
