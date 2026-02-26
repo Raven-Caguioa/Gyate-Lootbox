@@ -4,8 +4,8 @@ import { Navigation } from "@/components/navigation";
 import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, OBJECT_IDS, STATS_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Loader2 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { RefreshCw, Loader2, CheckCircle2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Transaction } from "@mysten/sui/transactions";
 import Image from "next/image";
 
@@ -32,11 +32,14 @@ interface KioskEarnings { kioskId: string; kioskCapId: string; profitsMist: bigi
 const REQ_OPEN_COUNT = "0", REQ_BURN_COUNT = "1", REQ_RARITY_MINT_COUNT = "2", REQ_GYATE_SPENT = "3", REQ_ADMIN_GRANTED = "4";
 const RARITY_LABELS = ["Common", "Rare", "Super Rare", "SSR", "Ultra Rare", "Legend Rare"];
 
+// How long to poll after a tx before giving up (ms)
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_MS = 40000;
+
 function mistToSui(mist: bigint): string {
   return (Number(mist) / 1_000_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
-// Normalize a Sui address to plain hex without 0x prefix, lowercase
 function normAddr(addr: string): string {
   return addr.replace(/^0x/i, "").toLowerCase().replace(/^0+/, "");
 }
@@ -103,6 +106,23 @@ const PROFILE_STYLES = `
   }
   .prof-name { font-family: 'Caveat', cursive; font-size: 34px; font-weight: 700; color: #1a1a1a; line-height: 1; margin-bottom: 6px; }
   .prof-addr { font-size: 11px; color: #94a3b8; font-family: monospace; font-weight: 600; }
+
+  .sync-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700; color: #94a3b8;
+  }
+  .sync-status.syncing { color: #7e22ce; }
+  .sync-status.done { color: #16a34a; }
+  .sync-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #e2e8f0;
+    transition: background 0.3s ease;
+  }
+  .sync-dot.active { background: #c9b8ff; animation: pulse-dot 1.2s ease-in-out infinite; }
+  .sync-dot.done { background: #86efac; animation: none; }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.7); }
+  }
 
   .prof-btn {
     display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px;
@@ -222,6 +242,7 @@ const PROFILE_STYLES = `
   .setup-icon { font-size: 48px; margin-bottom: 16px; }
   .setup-title { font-family: 'Caveat', cursive; font-size: 32px; font-weight: 700; color: #1a1a1a; margin-bottom: 8px; }
   .setup-desc { font-size: 14px; color: #64748b; max-width: 400px; margin: 0 auto 24px; line-height: 1.7; }
+  .setup-waiting { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 13px; font-weight: 700; color: #7e22ce; margin-top: 16px; }
 
   .connect-card { background: white; border: 2px solid #e2e8f0; border-radius: 24px; padding: 80px 48px; text-align: center; margin: 0 auto; max-width: 480px; box-shadow: 6px 6px 0px #f1f5f9; }
   .connect-icon { font-size: 56px; margin-bottom: 20px; }
@@ -255,28 +276,23 @@ export default function ProfilePage() {
   const [earnings, setEarnings]             = useState<KioskEarnings | null>(null);
   const [isLoading, setIsLoading]           = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  // true while we are polling for stats after an init tx
+  const [isPollingInit, setIsPollingInit]   = useState(false);
   const [claimingId, setClaimingId]         = useState<string | null>(null);
   const [isWithdrawing, setIsWithdrawing]   = useState(false);
+  // timestamp of last successful full fetch — shown in hero
+  const [lastSynced, setLastSynced]         = useState<Date | null>(null);
 
-  // ── Fetch PlayerStats (shared object) ──────────────────────────────
-  //
-  // PlayerStats is now shared — getOwnedObjects no longer works.
-  // We have two reliable paths to its object ID:
-  //
-  // Path 1 (fast): Read StatsRegistry table, find the entry whose key
-  //   matches our address, extract the value (the stats object ID).
-  //   The table key is stored as a hex address WITHOUT 0x prefix.
-  //   We normalize both sides before comparing.
-  //
-  // Path 2 (fallback): Query StatsInitializedEvent — the Move code emits
-  //   { player: address, stats_id: ID } on every initialize_stats call.
-  //   On Sui, event IDs come back as { id: "0x..." } objects, not plain strings.
-  //   We handle both shapes.
-  //
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef<number>(0);
+
+  // Cleanup on unmount
+  useEffect(() => () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); }, []);
+
+  // ── Stats fetch (shared object — two lookup paths) ──────────────────
   const fetchStats = useCallback(async (address: string): Promise<PlayerStatsData | null> => {
     const myNorm = normAddr(address);
 
-    // Helper: fetch object by ID and extract PlayerStats fields
     const hydrateById = async (objectId: string): Promise<PlayerStatsData | null> => {
       try {
         const obj = await suiClient.getObject({ id: objectId, options: { showContent: true } });
@@ -291,113 +307,70 @@ export default function ProfilePage() {
             ? f.rarity_mints.map(String)
             : ["0", "0", "0", "0", "0", "0"],
         };
-      } catch {
-        return null;
-      }
+      } catch { return null; }
     };
 
-    // ── Path 1: scan StatsRegistry.stats_by_owner table ───────────────
-    // The Move Table<address, ID> stores each entry as a dynamic field.
-    // The dynamic field object has content fields: { name: <address>, value: <ID> }
-    // where value is the PlayerStats object ID.
+    // Path 1: scan StatsRegistry table
     try {
       const regObj = await suiClient.getObject({ id: STATS_REGISTRY, options: { showContent: true } });
       const tableId = (regObj.data?.content as any)?.fields?.stats_by_owner?.fields?.id?.id;
-
       if (tableId) {
         let cursor: string | undefined = undefined;
         do {
           const page = await suiClient.getDynamicFields({ parentId: tableId, cursor, limit: 50 });
-
           for (const entry of page.data) {
-            // The key value may be stored as:
-            //   "0x262da71b..." (with prefix)  OR
-            //   "262da71b..."  (without prefix)
-            // Normalize both to no-prefix, no-leading-zeros for comparison
-            const keyRaw = String(entry.name?.value ?? "");
-            if (normAddr(keyRaw) === myNorm) {
-              // Found our entry — fetch the dynamic field object to get the value
-              const fieldObj = await suiClient.getObject({
-                id: entry.objectId,
-                options: { showContent: true },
-              });
-              const fieldContent = (fieldObj.data?.content as any)?.fields;
-
-              // The value field holds the PlayerStats object ID.
-              // It may be a plain string "0x..." or an object { id: "0x..." }
-              const rawValue = fieldContent?.value;
+            if (normAddr(String(entry.name?.value ?? "")) === myNorm) {
+              const fieldObj = await suiClient.getObject({ id: entry.objectId, options: { showContent: true } });
+              const rawValue = (fieldObj.data?.content as any)?.fields?.value;
               const statsId: string | null =
-                typeof rawValue === "string"
-                  ? rawValue
-                  : typeof rawValue?.id === "string"
-                  ? rawValue.id
-                  : null;
-
+                typeof rawValue === "string" ? rawValue
+                : typeof rawValue?.id === "string" ? rawValue.id
+                : null;
               if (statsId) {
                 const result = await hydrateById(statsId);
                 if (result) return result;
               }
-              break; // found our key, stop scanning even if hydration failed
+              break;
             }
           }
-
           cursor = page.hasNextPage ? (page.nextCursor ?? undefined) : undefined;
         } while (cursor);
       }
-    } catch {
-      // fall through to Path 2
-    }
+    } catch { /* fall through */ }
 
-    // ── Path 2: query StatsInitializedEvent ───────────────────────────
-    // Event parsedJson shape from Sui RPC:
-    //   { player: "0x...", stats_id: "0x..." }   ← plain strings
-    //   { player: "0x...", stats_id: { id: "0x..." } }  ← wrapped ID
-    // We handle both.
+    // Path 2: query StatsInitializedEvent
     try {
       const events = await suiClient.queryEvents({
-        query: {
-          MoveEventType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::StatsInitializedEvent`,
-        },
+        query: { MoveEventType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::StatsInitializedEvent` },
         limit: 50,
       });
-
       for (const ev of events.data) {
         const parsed = ev.parsedJson as any;
-        const playerRaw = String(parsed?.player ?? "");
-
-        if (normAddr(playerRaw) === myNorm) {
-          // Extract stats_id — handle both plain string and { id: "0x..." }
+        if (normAddr(String(parsed?.player ?? "")) === myNorm) {
           const rawId = parsed?.stats_id;
           const statsId: string | null =
-            typeof rawId === "string"
-              ? rawId
-              : typeof rawId?.id === "string"
-              ? rawId.id
-              : null;
-
+            typeof rawId === "string" ? rawId
+            : typeof rawId?.id === "string" ? rawId.id
+            : null;
           if (statsId) {
             const result = await hydrateById(statsId);
             if (result) return result;
           }
         }
       }
-    } catch {
-      // both paths failed
-    }
+    } catch { /* both paths failed */ }
 
     return null;
   }, [suiClient]);
 
-  // ── Fetch all profile data ──────────────────────────────────────────
-  const fetchProfileData = useCallback(async () => {
+  // ── Full profile fetch ──────────────────────────────────────────────
+  const fetchProfileData = useCallback(async (silent = false) => {
     if (!account) return;
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     try {
-      // 1. Stats (shared object — use registry/event lookup, NOT getOwnedObjects)
       const fetchedStats = await fetchStats(account.address);
       setStats(fetchedStats);
 
-      // 2. Badges (still owned by player — unchanged)
       const badgeObjects = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::AchievementBadge` },
@@ -405,16 +378,9 @@ export default function ProfilePage() {
       });
       setBadges(badgeObjects.data.map((obj: any) => {
         const f = obj.data?.content?.fields;
-        return {
-          id: obj.data?.objectId,
-          achievement_id: String(f.achievement_id),
-          name: f.achievement_name,
-          imageUrl: f.badge_image_url,
-          earnedAt: f.earned_at,
-        };
+        return { id: obj.data?.objectId, achievement_id: String(f.achievement_id), name: f.achievement_name, imageUrl: f.badge_image_url, earnedAt: f.earned_at };
       }));
 
-      // 3. AchievementRegistry
       if (OBJECT_IDS?.ACHIEVEMENT_REGISTRY) {
         const regObj = await suiClient.getObject({ id: OBJECT_IDS.ACHIEVEMENT_REGISTRY, options: { showContent: true } });
         const tableId = (regObj.data?.content as any)?.fields?.achievements?.fields?.id?.id;
@@ -431,18 +397,12 @@ export default function ProfilePage() {
             setAchievements(defObjects.map((obj: any) => {
               const f = obj.data?.content?.fields?.value?.fields ?? obj.data?.content?.fields;
               if (!f || !f.enabled) return null;
-              return {
-                id: String(f.id), name: f.name, description: f.description,
-                badge_image_url: f.badge_image_url, gyate_reward: f.gyate_reward,
-                requirement_type: String(f.requirement_type), requirement_value: f.requirement_value,
-                requirement_rarity: String(f.requirement_rarity), enabled: f.enabled,
-              } as AchievementDef;
+              return { id: String(f.id), name: f.name, description: f.description, badge_image_url: f.badge_image_url, gyate_reward: f.gyate_reward, requirement_type: String(f.requirement_type), requirement_value: f.requirement_value, requirement_rarity: String(f.requirement_rarity), enabled: f.enabled } as AchievementDef;
             }).filter((a): a is AchievementDef => a !== null));
           }
         }
       }
 
-      // 4. Kiosk earnings
       const capsRes = await suiClient.getOwnedObjects({
         owner: account.address,
         filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
@@ -458,13 +418,118 @@ export default function ProfilePage() {
           setEarnings({ kioskId, kioskCapId, profitsMist: BigInt(rawProfits.toString()) });
         }
       }
+
+      setLastSynced(new Date());
     } catch (err) {
       console.error("Profile fetch error:", err);
-      toast({ variant: "destructive", title: "Fetch Error", description: "Could not load profile data." });
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
-  }, [account, suiClient, toast, fetchStats]);
+  }, [account, suiClient, fetchStats]);
+
+  // ── Auto-load on mount and when account changes ─────────────────────
+  useEffect(() => {
+    if (account) fetchProfileData();
+  }, [account, fetchProfileData]);
+
+  // ── Poll for stats after initialize_stats tx ────────────────────────
+  // Keeps trying every POLL_INTERVAL_MS until stats appear or timeout.
+  // Once found, runs a full fetchProfileData so everything is fresh.
+  const startPollingForInit = useCallback(() => {
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    pollStartRef.current = Date.now();
+    setIsPollingInit(true);
+
+    pollTimerRef.current = setInterval(async () => {
+      if (!account) return;
+
+      // Timed out
+      if (Date.now() - pollStartRef.current > POLL_MAX_MS) {
+        clearInterval(pollTimerRef.current!);
+        pollTimerRef.current = null;
+        setIsPollingInit(false);
+        setIsInitializing(false);
+        toast({ variant: "destructive", title: "Indexing Slow", description: "Stats are taking a while to appear. Try syncing manually in a moment." });
+        return;
+      }
+
+      const result = await fetchStats(account.address);
+      if (result) {
+        clearInterval(pollTimerRef.current!);
+        pollTimerRef.current = null;
+        setIsPollingInit(false);
+        setIsInitializing(false);
+        // Do a full fetch now that stats are confirmed indexed
+        await fetchProfileData(true);
+      }
+    }, POLL_INTERVAL_MS);
+  }, [account, fetchStats, fetchProfileData, toast]);
+
+  // ── Poll until data changes after a tx ─────────────────────────────
+  // Takes a "snapshot" of the current state, then polls every 2s until
+  // something actually changes on-chain, then does one final full fetch.
+  // No spinner shown — updates happen silently in the background.
+  const pollUntilChanged = useCallback((snapshot: {
+    opens: string; burns: string; badgeCount: number; earningsMist: string;
+  }) => {
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    pollStartRef.current = Date.now();
+
+    pollTimerRef.current = setInterval(async () => {
+      if (!account) return;
+
+      // Give up after POLL_MAX_MS
+      if (Date.now() - pollStartRef.current > POLL_MAX_MS) {
+        clearInterval(pollTimerRef.current!);
+        pollTimerRef.current = null;
+        return;
+      }
+
+      try {
+        // Quick lightweight check: just fetch stats and badge count
+        const newStats = await fetchStats(account.address);
+
+        // Check if anything changed from the snapshot
+        const statsChanged =
+          newStats &&
+          (newStats.total_opens !== snapshot.opens ||
+           newStats.total_burns !== snapshot.burns);
+
+        const newBadges = await suiClient.getOwnedObjects({
+          owner: account.address,
+          filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::AchievementBadge` },
+          options: {},
+        });
+        const badgeChanged = newBadges.data.length !== snapshot.badgeCount;
+
+        // Check kiosk balance change
+        const capsRes = await suiClient.getOwnedObjects({
+          owner: account.address,
+          filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
+          options: { showContent: true },
+        });
+        let newMist = snapshot.earningsMist;
+        if (capsRes.data.length > 0) {
+          const kioskId = (capsRes.data[0].data?.content as any)?.fields?.for;
+          if (kioskId) {
+            const kObj = await suiClient.getObject({ id: kioskId, options: { showContent: true } });
+            const kf = (kObj.data?.content as any)?.fields;
+            newMist = String(kf?.profits?.fields?.value ?? kf?.profits ?? "0");
+          }
+        }
+        const earningsChanged = newMist !== snapshot.earningsMist;
+
+        if (statsChanged || badgeChanged || earningsChanged) {
+          clearInterval(pollTimerRef.current!);
+          pollTimerRef.current = null;
+          // Data changed — do a full silent refresh to update everything
+          await fetchProfileData(true);
+        }
+      } catch {
+        // swallow — keep polling
+      }
+    }, POLL_INTERVAL_MS);
+  }, [account, fetchStats, fetchProfileData, suiClient]);
 
   // ── Initialize stats ────────────────────────────────────────────────
   const handleInitializeStats = async () => {
@@ -477,9 +542,9 @@ export default function ProfilePage() {
     });
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: "Profile Initialized!", description: "Your on-chain progress tracking is now active." });
-        setIsInitializing(false);
-        setTimeout(fetchProfileData, 4000);
+        toast({ title: "Profile Initialized!", description: "Setting up your on-chain profile..." });
+        // Start polling — don't resolve immediately, wait for indexer
+        startPollingForInit();
       },
       onError: (err) => {
         toast({ variant: "destructive", title: "Initialization Failed", description: err.message });
@@ -492,6 +557,13 @@ export default function ProfilePage() {
   const handleClaim = async (achievementId: string) => {
     if (!account || !stats) return;
     setClaimingId(achievementId);
+    // Snapshot current state so we know when something actually changed
+    const snapshot = {
+      opens: stats.total_opens,
+      burns: stats.total_burns,
+      badgeCount: badges.length,
+      earningsMist: earnings ? earnings.profitsMist.toString() : "0",
+    };
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::${FUNCTIONS.CLAIM_ACHIEVEMENT}`,
@@ -506,7 +578,7 @@ export default function ProfilePage() {
       onSuccess: () => {
         toast({ title: "🏆 Achievement Claimed!", description: "Badge and GYATE reward sent to your wallet." });
         setClaimingId(null);
-        setTimeout(fetchProfileData, 3000);
+        pollUntilChanged(snapshot);
       },
       onError: (err) => {
         toast({ variant: "destructive", title: "Claim Failed", description: err.message });
@@ -519,6 +591,12 @@ export default function ProfilePage() {
   const handleWithdrawEarnings = async () => {
     if (!account || !earnings || earnings.profitsMist <= 0n) return;
     setIsWithdrawing(true);
+    const snapshot = {
+      opens: stats?.total_opens ?? "0",
+      burns: stats?.total_burns ?? "0",
+      badgeCount: badges.length,
+      earningsMist: earnings.profitsMist.toString(),
+    };
     try {
       const txb = new Transaction();
       const [profitCoin] = txb.moveCall({
@@ -534,7 +612,7 @@ export default function ProfilePage() {
         onSuccess: () => {
           toast({ title: "💰 Earnings Withdrawn!", description: `${mistToSui(earnings.profitsMist)} SUI sent to your wallet.` });
           setIsWithdrawing(false);
-          setTimeout(fetchProfileData, 3000);
+          pollUntilChanged(snapshot);
         },
         onError: (err) => {
           toast({ variant: "destructive", title: "Withdrawal Failed", description: err.message });
@@ -547,14 +625,15 @@ export default function ProfilePage() {
     }
   };
 
-  useEffect(() => { fetchProfileData(); }, [fetchProfileData]);
-
   const claimedIds = new Set(badges.map(b => b.achievement_id));
   const readyCount = achievements.filter(a =>
     !claimedIds.has(String(a.id)) &&
     a.requirement_type !== REQ_ADMIN_GRANTED &&
     stats && getProgress(a, stats).pct >= 100
   ).length;
+
+  const syncStatusClass = isLoading ? "syncing" : lastSynced ? "done" : "";
+  const syncDotClass = isLoading ? "active" : lastSynced ? "done" : "";
 
   if (!account) {
     return (
@@ -587,13 +666,31 @@ export default function ProfilePage() {
               <div className="prof-addr">{account.address.slice(0, 10)}...{account.address.slice(-6)}</div>
             </div>
           </div>
-          <button className="prof-btn" onClick={fetchProfileData} disabled={isLoading}>
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-            {isLoading ? "Syncing..." : "Sync Data"}
-          </button>
+
+          {/* Sync status + manual refresh */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div className={`sync-status ${syncStatusClass}`}>
+              <div className={`sync-dot ${syncDotClass}`} />
+              {isLoading
+                ? "Syncing..."
+                : lastSynced
+                ? `Updated ${lastSynced.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : "Not synced"
+              }
+            </div>
+            <button
+              className="prof-btn"
+              onClick={() => fetchProfileData(false)}
+              disabled={isLoading}
+              style={{ fontSize: 12, padding: "8px 14px" }}
+            >
+              <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
+              Sync
+            </button>
+          </div>
         </div>
 
-        {/* Loading skeleton */}
+        {/* Loading skeleton — first load only */}
         {isLoading && !stats ? (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 28 }}>
@@ -604,14 +701,29 @@ export default function ProfilePage() {
         ) : !stats ? (
           /* Not initialized yet */
           <div className="setup-card">
-            <div className="setup-icon">⚙️</div>
-            <div className="setup-title">Setup Required</div>
-            <div className="setup-desc">
-              To track your on-chain summons, burns, and unlock rewards, initialize your player stats object.
+            <div className="setup-icon">{isPollingInit ? "⏳" : "⚙️"}</div>
+            <div className="setup-title">
+              {isPollingInit ? "Setting Up Your Profile..." : "Setup Required"}
             </div>
-            <button className="prof-btn init" onClick={handleInitializeStats} disabled={isInitializing}>
-              {isInitializing ? <Loader2 size={16} className="animate-spin" /> : "✦ Initialize Player Stats"}
-            </button>
+            <div className="setup-desc">
+              {isPollingInit
+                ? "Transaction confirmed! Waiting for the network to index your profile — usually just a few seconds."
+                : "To track your on-chain summons, burns, and unlock rewards, initialize your player stats object."
+              }
+            </div>
+            {isPollingInit ? (
+              <div className="setup-waiting">
+                <Loader2 size={16} className="animate-spin" />
+                Indexing on-chain...
+              </div>
+            ) : (
+              <button className="prof-btn init" onClick={handleInitializeStats} disabled={isInitializing}>
+                {isInitializing
+                  ? <><Loader2 size={16} className="animate-spin" /> Confirming...</>
+                  : "✦ Initialize Player Stats"
+                }
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -709,14 +821,16 @@ export default function ProfilePage() {
               <AchievementsTab
                 achievements={achievements} stats={stats}
                 claimedAchievementIds={claimedIds} claimingId={claimingId}
-                onClaim={handleClaim} onRefresh={fetchProfileData} isLoading={isLoading}
+                onClaim={handleClaim} onRefresh={() => fetchProfileData(false)} isLoading={isLoading}
               />
             )}
 
             {activeTab === "earnings" && (
               <EarningsTab
                 earnings={earnings} isLoading={isLoading}
-                isWithdrawing={isWithdrawing} onWithdraw={handleWithdrawEarnings} onRefresh={fetchProfileData}
+                isWithdrawing={isWithdrawing}
+                onWithdraw={handleWithdrawEarnings}
+                onRefresh={() => fetchProfileData(false)}
               />
             )}
           </>

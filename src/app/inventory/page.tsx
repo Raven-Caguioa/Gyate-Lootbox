@@ -2,24 +2,17 @@
 
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Search, RefreshCw, ShoppingBag, Loader2, LayoutGrid,
   Tag, ChevronRight, X, Layers, ArrowLeft, Flame, Filter
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
-import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_CAP } from "@/lib/sui-constants";
+import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_CAP, STATS_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { NFT } from "@/lib/mock-data";
 import { Transaction } from "@mysten/sui/transactions";
-import { cn } from "@/lib/utils";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
 
 // ─────────────────────────────────────────────
 // Types
@@ -296,27 +289,67 @@ function normalizeSuiId(id: string | any): string {
 }
 function shortenId(id: string): string { return `${id.slice(0, 6)}...${id.slice(-4)}`; }
 
+/**
+ * Resolve a player's PlayerStats shared-object ID from the StatsRegistry table.
+ *
+ * StatsRegistry holds a NESTED Table<address, ID> called stats_by_owner.
+ * That inner table has its own object ID (table.fields.id.id).
+ * We must fetch the registry first to get the inner table ID, THEN
+ * call getDynamicFieldObject on that inner table ID — NOT on STATS_REGISTRY directly.
+ *
+ * Wrong:  getDynamicFieldObject(STATS_REGISTRY, address)      ← was broken
+ * Correct: getDynamicFieldObject(innerTableId,   address)      ← fixed
+ */
+async function resolveStatsId(suiClient: any, playerAddress: string): Promise<string | null> {
+  try {
+    // Step 1: get the StatsRegistry object to find the inner table's own ID
+    const registryObj = await suiClient.getObject({
+      id: STATS_REGISTRY,
+      options: { showContent: true },
+    });
+    const tableId = (registryObj.data?.content as any)?.fields?.stats_by_owner?.fields?.id?.id;
+    if (!tableId) {
+      console.error("resolveStatsId: could not find inner table ID in StatsRegistry");
+      return null;
+    }
+
+    // Step 2: query the inner table for this player's entry
+    const field = await suiClient.getDynamicFieldObject({
+      parentId: tableId,
+      name: { type: "address", value: playerAddress },
+    });
+
+    // Step 3: the value IS the PlayerStats object ID
+    const rawId = (field?.data?.content as any)?.fields?.value;
+    if (!rawId) return null;
+    return typeof rawId === "string" ? rawId : rawId?.id ?? null;
+  } catch (err) {
+    console.error("resolveStatsId failed:", err);
+    return null;
+  }
+}
+
 // ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
 
 export default function InventoryPage() {
-  const account        = useCurrentAccount();
-  const suiClient      = useSuiClient();
+  const account = useCurrentAccount();
+  const suiClient = useSuiClient();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
-  const { toast }      = useToast();
+  const { toast } = useToast();
 
-  const [userNfts, setUserNfts]   = useState<NFTWithListed[]>([]);
+  const [userNfts, setUserNfts] = useState<NFTWithListed[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-  const [selectedNft, setSelectedNft]     = useState<NFT | null>(null);
-  const [searchTerm, setSearchTerm]       = useState("");
-  const [rarityFilter, setRarityFilter]   = useState<number | null>(null);
-  const [isBurning, setIsBurning]         = useState(false);
-  const [isListing, setIsListing]         = useState(false);
+  const [selectedNft, setSelectedNft] = useState<NFT | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [rarityFilter, setRarityFilter] = useState<number | null>(null);
+  const [isBurning, setIsBurning] = useState(false);
+  const [isListing, setIsListing] = useState(false);
   const [listDialogOpen, setListDialogOpen] = useState(false);
-  const [listingNft, setListingNft]       = useState<NFT | null>(null);
-  const [listPriceSui, setListPriceSui]   = useState("");
+  const [listingNft, setListingNft] = useState<NFT | null>(null);
+  const [listPriceSui, setListPriceSui] = useState("");
 
   // ── Fetch NFTs ──────────────────────────────────────────────────────
   const fetchUserNfts = useCallback(async () => {
@@ -330,7 +363,7 @@ export default function InventoryPage() {
       });
       if (capsRes.data.length === 0) { setUserNfts([]); return; }
       const kioskCapId = capsRes.data[0].data?.objectId!;
-      const kioskId    = (capsRes.data[0].data?.content as any)?.fields?.for;
+      const kioskId = (capsRes.data[0].data?.content as any)?.fields?.for;
       if (!kioskId) { setUserNfts([]); return; }
 
       let allFields: any[] = [];
@@ -342,10 +375,10 @@ export default function InventoryPage() {
       } while (cursor);
       if (allFields.length === 0) { setUserNfts([]); return; }
 
-      const NFT_TYPE     = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
-      const ITEM_TYPE    = "0x2::kiosk::Item";
+      const NFT_TYPE = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
+      const ITEM_TYPE = "0x2::kiosk::Item";
       const LISTING_TYPE = "0x2::kiosk::Listing";
-      const itemFields    = allFields.filter(f => typeof f.name.type === "string" && f.name.type.startsWith(ITEM_TYPE));
+      const itemFields = allFields.filter(f => typeof f.name.type === "string" && f.name.type.startsWith(ITEM_TYPE));
       const listingFields = allFields.filter(f => typeof f.name.type === "string" && f.name.type.startsWith(LISTING_TYPE));
       if (itemFields.length === 0) { setUserNfts([]); return; }
 
@@ -362,7 +395,7 @@ export default function InventoryPage() {
       const mapped: NFTWithListed[] = nftObjects.map((obj: any) => {
         if (!obj.data) return null;
         const objectId = normalizeSuiId(obj.data.objectId);
-        const content  = obj.data.content;
+        const content = obj.data.content;
         if (content?.type !== NFT_TYPE) return null;
         const f = content?.fields;
         if (!f) return null;
@@ -413,28 +446,43 @@ export default function InventoryPage() {
     if (!account || !nft.kioskId || !nft.kioskCapId) return;
     setIsBurning(true);
     try {
-      const statsObjects = await suiClient.getOwnedObjects({
-        owner: account.address,
-        filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` },
-      });
-      if (statsObjects.data.length === 0) {
-        toast({ variant: "destructive", title: "Profile Required", description: "Initialize your profile in the Account section before burning." });
+      // ── PlayerStats (SHARED object — resolve via StatsRegistry) ──────────
+      // PlayerStats is a shared object; it won't show in getOwnedObjects.
+      const statsId = await resolveStatsId(suiClient, account.address);
+      if (!statsId) {
+        toast({
+          variant: "destructive",
+          title: "Profile Required",
+          description: "Initialize your player profile in the Account / Profile section before burning.",
+        });
         setIsBurning(false); return;
       }
-      const statsId = statsObjects.data[0].data!.objectId;
+
       const txb = new Transaction();
       txb.moveCall({
         target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.BURN_NFT_FOR_GYATE}`,
-        arguments: [txb.object(nft.kioskId), txb.object(nft.kioskCapId), txb.object(TREASURY_CAP), txb.object(statsId), txb.pure.id(nft.id)],
+        arguments: [
+          txb.object(nft.kioskId),
+          txb.object(nft.kioskCapId),
+          txb.object(TREASURY_CAP),
+          txb.object(statsId),   // shared PlayerStats — pass by ID
+          txb.pure.id(nft.id),
+        ],
       });
       signAndExecute({ transaction: txb }, {
         onSuccess: () => {
           toast({ title: "Hero Sacrificed 🔥", description: "You received $GYATE tokens." });
           setIsBurning(false); setSelectedNft(null); setTimeout(fetchUserNfts, 3000);
         },
-        onError: (err) => { toast({ variant: "destructive", title: "Burn failed", description: err.message }); setIsBurning(false); },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Burn failed", description: err.message });
+          setIsBurning(false);
+        },
       });
-    } catch (err: any) { toast({ variant: "destructive", title: "Burn error", description: err.message }); setIsBurning(false); }
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Burn error", description: err.message });
+      setIsBurning(false);
+    }
   };
 
   const openListDialog = (nft: NFT) => { setListingNft(nft); setListPriceSui(""); setListDialogOpen(true); };
@@ -448,14 +496,22 @@ export default function InventoryPage() {
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.LIST_NFT}`,
-      arguments: [txb.object(listingNft.kioskId), txb.object(listingNft.kioskCapId), txb.pure.id(listingNft.id), txb.pure.u64(priceMist)],
+      arguments: [
+        txb.object(listingNft.kioskId),
+        txb.object(listingNft.kioskCapId),
+        txb.pure.id(listingNft.id),
+        txb.pure.u64(priceMist),
+      ],
     });
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
         toast({ title: "Listed! 🏷️", description: `${listingNft.name} listed for ${priceFloat} SUI.` });
         setIsListing(false); setListDialogOpen(false); setListingNft(null); setTimeout(fetchUserNfts, 3000);
       },
-      onError: (err) => { toast({ variant: "destructive", title: "Listing failed", description: err.message }); setIsListing(false); },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Listing failed", description: err.message });
+        setIsListing(false);
+      },
     });
   };
 
@@ -467,8 +523,13 @@ export default function InventoryPage() {
       arguments: [txb.object(nft.kioskId), txb.object(nft.kioskCapId), txb.pure.id(nft.id)],
     });
     signAndExecute({ transaction: txb }, {
-      onSuccess: () => { toast({ title: "Delisted", description: `${nft.name} removed from marketplace.` }); setTimeout(fetchUserNfts, 3000); },
-      onError: (err) => { toast({ variant: "destructive", title: "Delist failed", description: err.message }); },
+      onSuccess: () => {
+        toast({ title: "Delisted", description: `${nft.name} removed from marketplace.` });
+        setTimeout(fetchUserNfts, 3000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Delist failed", description: err.message });
+      },
     });
   };
 
@@ -518,7 +579,7 @@ export default function InventoryPage() {
             <div className="inv-empty-icon">🎴</div>
             <div className="inv-empty-title">Collection Empty</div>
             <div className="inv-empty-desc">Visit the shop to summon your first hero!</div>
-            <a href="/shop" className="inv-btn primary" style={{ display:"inline-flex", textDecoration:"none" }}>
+            <a href="/shop" className="inv-btn primary" style={{ display: "inline-flex", textDecoration: "none" }}>
               Go to Shop →
             </a>
           </div>
@@ -533,7 +594,6 @@ export default function InventoryPage() {
           />
         ) : (
           <>
-            {/* Rarity filter */}
             <div className="filter-row">
               <span className="filter-label"><Filter size={10} /> Rarity</span>
               <button className={`filter-pill ${rarityFilter === null ? "active" : ""}`} onClick={() => setRarityFilter(null)}>All</button>
@@ -566,8 +626,7 @@ export default function InventoryPage() {
         nft={selectedNft} open={!!selectedNft} onOpenChange={open => !open && setSelectedNft(null)}
         isInventory={true} onBurn={() => selectedNft && handleBurnNft(selectedNft)} isBurning={isBurning}
       />
-      
-      {/* List dialog */}
+
       {listDialogOpen && (
         <div className="list-dialog-overlay" onClick={() => setListDialogOpen(false)}>
           <div className="list-dialog" onClick={e => e.stopPropagation()}>
@@ -608,15 +667,15 @@ export default function InventoryPage() {
 // ─────────────────────────────────────────────
 
 function DoodleGroupCard({ group, onClick }: { group: NFTGroup; onClick: () => void }) {
-  const listedCount   = group.items.filter(i => i.isListed).length;
+  const listedCount = group.items.filter(i => i.isListed).length;
   const unlistedCount = group.items.length - listedCount;
   const color = RARITY_DOODLE_COLORS[group.rarity] ?? RARITY_DOODLE_COLORS[0];
 
   return (
-    <div style={{ position:"relative" }} onClick={onClick}>
-      <div style={{ position:"absolute", inset:0, borderRadius:20, background: color.shadow, transform:"translate(5px,5px)", zIndex:0 }} />
-      <div className="group-card" style={{ background: color.bg, borderColor: color.border, position:"relative", zIndex:1 }}>
-        <div style={{ position:"relative", overflow:"hidden", aspectRatio:"1" }}>
+    <div style={{ position: "relative" }} onClick={onClick}>
+      <div style={{ position: "absolute", inset: 0, borderRadius: 20, background: color.shadow, transform: "translate(5px,5px)", zIndex: 0 }} />
+      <div className="group-card" style={{ background: color.bg, borderColor: color.border, position: "relative", zIndex: 1 }}>
+        <div style={{ position: "relative", overflow: "hidden", aspectRatio: "1" }}>
           <img src={group.baseImage} alt={group.name} />
           <div className="group-card-count"><Layers size={10} /> {group.items.length}</div>
           {listedCount > 0 && <div className="group-card-listed">{listedCount} listed</div>}
@@ -657,7 +716,7 @@ function ExpandedGroupView({ group, items, onBack, onSelectNft, onList, onDelist
             <span className="rarity-badge" style={{ background: color.bg, borderColor: color.border, color: color.text }}>
               {RARITY_LABELS[group.rarity]}
             </span>
-            <span style={{ fontSize:12, color:"#64748b", fontWeight:600 }}>{items.length} owned · {listedCount} listed</span>
+            <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>{items.length} owned · {listedCount} listed</span>
           </div>
         </div>
       </div>
@@ -686,7 +745,7 @@ function DoodleTokenRow({ nft, index, onView, onList, onDelist }: {
         <img src={nft.image} alt={nft.name} />
       </div>
       <div className="token-info">
-        <div className="token-id">#{String(index).padStart(3,"0")} · {shortenId(nft.id)}</div>
+        <div className="token-id">#{String(index).padStart(3, "0")} · {shortenId(nft.id)}</div>
         <div className="token-stats">
           HP <span>{nft.hp}</span> &nbsp; ATK <span>{nft.atk}</span> &nbsp; SPD <span>{nft.spd}</span>
         </div>

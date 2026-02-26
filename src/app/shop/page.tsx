@@ -1,7 +1,6 @@
 "use client";
 
 import { Navigation } from "@/components/navigation";
-import { Button } from "@/components/ui/button";
 import { Store, Sparkles, Loader2, RefreshCw, Zap, Info, Coins, ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +8,7 @@ import { useState, useEffect, useCallback } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, TREASURY_CAP } from "@/lib/sui-constants";
+import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, TREASURY_CAP, STATS_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -25,6 +24,48 @@ interface LootboxData {
   common_count: number; rare_count: number; super_rare_count: number;
   ssr_count: number; ultra_rare_count: number; legend_rare_count: number;
   possibleNfts: PossibleNFT[];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve a player's PlayerStats shared-object ID from the StatsRegistry table.
+ *
+ * StatsRegistry holds a NESTED Table<address, ID> called stats_by_owner.
+ * That inner table has its own object ID (table.fields.id.id).
+ * We must fetch the registry first to get the inner table ID, THEN
+ * call getDynamicFieldObject on that inner table ID — NOT on STATS_REGISTRY directly.
+ *
+ * Wrong:  getDynamicFieldObject(STATS_REGISTRY, address)      ← was broken
+ * Correct: getDynamicFieldObject(innerTableId,   address)      ← fixed
+ */
+async function resolveStatsId(suiClient: any, playerAddress: string): Promise<string | null> {
+  try {
+    // Step 1: get the StatsRegistry object to find the inner table's own ID
+    const registryObj = await suiClient.getObject({
+      id: STATS_REGISTRY,
+      options: { showContent: true },
+    });
+    const tableId = (registryObj.data?.content as any)?.fields?.stats_by_owner?.fields?.id?.id;
+    if (!tableId) {
+      console.error("resolveStatsId: could not find inner table ID in StatsRegistry");
+      return null;
+    }
+
+    // Step 2: query the inner table for this player's entry
+    const field = await suiClient.getDynamicFieldObject({
+      parentId: tableId,
+      name: { type: "address", value: playerAddress },
+    });
+
+    // Step 3: the value IS the PlayerStats object ID
+    const rawId = (field?.data?.content as any)?.fields?.value;
+    if (!rawId) return null;
+    return typeof rawId === "string" ? rawId : rawId?.id ?? null;
+  } catch (err) {
+    console.error("resolveStatsId failed:", err);
+    return null;
+  }
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -293,16 +334,36 @@ export default function ShopPage() {
     if (totalChars === 0) { toast({ variant: "destructive", title: "Empty Protocol", description: "This lootbox has no character types registered yet." }); return; }
     setIsPending(true);
     try {
+      // ── Kiosk ──────────────────────────────────────────────────────────────
       const ownedCaps = await suiClient.getOwnedObjects({ owner: account.address, filter: { StructType: `0x2::kiosk::KioskOwnerCap` } });
-      if (ownedCaps.data.length === 0) { toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to receive characters." }); setIsPending(false); return; }
+      if (ownedCaps.data.length === 0) {
+        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to receive characters." });
+        setIsPending(false); return;
+      }
       const kioskCapId = ownedCaps.data[0].data?.objectId;
       const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
       const kioskId = (capObject.data?.content as any)?.fields?.for;
-      const statsObjects = await suiClient.getOwnedObjects({ owner: account.address, filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::PlayerStats` } });
-      if (statsObjects.data.length === 0) { toast({ variant: "destructive", title: "Account Setup Required", description: "Initialize your profile in the Account section first." }); setIsPending(false); return; }
-      const statsId = statsObjects.data[0].data?.objectId;
+
+      // ── PlayerStats (SHARED object — resolve via StatsRegistry) ────────────
+      // PlayerStats is NOT owned by the player. It's a shared object registered
+      // in StatsRegistry.stats_by_owner (Table<address, ID>). We fetch it via
+      // getDynamicFieldObject so we get its on-chain object ID.
+      const statsId = await resolveStatsId(suiClient, account.address);
+      if (!statsId) {
+        toast({
+          variant: "destructive",
+          title: "Profile Setup Required",
+          description: "Please initialize your player profile in the Account / Profile section first.",
+        });
+        setIsPending(false); return;
+      }
+
+      // ── Build transaction ──────────────────────────────────────────────────
       const txb = new Transaction();
-      let paymentAmount = mode === 'multi' ? BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price) * BigInt(box.multi_open_size) : BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price);
+      let paymentAmount = mode === 'multi'
+        ? BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price) * BigInt(box.multi_open_size)
+        : BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price);
+
       let targetFunction = "";
       if (paymentMethod === 'SUI') {
         if (mode === 'single') targetFunction = FUNCTIONS.OPEN_LOOTBOX;
@@ -313,6 +374,7 @@ export default function ShopPage() {
         else if (mode === 'multi') targetFunction = FUNCTIONS.MULTI_OPEN_LOOTBOX_GYATE;
         else if (mode === 'pity') targetFunction = FUNCTIONS.OPEN_LOOTBOX_GYATE_WITH_PITY;
       }
+
       let paymentCoin;
       if (paymentMethod === 'SUI') {
         const [coin] = txb.splitCoins(txb.gas, [txb.pure.u64(paymentAmount)]);
@@ -321,41 +383,77 @@ export default function ShopPage() {
         const gyateType = `${PACKAGE_ID}::${MODULE_NAMES.GYATE_COIN}::GYATE_COIN`;
         const coins = await suiClient.getCoins({ owner: account.address, coinType: gyateType });
         if (coins.data.length === 0) throw new Error("No $GYATE tokens found in wallet.");
-        const [mainCoin, ...otherCoins] = coins.data.map(c => c.coinObjectId);
-        if (otherCoins.length > 0) txb.mergeCoins(txb.object(mainCoin), otherCoins.map(c => txb.object(c)));
+        const [mainCoin, ...otherCoins] = coins.data.map((c: any) => c.coinObjectId);
+        if (otherCoins.length > 0) txb.mergeCoins(txb.object(mainCoin), otherCoins.map((c: string) => txb.object(c)));
         const [coin] = txb.splitCoins(txb.object(mainCoin), [txb.pure.u64(paymentAmount)]);
         paymentCoin = coin;
       }
+
       let progressId: string | null = null;
       if (mode === 'pity') {
-        const progressObjects = await suiClient.getOwnedObjects({ owner: account.address, filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::UserProgress` }, options: { showContent: true } });
+        const progressObjects = await suiClient.getOwnedObjects({
+          owner: account.address,
+          filter: { StructType: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::UserProgress` },
+          options: { showContent: true },
+        });
         const progress = progressObjects.data.find((p: any) => p.data?.content?.fields?.lootbox_id === box.id);
-        if (!progress) { toast({ variant: "destructive", title: "Pity Tracking Disabled", description: "Initialize pity progress for this box in your profile." }); setIsPending(false); return; }
+        if (!progress) {
+          toast({ variant: "destructive", title: "Pity Tracking Disabled", description: "Initialize pity progress for this box in your profile." });
+          setIsPending(false); return;
+        }
         progressId = progress.data!.objectId;
       }
-      const callArgs = [txb.object(box.id), txb.object(LOOTBOX_REGISTRY), paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(TREASURY_CAP)];
+
+      const callArgs = [
+        txb.object(box.id),
+        txb.object(LOOTBOX_REGISTRY),
+        paymentMethod === 'SUI' ? txb.object(TREASURY_POOL) : txb.object(TREASURY_CAP),
+      ];
       if (mode === 'pity' && progressId) callArgs.push(txb.object(progressId));
-      callArgs.push(paymentCoin, txb.object(statsId!), txb.object(RANDOM_STATE), txb.object(kioskId), txb.object(kioskCapId!));
+      callArgs.push(
+        paymentCoin,
+        txb.object(statsId),   // shared PlayerStats object — pass by ID directly
+        txb.object(RANDOM_STATE),
+        txb.object(kioskId),
+        txb.object(kioskCapId!),
+      );
+
       txb.moveCall({ target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`, arguments: callArgs });
+
       signAndExecute({ transaction: txb }, {
         onSuccess: async (result) => {
           toast({ title: "Transaction Sent", description: "Waiting for blockchain confirmation..." });
           try {
             const resp = await suiClient.waitForTransaction({ digest: result.digest, options: { showEvents: true } });
-            const nftMintedEvents = resp.events?.filter(e => e.type.includes("::NFTMintedEvent")) || [];
+            const nftMintedEvents = resp.events?.filter((e: any) => e.type.includes("::NFTMintedEvent")) || [];
             if (nftMintedEvents.length === 0) throw new Error("No characters minted in transaction.");
             const nftIds = nftMintedEvents.map((e: any) => e.parsedJson.nft_id);
             const objects = await suiClient.multiGetObjects({ ids: nftIds, options: { showContent: true } });
             const results: NFT[] = objects.map((obj: any) => {
               const fields = obj.data?.content?.fields;
-              return { id: obj.data?.objectId, name: fields.name, rarity: fields.rarity, variantType: fields.variant_type, image: fields.image_url, hp: parseInt(fields.hp), atk: parseInt(fields.atk), spd: parseInt(fields.spd), baseValue: parseInt(fields.base_value), actualValue: parseInt(fields.actual_value), lootboxSource: fields.lootbox_source, globalId: parseInt(fields.global_sequential_id) };
+              return {
+                id: obj.data?.objectId, name: fields.name, rarity: fields.rarity,
+                variantType: fields.variant_type, image: fields.image_url,
+                hp: parseInt(fields.hp), atk: parseInt(fields.atk), spd: parseInt(fields.spd),
+                baseValue: parseInt(fields.base_value), actualValue: parseInt(fields.actual_value),
+                lootboxSource: fields.lootbox_source, globalId: parseInt(fields.global_sequential_id),
+              };
             });
             setRevealBox(box); setRevealResults(results); setShowReveal(true); setIsPending(false);
-          } catch (err: any) { toast({ variant: "destructive", title: "Reveal Error", description: err.message }); setIsPending(false); }
+          } catch (err: any) {
+            toast({ variant: "destructive", title: "Reveal Error", description: err.message });
+            setIsPending(false);
+          }
         },
-        onError: (err) => { toast({ variant: "destructive", title: "Summon Failed", description: err.message }); setIsPending(false); },
+        onError: (err) => {
+          toast({ variant: "destructive", title: "Summon Failed", description: err.message });
+          setIsPending(false);
+        },
       });
-    } catch (err: any) { toast({ variant: "destructive", title: "Summon Error", description: err.message }); setIsPending(false); }
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Summon Error", description: err.message });
+      setIsPending(false);
+    }
   };
 
   return (
@@ -366,9 +464,7 @@ export default function ShopPage() {
       <div className="shop-container">
         <div className="shop-header">
           <div>
-            <div className="shop-title">
-              Summoning Altar 
-            </div>
+            <div className="shop-title">Summoning Altar</div>
             <div className="shop-subtitle">On-chain randomness · Bad-luck protection · $GYATE rewards</div>
           </div>
 
@@ -390,7 +486,7 @@ export default function ShopPage() {
 
         {isLoading ? (
           <div className="shop-loading">
-            <div style={{ fontSize:56 }}>📦</div>
+            <div style={{ fontSize: 56 }}>📦</div>
             <div className="shop-loading-text">Consulting the registry...</div>
           </div>
         ) : activeBoxes.length === 0 ? (
@@ -402,23 +498,19 @@ export default function ShopPage() {
         ) : (
           <div className="lootbox-grid">
             {activeBoxes.map(box => (
-              <div key={box.id} style={{ position:"relative" }}>
+              <div key={box.id} style={{ position: "relative" }}>
                 <div className="lootbox-card-shadow" />
                 <div className="lootbox-card">
-                  {/* Carousel */}
                   <LootboxPreviewCarousel nfts={box.possibleNfts} fallbackImage={box.image} />
 
-                  {/* Feature badges */}
                   <div className="card-badges">
                     {box.pity_enabled && <span className="card-badge pity">✦ Pity</span>}
                     {box.multi_open_enabled && <span className="card-badge multi">{box.multi_open_size}× Batch</span>}
                   </div>
 
-                  {/* Body */}
                   <div className="card-body">
                     <div className="card-name">{box.name}</div>
 
-                    {/* Drop rates */}
                     <div className="card-drops">
                       {box.common_count > 0 && <span className="drop-pill common">Common ×{box.common_count}</span>}
                       {box.rare_count > 0 && <span className="drop-pill rare">Rare ×{box.rare_count}</span>}
@@ -428,18 +520,17 @@ export default function ShopPage() {
                       {box.legend_rare_count > 0 && <span className="drop-pill legend">Legend ×{box.legend_rare_count}</span>}
                     </div>
 
-                    {/* Price row */}
                     <div className="price-row">
                       <div>
                         <div className="price-label">Price</div>
-                        <div style={{ display:"flex", alignItems:"baseline" }}>
+                        <div style={{ display: "flex", alignItems: "baseline" }}>
                           <span className="price-main" style={{ opacity: paymentMethod === 'GYATE' ? 0.3 : 1 }}>
                             {Number(box.price) / 1_000_000_000}
                           </span>
                           <span className="price-currency" style={{ opacity: paymentMethod === 'GYATE' ? 0.3 : 1 }}>SUI</span>
                         </div>
                       </div>
-                      <div style={{ textAlign:"right" }}>
+                      <div style={{ textAlign: "right" }}>
                         <div className="price-label">Alt Price</div>
                         <span className={`price-alt ${paymentMethod === 'GYATE' ? 'active-gyate' : ''}`}>
                           {box.gyate_price} <Coins size={12} />
@@ -447,7 +538,6 @@ export default function ShopPage() {
                       </div>
                     </div>
 
-                    {/* Action buttons */}
                     <div className={`action-row ${box.multi_open_enabled ? 'two-col' : ''}`}>
                       <button className="shop-btn primary" disabled={isPending} onClick={() => handleSummon(box, 'single')}>
                         {isPending ? <Loader2 size={14} className="animate-spin" /> : "✦ Single Pull"}
@@ -459,8 +549,8 @@ export default function ShopPage() {
                       )}
                     </div>
                     {box.pity_enabled && (
-                      <div style={{ marginTop:8 }}>
-                        <button className="shop-btn pity" style={{ width:"100%" }} disabled={isPending} onClick={() => handleSummon(box, 'pity')}>
+                      <div style={{ marginTop: 8 }}>
+                        <button className="shop-btn pity" style={{ width: "100%" }} disabled={isPending} onClick={() => handleSummon(box, 'pity')}>
                           ⚡ Pity-Guaranteed Summon
                         </button>
                       </div>
