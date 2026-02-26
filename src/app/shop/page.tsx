@@ -335,14 +335,24 @@ export default function ShopPage() {
     setIsPending(true);
     try {
       // ── Kiosk ──────────────────────────────────────────────────────────────
-      const ownedCaps = await suiClient.getOwnedObjects({ owner: account.address, filter: { StructType: `0x2::kiosk::KioskOwnerCap` } });
+      // Always fetch with showContent: true so objectId and fields are present.
+      // Using data[0] without showContent silently returns objectId as undefined,
+      // causing the tx to reference a stale or wrong-wallet cap object.
+      const ownedCaps = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
+        options: { showContent: true },
+      });
       if (ownedCaps.data.length === 0) {
         toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to receive characters." });
         setIsPending(false); return;
       }
       const kioskCapId = ownedCaps.data[0].data?.objectId;
-      const capObject = await suiClient.getObject({ id: kioskCapId!, options: { showContent: true } });
-      const kioskId = (capObject.data?.content as any)?.fields?.for;
+      if (!kioskCapId) {
+        toast({ variant: "destructive", title: "Kiosk Error", description: "Could not read your KioskOwnerCap. Try refreshing." });
+        setIsPending(false); return;
+      }
+      const kioskId = (ownedCaps.data[0].data?.content as any)?.fields?.for;
 
       // ── PlayerStats (SHARED object — resolve via StatsRegistry) ────────────
       // PlayerStats is NOT owned by the player. It's a shared object registered
