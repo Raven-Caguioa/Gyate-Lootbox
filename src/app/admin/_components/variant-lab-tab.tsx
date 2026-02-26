@@ -314,7 +314,7 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
 
               {/* Base image preview */}
               {selectedNftBaseImage && (
-                <div className="mt-2 rounded-xl overflow-hidden border border-white/10 bg-black/30">
+                <div className="mt-2 rounded-xl overflow-hidden border border-primary/20 bg-gray-100">
                   <div className="w-full aspect-square max-h-48">
                     <img src={selectedNftBaseImage} alt="Base NFT" className="w-full h-full object-contain" />
                   </div>
@@ -378,7 +378,7 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
                   />
                   {variantImage && (
                     <button
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       onClick={() => { setVariantImage(""); setGenState({ status: "idle", url: null, error: null }); }}
                     >
                       <X className="w-3 h-3" />
@@ -424,7 +424,7 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
               </div>
 
               <Button
-                className="w-full bg-pink-600 hover:bg-pink-500 font-bold h-12 glow-violet"
+                className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-bold h-12 glow-violet"
                 onClick={handleAddVariant}
                 disabled={isPending || !variantBoxId || !selectedNftForVariant || !variantName || !variantImage}
               >
@@ -525,7 +525,7 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
                       "w-8 h-8 rounded-full flex items-center justify-center",
                       activePreset?.color
                     )}>
-                      <Wand2 className="w-4 h-4 text-white" />
+                      <Wand2 className="w-4 h-4 text-primary" />
                     </div>
                     <span className="text-[9px] text-center font-bold uppercase tracking-wider">{activePreset?.label}</span>
                     <span className="text-[18px]">→</span>
@@ -535,8 +535,8 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
                   <div className="space-y-1.5">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Output</p>
                     <div className={cn(
-                      "relative aspect-square w-full rounded-xl overflow-hidden border bg-black/40 flex items-center justify-center",
-                      genState.status === "done" ? "border-green-500/30" : "border-white/10 border-dashed"
+                      "relative aspect-square w-full rounded-xl overflow-hidden border bg-gray-100 flex items-center justify-center",
+                      genState.status === "done" ? "border-green-500/50" : "border-primary/20 border-dashed"
                     )}>
                       {genState.status === "done" && genState.url ? (
                         <img src={genState.url} alt="Generated" className="w-full h-full object-contain" />
@@ -568,8 +568,8 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
                     className={cn(
                       "flex-1 h-11 font-bold transition-all",
                       activePreset?.color
-                        ? "text-white"
-                        : "bg-amber-500 hover:bg-amber-400 text-black"
+                        ? "text-accent-foreground"
+                        : "bg-primary hover:bg-primary/90 text-primary-foreground"
                     )}
                     style={activePreset ? undefined : undefined}
                     onClick={handleGenerateImage}

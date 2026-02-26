@@ -148,7 +148,7 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
                 </Select>
               </div>
             </div>
-            <Button className="w-full glow-purple h-12 mt-4" onClick={handleCreateAchievement} disabled={isPending}>
+            <Button className="w-full glow-violet bg-accent font-bold h-12 mt-4" onClick={handleCreateAchievement} disabled={isPending}>
               Register On-Chain Achievement
             </Button>
           </CardContent>

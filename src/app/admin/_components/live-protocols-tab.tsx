@@ -62,12 +62,12 @@ const RARITY_COLORS = [
 // Stat mini-card
 // ─────────────────────────────────────────────
 
-function StatPill({ icon: Icon, label, value, color = "text-slate-800" }: {
+function StatPill({ icon: Icon, label, value, color = "text-foreground" }: {
   icon: any; label: string; value: string; color?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1 p-3 rounded-xl bg-slate-50 border border-slate-200">
-      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+    <div className="flex flex-col gap-1 p-3 rounded-xl bg-white border border-primary/20">
+      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
         <Icon className="w-3 h-3" /> {label}
       </div>
       <div className={cn("text-lg font-bold font-headline", color)}>{value}</div>
@@ -122,11 +122,11 @@ function VariantToggleRow({
   return (
     <div className={cn(
       "flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all",
-      enabled ? "bg-slate-50 border-slate-200" : "bg-red-50 border-red-200"
+      enabled ? "bg-white border-primary/20" : "bg-red-50 border-red-300"
     )}>
       <div className="flex items-center gap-2">
-        <Sparkles className={cn("w-3 h-3", enabled ? "text-purple-500" : "text-slate-400")} />
-        <span className="font-bold text-slate-800">{variantName}</span>
+        <Sparkles className={cn("w-3 h-3", enabled ? "text-primary" : "text-gray-400")} />
+        <span className="font-bold text-foreground">{variantName}</span>
         <span className={cn("text-[9px] font-bold", RARITY_COLORS[rarity])}>
           ({RARITY_LABELS[rarity as keyof typeof RARITY_LABELS]})
         </span>
@@ -256,7 +256,7 @@ function LiveBoxPanel({
               box.isActive ? "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-orange-400"
             )} />
             <div className="min-w-0">
-              <h3 className="font-headline font-bold text-lg truncate text-slate-900">{box.name}</h3>
+              <h3 className="font-headline font-bold text-lg truncate text-foreground">{box.name}</h3>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span className={cn(
                   "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full",
@@ -327,8 +327,8 @@ function LiveBoxPanel({
 
         {/* Inventory health */}
         {fullData && (
-          <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          <div className="mt-4 p-3 rounded-xl bg-white border border-primary/20 space-y-3">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Layers className="w-3 h-3" /> Inventory Health
               </span>
@@ -341,10 +341,10 @@ function LiveBoxPanel({
                 return (
                   <div key={i} className={cn(
                     "rounded-lg p-2 text-center border",
-                    count > 0 ? "bg-white border-slate-200" : "bg-red-50 border-red-200"
+                    count > 0 ? "bg-white border-primary/20" : "bg-red-50 border-red-300"
                   )}>
                     <div className={cn("text-[9px] font-bold uppercase", RARITY_COLORS[i])}>{labels[i]}</div>
-                    <div className={cn("text-sm font-bold", count > 0 ? "text-slate-800" : "text-red-500")}>{count}</div>
+                    <div className={cn("text-sm font-bold", count > 0 ? "text-foreground" : "text-red-500")}>{count}</div>
                   </div>
                 );
               })}
@@ -361,7 +361,7 @@ function LiveBoxPanel({
               setShowInspector(!showInspector);
               if (!fullData && !isFetching) onRefreshFull();
             }}
-            className="h-8 text-xs border-slate-200 gap-1.5 text-slate-700"
+            className="h-8 text-xs border-primary/30 gap-1.5 text-foreground hover:bg-primary/5"
           >
             <Eye className="w-3 h-3" />
             {showInspector ? "Hide" : "Inspect"}
@@ -373,7 +373,7 @@ function LiveBoxPanel({
               variant="outline"
               size="sm"
               onClick={() => setShowVariants(!showVariants)}
-              className="h-8 text-xs border-slate-200 gap-1.5 text-slate-700"
+              className="h-8 text-xs border-primary/30 gap-1.5 text-foreground hover:bg-primary/5"
             >
               <Sparkles className="w-3 h-3" />
               Variants
@@ -389,7 +389,7 @@ function LiveBoxPanel({
             variant="outline"
             size="sm"
             onClick={() => setShowPriceEdit(!showPriceEdit)}
-            className="h-8 text-xs border-slate-200 gap-1.5 text-slate-700"
+            className="h-8 text-xs border-primary/30 gap-1.5 text-foreground hover:bg-primary/5"
           >
             <DollarSign className="w-3 h-3" /> Edit Price
           </Button>
@@ -399,7 +399,7 @@ function LiveBoxPanel({
             size="sm"
             onClick={onRefreshFull}
             disabled={isFetching}
-            className="h-8 text-xs text-slate-500 gap-1.5 ml-auto"
+            className="h-8 text-xs text-foreground gap-1.5 ml-auto hover:bg-primary/5"
           >
             <RefreshCw className={cn("w-3 h-3", isFetching && "animate-spin")} />
             Sync

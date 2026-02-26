@@ -153,6 +153,58 @@ const ADMIN_STYLES = `
     font-family: 'Nunito', sans-serif !important;
   }
 
+  /* ── Live Protocol Panel Fixes ── */
+  /* Force white backgrounds on all live protocol cards */
+  .admin-root .border-green-200,
+  .admin-root .border-orange-200 {
+    background: white !important;
+  }
+
+  /* StatPill backgrounds */
+  .admin-root .bg-slate-50 {
+    background: #f8fafc !important;
+  }
+
+  /* Inventory health grid items */
+  .admin-root .bg-white {
+    background: white !important;
+  }
+
+  /* Protocol card content areas */
+  .admin-root [class*="CardContent"] {
+    background: transparent !important;
+  }
+
+  /* Force card backgrounds to white */
+  .admin-root .shadow-\[3px_3px_0px_rgba\(201\,184\,255\,0\.3\)\] {
+    background: white !important;
+  }
+
+  /* Status indicator backgrounds */
+  .admin-root .bg-green-100 {
+    background: #dcfce7 !important;
+    color: #15803d !important;
+  }
+  .admin-root .bg-orange-100 {
+    background: #ffedd5 !important;
+    color: #c2410c !important;
+  }
+
+  /* Expanded panels */
+  .admin-root .animate-in {
+    background: #f8fafc !important;
+  }
+
+  /* Live protocol summary cards at top */
+  .admin-root .border-slate-200 {
+    background: white !important;
+  }
+
+  /* Inventory health container */
+  .admin-root .bg-slate-50.border.border-slate-200 {
+    background: #f8fafc !important;
+  }
+
   /* ── Buttons — override all to home style ── */
   .admin-root .glow-purple,
   .admin-root .glow-violet,
@@ -216,11 +268,11 @@ const ADMIN_STYLES = `
     background: #f8fafc !important;
   }
 
-  /* Inputs */
+  /* Inputs — FIXED FOR VISIBILITY */
   .admin-root input,
   .admin-root textarea {
     background: white !important;
-    border-color: #e2e8f0 !important;
+    border: 2px solid #e2e8f0 !important;
     color: #1a1a1a !important;
     border-radius: 12px !important;
     font-family: 'Nunito', sans-serif !important;
@@ -235,15 +287,15 @@ const ADMIN_STYLES = `
   }
   .admin-root input::placeholder { color: #94a3b8 !important; }
 
-  /* Labels */
+  /* Labels — FIXED TO BE DARKER */
   .admin-root label, .admin-root [class*="Label"] {
-    color: #475569 !important;
+    color: #1a1a1a !important;
     font-family: 'Nunito', sans-serif !important;
     font-size: 12px !important;
     font-weight: 700 !important;
   }
 
-  /* Select triggers */
+  /* Select triggers — FIXED */
   .admin-root [class*="SelectTrigger"] {
     background: white !important;
     border: 2px solid #e2e8f0 !important;
@@ -254,6 +306,28 @@ const ADMIN_STYLES = `
   }
   .admin-root [class*="SelectTrigger"]:hover {
     border-color: #c9b8ff !important;
+  }
+  
+  /* Select content dropdown — FIXED */
+  .admin-root [class*="SelectContent"] {
+    background: white !important;
+    border: 2px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    box-shadow: 4px 4px 0px rgba(201,184,255,0.3) !important;
+  }
+  
+  /* Select items — FIXED */
+  .admin-root [class*="SelectItem"] {
+    color: #1a1a1a !important;
+    font-family: 'Nunito', sans-serif !important;
+    font-weight: 600 !important;
+  }
+  .admin-root [class*="SelectItem"]:hover {
+    background: #f8fafc !important;
+  }
+  .admin-root [class*="SelectItem"][data-state="checked"] {
+    background: #ede9fe !important;
+    color: #5b21b6 !important;
   }
 
   /* Scroll area */
@@ -281,13 +355,21 @@ const ADMIN_STYLES = `
     border-color: #c9b8ff !important;
   }
 
-  /* Switch */
+  /* Switch — FIXED TO BE VISIBLE */
   .admin-root [class*="Switch"] {
     background-color: #e2e8f0 !important;
     border-radius: 99px !important;
+    border: 2px solid #cbd5e1 !important;
   }
   .admin-root [data-state="checked"][class*="Switch"] {
     background-color: #1a1a1a !important;
+    border-color: #1a1a1a !important;
+  }
+  
+  /* Switch thumb — FIXED */
+  .admin-root [class*="Switch"] [class*="Thumb"] {
+    background: white !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
   }
 
   /* Dividers */
@@ -539,6 +621,7 @@ const ADMIN_STYLES = `
     .admin-tab-btn { padding: 8px 12px; font-size: 11px; }
     .admin-container { padding: 32px 16px 60px; }
   }
+    
 `;
 
 const TABS = [

@@ -17,7 +17,7 @@ function RarityTier({ label, configs, isFetching }: {
   return (
     <div className="space-y-4">
       <h4 className={cn(
-        "text-xs font-bold uppercase tracking-widest border-b border-white/5 pb-2 flex justify-between",
+        "text-xs font-bold uppercase tracking-widest border-b border-primary/20 pb-2 flex justify-between",
         isEmpty ? "text-red-400" : "text-muted-foreground"
       )}>
         {label} ({configs?.length || 0})
@@ -30,9 +30,9 @@ function RarityTier({ label, configs, isFetching }: {
       ) : (
         <div className="grid gap-3">
           {configs.map((nft, idx) => (
-            <div key={idx} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-3">
+            <div key={idx} className="p-3 rounded-xl bg-white border border-primary/20 space-y-3">
               <div className="flex items-center gap-3">
-                <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-black/40 border border-white/10 shrink-0">
+                <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-primary/20 shrink-0">
                   {nft.base_image_url ? (
                     <Image src={nft.base_image_url} alt={nft.name} fill className="object-cover" />
                   ) : (
@@ -48,21 +48,21 @@ function RarityTier({ label, configs, isFetching }: {
                   </div>
                 </div>
                 <div className="flex flex-col items-end text-[10px] gap-1">
-                  <Badge variant="outline" className="text-[9px] py-0 border-white/10">HP: {nft.min_hp}–{nft.max_hp}</Badge>
-                  <Badge variant="outline" className="text-[9px] py-0 border-white/10">ATK: {nft.min_atk}–{nft.max_atk}</Badge>
+                  <Badge variant="outline" className="text-[9px] py-0 border-primary/30">HP: {nft.min_hp}–{nft.max_hp}</Badge>
+                  <Badge variant="outline" className="text-[9px] py-0 border-primary/30">ATK: {nft.min_atk}–{nft.max_atk}</Badge>
                 </div>
               </div>
 
               {nft.variant_configs && nft.variant_configs.length > 0 && (
-                <div className="pl-4 space-y-2 border-l border-white/5 ml-6">
+                <div className="pl-4 space-y-2 border-l border-primary/20 ml-6">
                   {nft.variant_configs.map((v, vIdx) => {
                     const variant: VariantData = v.fields;
                     return (
                       <div key={vIdx} className={cn(
                         "flex items-center justify-between text-[10px] p-2 rounded-lg border",
                         variant.enabled
-                          ? "bg-white/5 border-white/5"
-                          : "bg-red-500/5 border-red-500/10 opacity-50"
+                        ? "bg-white border-primary/20"
+                        : "bg-red-50 border-red-300 opacity-50"
                       )}>
                         <div className="flex items-center gap-2">
                           <Sparkles className={cn("w-3 h-3", variant.enabled ? "text-accent" : "text-muted-foreground")} />
@@ -96,8 +96,8 @@ interface ProtocolInspectorProps {
 
 export function ProtocolInspector({ data, isFetching, title = "Protocol Inspector" }: ProtocolInspectorProps) {
   return (
-    <Card className="glass-card border-white/10 flex flex-col h-[800px]">
-      <CardHeader className="border-b border-white/5">
+    <Card className="glass-card border-primary/30 flex flex-col h-[800px]">
+      <CardHeader className="border-b border-primary/20">
         <CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2">
           <Eye className="w-4 h-4" /> {title}
         </CardTitle>

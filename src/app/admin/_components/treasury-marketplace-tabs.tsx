@@ -95,7 +95,7 @@ export function TreasuryTab({ treasuryStats, isFetchingTreasury, fetchTreasuryDa
           <div className="space-y-2"><Label>Amount to Withdraw (SUI)</Label>
             <Input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} />
           </div>
-          <Button className="w-full glow-purple font-bold h-12" onClick={handleWithdrawGyate} disabled={isPending || !withdrawAmount}>
+          <Button className="w-full glow-violet bg-accent font-bold h-12" onClick={handleWithdrawGyate} disabled={isPending || !withdrawAmount}>
             {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Wallet className="w-4 h-4 mr-2" />}
             Execute On-Chain Withdrawal
           </Button>
@@ -165,7 +165,7 @@ export function MarketplaceTab({ policyExists, isCheckingPolicy, checkPolicy }: 
             </div>
             <p className="text-xs font-mono text-muted-foreground/60 italic">Publisher ID: {PUBLISHER.slice(0, 20)}...</p>
           </div>
-          <Button className="w-full glow-purple font-bold h-12" onClick={handleCreateTransferPolicy} disabled={isPending || policyExists === true}>
+          <Button className="w-full glow-violet bg-accent font-bold h-12" onClick={handleCreateTransferPolicy} disabled={isPending || policyExists === true}>
             {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
             {policyExists ? "Policy Already Active" : "Create TransferPolicy"}
           </Button>

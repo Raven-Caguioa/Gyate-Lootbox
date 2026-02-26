@@ -243,7 +243,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
                 )}
               </div>
 
-              <Button className="w-full glow-purple font-bold h-12" onClick={handleCreateDraft} disabled={isPending}>
+              <Button className="w-full glow-violet bg-accent font-bold h-12" onClick={handleCreateDraft} disabled={isPending}>
                 {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
                 Deploy Protocol Draft
               </Button>
@@ -329,7 +329,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
               </div>
 
               <Button
-                variant="outline" className="w-full h-12"
+                variant="outline" className="w-full glow-violet bg-accent font-bold h-12"
                 onClick={handleAddNftType}
                 disabled={isPending || !targetBoxId}
               >
