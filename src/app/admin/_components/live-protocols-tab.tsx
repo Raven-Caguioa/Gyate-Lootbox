@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Area, AreaChart,
+} from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Activity, Pause, Play, RefreshCw, TrendingUp, Package,
   Coins, Sparkles, ToggleLeft, ToggleRight, DollarSign, Zap, Eye,
-  BarChart3, Layers, Loader2, AlertTriangle,
+  Layers, Loader2, AlertTriangle, BarChart2, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PACKAGE_ID, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
@@ -21,25 +25,66 @@ import type { LootboxOption, LootboxFullData, NFTTypeData } from "../_hooks/use-
 import { RARITY_LABELS } from "@/lib/mock-data";
 
 // ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
+
+type StatKey = "opens" | "revenue" | "gyate";
+
+interface DailyPoint {
+  date: string;
+  opens: number;
+  revenue: number;
+  gyate: number;
+}
+
+// ─────────────────────────────────────────────
+// Mock event data generator
+// Replace with real Sui event queries in production:
+// query NFTMintedEvent filtered by lootbox_name, group by timestamp epoch → date
+// ─────────────────────────────────────────────
+
+function generateMockHistory(boxes: LootboxOption[]): DailyPoint[] {
+  const totalOpens = boxes.reduce((a, b) => a + parseInt(b.totalOpens || "0"), 0);
+  const totalRev   = boxes.reduce((a, b) => a + parseInt(b.totalRevenueMist || "0"), 0);
+  const totalGyate = boxes.reduce((a, b) => a + parseInt(b.totalGyateSpent || "0"), 0);
+
+  const days = 14;
+  const points: DailyPoint[] = [];
+  let cumOpens = 0, cumRev = 0, cumGyate = 0;
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+    // Distribute totals with some variance across days
+    const weight = Math.random() * 0.12 + (i === 0 ? 0.15 : 0.04);
+    const dayOpens = i === 0
+      ? Math.max(0, totalOpens - cumOpens)
+      : Math.floor(totalOpens * weight);
+    const dayRev = i === 0
+      ? Math.max(0, totalRev - cumRev)
+      : Math.floor(totalRev * weight);
+    const dayGyate = i === 0
+      ? Math.max(0, totalGyate - cumGyate)
+      : Math.floor(totalGyate * weight);
+
+    cumOpens += dayOpens;
+    cumRev   += dayRev;
+    cumGyate += dayGyate;
+
+    points.push({ date: label, opens: dayOpens, revenue: dayRev, gyate: dayGyate });
+  }
+  return points;
+}
+
+// ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
 
-function mistToSui(mist: string): string {
-  const n = parseInt(mist || "0");
-  return (n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 4 });
-}
-
-function totalNfts(box: LootboxFullData): number {
-  return box.common_configs.length + box.rare_configs.length + box.super_rare_configs.length +
-    box.ssr_configs.length + box.ultra_rare_configs.length + box.legend_rare_configs.length;
-}
-
-function totalVariants(box: LootboxFullData): number {
-  const all = [
-    ...box.common_configs, ...box.rare_configs, ...box.super_rare_configs,
-    ...box.ssr_configs, ...box.ultra_rare_configs, ...box.legend_rare_configs,
-  ];
-  return all.reduce((acc, nft) => acc + (nft.variant_configs?.length ?? 0), 0);
+function mistToSui(mist: string | number): string {
+  const n = typeof mist === "string" ? parseInt(mist || "0") : mist;
+  return (n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
 
 function allNftOptions(box: LootboxFullData): { nft: NFTTypeData; rarity: number }[] {
@@ -54,23 +99,224 @@ function allNftOptions(box: LootboxFullData): { nft: NFTTypeData; rarity: number
 }
 
 const RARITY_COLORS = [
-  "text-slate-400", "text-blue-500", "text-purple-500",
-  "text-pink-500", "text-yellow-500", "text-red-500",
+  "text-slate-400", "text-blue-400", "text-purple-400",
+  "text-pink-400", "text-yellow-400", "text-red-400",
+];
+
+const RARITY_BG = [
+  "bg-slate-100", "bg-blue-50", "bg-purple-50",
+  "bg-pink-50", "bg-yellow-50", "bg-red-50",
 ];
 
 // ─────────────────────────────────────────────
-// Stat mini-card
+// Stat config
 // ─────────────────────────────────────────────
 
-function StatPill({ icon: Icon, label, value, color = "text-foreground" }: {
-  icon: any; label: string; value: string; color?: string;
-}) {
+const STAT_CONFIG: Record<StatKey, {
+  label: string;
+  icon: any;
+  color: string;
+  stroke: string;
+  gradient: [string, string];
+  format: (v: number, boxes: LootboxOption[]) => string;
+}> = {
+  opens: {
+    label: "Total Opens",
+    icon: BarChart2,
+    color: "text-violet-600",
+    stroke: "#7c3aed",
+    gradient: ["#7c3aed33", "#7c3aed00"],
+    format: (v) => v.toLocaleString(),
+  },
+  revenue: {
+    label: "SUI Revenue",
+    icon: Coins,
+    color: "text-emerald-600",
+    stroke: "#059669",
+    gradient: ["#05966933", "#05966900"],
+    format: (v) => `${mistToSui(v)} SUI`,
+  },
+  gyate: {
+    label: "GYATE Spent",
+    icon: Zap,
+    color: "text-pink-600",
+    stroke: "#db2777",
+    gradient: ["#db277733", "#db277700"],
+    format: (v) => v.toLocaleString(),
+  },
+};
+
+// ─────────────────────────────────────────────
+// Custom Tooltip
+// ─────────────────────────────────────────────
+
+function ChartTooltip({ active, payload, label, activeMetric }: any) {
+  if (!active || !payload?.length) return null;
+  const cfg = STAT_CONFIG[activeMetric as StatKey];
+  const val = payload[0]?.value ?? 0;
+
   return (
-    <div className="flex flex-col gap-1 p-3 rounded-xl bg-white border border-primary/20">
-      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
-        <Icon className="w-3 h-3" /> {label}
+    <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-xs">
+      <p className="text-slate-400 font-medium mb-1">{label}</p>
+      <p className={cn("font-bold text-sm", cfg.color)}>
+        {activeMetric === "revenue" ? `${mistToSui(val)} SUI` : val.toLocaleString()}
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Clickable stat card
+// ─────────────────────────────────────────────
+
+function StatCard({
+  statKey, value, isActive, onClick, boxes,
+}: {
+  statKey: StatKey;
+  value: number;
+  isActive: boolean;
+  onClick: () => void;
+  boxes: LootboxOption[];
+}) {
+  const cfg = STAT_CONFIG[statKey];
+  const Icon = cfg.icon;
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "relative flex flex-col gap-2 p-4 rounded-2xl border text-left transition-all duration-200 w-full group",
+        isActive
+          ? "bg-white border-slate-300 shadow-md shadow-slate-100"
+          : "bg-white/60 border-slate-200 hover:border-slate-300 hover:bg-white"
+      )}
+    >
+      {isActive && (
+        <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
+          style={{ background: STAT_CONFIG[statKey].stroke }} />
+      )}
+      <div className="flex items-center gap-2">
+        <div className={cn(
+          "w-7 h-7 rounded-lg flex items-center justify-center",
+          isActive ? "bg-slate-900" : "bg-slate-100 group-hover:bg-slate-200"
+        )}>
+          <Icon className={cn("w-3.5 h-3.5", isActive ? "text-white" : "text-slate-500")} />
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{cfg.label}</span>
       </div>
-      <div className={cn("text-lg font-bold font-headline", color)}>{value}</div>
+      <span className={cn("text-2xl font-bold tracking-tight", cfg.color)}>
+        {cfg.format(value, boxes)}
+      </span>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Analytics Panel
+// ─────────────────────────────────────────────
+
+function AnalyticsPanel({ boxes }: { boxes: LootboxOption[] }) {
+  const [activeMetric, setActiveMetric] = useState<StatKey>("opens");
+  const history = useMemo(() => generateMockHistory(boxes), [boxes]);
+
+  const totalOpens   = boxes.reduce((a, b) => a + parseInt(b.totalOpens || "0"), 0);
+  const totalRevenue = boxes.reduce((a, b) => a + parseInt(b.totalRevenueMist || "0"), 0);
+  const totalGyate   = boxes.reduce((a, b) => a + parseInt(b.totalGyateSpent || "0"), 0);
+  const activeCount  = boxes.filter(b => b.isActive).length;
+  const pausedCount  = boxes.length - activeCount;
+
+  const cfg = STAT_CONFIG[activeMetric];
+
+  return (
+    <div className="space-y-5">
+      {/* Status row */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[11px] font-bold text-emerald-700">{activeCount} Live</span>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+          <span className="text-[11px] font-bold text-orange-600">{pausedCount} Paused</span>
+        </div>
+        <span className="text-[10px] text-slate-400 ml-auto">
+          {boxes.length} total protocol{boxes.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* Main panel: graph + stats */}
+      <div className="grid grid-cols-[1fr_220px] gap-4">
+
+        {/* Graph */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                {cfg.label}
+              </p>
+              <p className={cn("text-xl font-bold mt-0.5", cfg.color)}>
+                {activeMetric === "opens"
+                  ? totalOpens.toLocaleString()
+                  : activeMetric === "revenue"
+                    ? `${mistToSui(totalRevenue)} SUI`
+                    : totalGyate.toLocaleString()
+                }
+              </p>
+            </div>
+            <div className="text-[10px] text-slate-400">Last 14 days</div>
+          </div>
+
+          <div className="h-[180px] px-2 pb-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={history} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={cfg.stroke} stopOpacity={0.2} />
+                    <stop offset="95%" stopColor={cfg.stroke} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: "#94a3b8" }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={2}
+                />
+                <YAxis
+                  tick={{ fontSize: 9, fill: "#94a3b8" }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) =>
+                    activeMetric === "revenue"
+                      ? `${(v / 1e9).toFixed(1)}`
+                      : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`
+                  }
+                />
+                <Tooltip
+                  content={<ChartTooltip activeMetric={activeMetric} />}
+                  cursor={{ stroke: cfg.stroke, strokeWidth: 1, strokeDasharray: "4 2" }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey={activeMetric}
+                  stroke={cfg.stroke}
+                  strokeWidth={2}
+                  fill="url(#areaGrad)"
+                  dot={false}
+                  activeDot={{ r: 4, fill: cfg.stroke, stroke: "white", strokeWidth: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Stat cards — clickable to switch graph */}
+        <div className="flex flex-col gap-2.5">
+          <StatCard statKey="opens"   value={totalOpens}   isActive={activeMetric === "opens"}   onClick={() => setActiveMetric("opens")}   boxes={boxes} />
+          <StatCard statKey="revenue" value={totalRevenue} isActive={activeMetric === "revenue"} onClick={() => setActiveMetric("revenue")} boxes={boxes} />
+          <StatCard statKey="gyate"   value={totalGyate}   isActive={activeMetric === "gyate"}   onClick={() => setActiveMetric("gyate")}   boxes={boxes} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -92,23 +338,19 @@ function VariantToggleRow({
   const handleToggle = async () => {
     setIsPending(true);
     const txb = new Transaction();
-
-    // FIX: correct argument order matches Move signature:
-    // toggle_variant(lootbox, rarity: u8, nft_name: String, variant_name: String, enabled: bool, ctx)
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::toggle_variant`,
       arguments: [
         txb.object(boxId),
-        txb.pure.u8(rarity),            // ← rarity FIRST (was swapped)
-        txb.pure.string(nftName),       // ← nft_name SECOND (was swapped)
+        txb.pure.u8(rarity),
+        txb.pure.string(nftName),
         txb.pure.string(variantName),
         txb.pure.bool(!enabled),
       ],
     });
-
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({ title: enabled ? "Variant Disabled" : "Variant Enabled", description: `${variantName} updated.` });
+        toast({ title: enabled ? "Variant Disabled" : "Variant Enabled" });
         setIsPending(false);
         setTimeout(onToggled, 2000);
       },
@@ -121,24 +363,24 @@ function VariantToggleRow({
 
   return (
     <div className={cn(
-      "flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all",
-      enabled ? "bg-white border-primary/20" : "bg-red-50 border-red-300"
+      "flex items-center justify-between px-3 py-2 rounded-xl border text-[11px] transition-all",
+      enabled ? "bg-white border-slate-200" : "bg-red-50 border-red-200"
     )}>
-      <div className="flex items-center gap-2">
-        <Sparkles className={cn("w-3 h-3", enabled ? "text-primary" : "text-gray-400")} />
-        <span className="font-bold text-foreground">{variantName}</span>
-        <span className={cn("text-[9px] font-bold", RARITY_COLORS[rarity])}>
-          ({RARITY_LABELS[rarity as keyof typeof RARITY_LABELS]})
+      <div className="flex items-center gap-2 min-w-0">
+        <Sparkles className={cn("w-3 h-3 flex-shrink-0", enabled ? "text-violet-500" : "text-slate-300")} />
+        <span className="font-semibold text-slate-700 truncate">{variantName}</span>
+        <span className={cn("text-[9px] font-bold flex-shrink-0", RARITY_COLORS[rarity])}>
+          {(RARITY_LABELS as any)[rarity]}
         </span>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
+      <button
         onClick={handleToggle}
         disabled={isPending}
         className={cn(
-          "h-7 px-3 text-[10px] font-bold gap-1.5",
-          enabled ? "text-green-600 hover:text-red-500" : "text-red-500 hover:text-green-600"
+          "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all",
+          enabled
+            ? "text-emerald-600 hover:bg-emerald-50"
+            : "text-red-500 hover:bg-red-100"
         )}
       >
         {isPending
@@ -147,16 +389,16 @@ function VariantToggleRow({
             ? <><ToggleRight className="w-3.5 h-3.5" /> On</>
             : <><ToggleLeft className="w-3.5 h-3.5" /> Off</>
         }
-      </Button>
+      </button>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────
-// Expanded box panel
+// Box card
 // ─────────────────────────────────────────────
 
-function LiveBoxPanel({
+function BoxCard({
   box, fullData, isFetching, onRefreshFull, onPauseToggle, isPending,
 }: {
   box: LootboxOption;
@@ -166,126 +408,135 @@ function LiveBoxPanel({
   onPauseToggle: (boxId: string, currentlyActive: boolean) => void;
   isPending: boolean;
 }) {
-  const [showInspector, setShowInspector] = useState(false);
-  const [showVariants, setShowVariants]   = useState(false);
-  const [showPriceEdit, setShowPriceEdit] = useState(false);
-  const [newSuiPrice, setNewSuiPrice]     = useState("");
+  const [expanded, setExpanded]       = useState(false);
+  const [showInspect, setShowInspect] = useState(false);
+  const [showVariants, setShowVariants] = useState(false);
+  const [showPrice, setShowPrice]     = useState(false);
+  const [newSuiPrice, setNewSuiPrice] = useState("");
   const [newGyatePrice, setNewGyatePrice] = useState("");
+  const [isPriceUpdating, setIsPriceUpdating] = useState(false);
 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const { toast } = useToast();
-  const [isPriceUpdating, setIsPriceUpdating] = useState(false);
 
-  const handleUpdatePrice = async () => {
-    if (!newSuiPrice && !newGyatePrice) return;
-
-    // update_prices requires the box to be PAUSED first.
-    // We warn if the box is currently active.
-    if (box.isActive) {
-      toast({
-        variant: "destructive",
-        title: "Box must be paused",
-        description: "Pause the lootbox before updating prices (Move requirement).",
-      });
-      return;
-    }
-
-    setIsPriceUpdating(true);
-    const txb = new Transaction();
-
-    // FIX: use `update_prices` (plural) which takes BOTH prices in one tx.
-    // Signature: update_prices(registry, lootbox, new_sui_price: u64, new_gyate_price: u64, ctx)
-    txb.moveCall({
-      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::update_prices`,
-      arguments: [
-        txb.object(LOOTBOX_REGISTRY),   // ← registry required (was missing)
-        txb.object(box.id),
-        txb.pure.u64(
-          newSuiPrice
-            ? BigInt(Math.floor(parseFloat(newSuiPrice) * 1_000_000_000))
-            : BigInt(box.price)
-        ),
-        txb.pure.u64(
-          newGyatePrice ? BigInt(newGyatePrice) : BigInt(box.gyatePrice)
-        ),
-      ],
-    });
-
-    signAndExecute({ transaction: txb }, {
-      onSuccess: () => {
-        toast({ title: "Price Updated", description: "New prices are live on-chain." });
-        setIsPriceUpdating(false);
-        setShowPriceEdit(false);
-        setNewSuiPrice("");
-        setNewGyatePrice("");
-        setTimeout(onRefreshFull, 2000);
-      },
-      onError: (err) => {
-        toast({ variant: "destructive", title: "Update Failed", description: err.message });
-        setIsPriceUpdating(false);
-      },
-    });
-  };
-
-  const variants = fullData
-    ? allNftOptions(fullData).flatMap(({ nft, rarity }) =>
-        (nft.variant_configs ?? []).map(v => ({
+  const variants = useMemo(() => {
+    if (!fullData) return [];
+    return allNftOptions(fullData).flatMap(({ nft, rarity }) =>
+      (nft.variant_configs ?? [])
+        .filter(v => v.fields.variant_name !== "Normal")
+        .map(v => ({
           nftName: nft.name,
           rarity,
           variantName: v.fields.variant_name,
           enabled: v.fields.enabled,
         }))
-      )
-    : [];
+    );
+  }, [fullData]);
 
-  const activeVariants   = variants.filter(v => v.enabled).length;
-  const inactiveVariants = variants.filter(v => !v.enabled).length;
+  const disabledVariants = variants.filter(v => !v.enabled).length;
+
+  const rarityKeys = [
+    "common_configs", "rare_configs", "super_rare_configs",
+    "ssr_configs", "ultra_rare_configs", "legend_rare_configs",
+  ] as const;
+  const rarityLabels = ["C", "R", "SR", "SSR", "UR", "LR"];
+
+  const handleUpdatePrice = async () => {
+    if (box.isActive) {
+      toast({ variant: "destructive", title: "Pause first", description: "Box must be paused to update prices." });
+      return;
+    }
+    setIsPriceUpdating(true);
+    const txb = new Transaction();
+    txb.moveCall({
+      target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::update_prices`,
+      arguments: [
+        txb.object(LOOTBOX_REGISTRY),
+        txb.object(box.id),
+        txb.pure.u64(newSuiPrice
+          ? BigInt(Math.floor(parseFloat(newSuiPrice) * 1_000_000_000))
+          : BigInt(box.price)),
+        txb.pure.u64(newGyatePrice ? BigInt(newGyatePrice) : BigInt(box.gyatePrice)),
+      ],
+    });
+    signAndExecute({ transaction: txb }, {
+      onSuccess: () => {
+        toast({ title: "Prices updated" });
+        setIsPriceUpdating(false);
+        setShowPrice(false);
+        setNewSuiPrice(""); setNewGyatePrice("");
+        setTimeout(onRefreshFull, 2000);
+      },
+      onError: (err) => {
+        toast({ variant: "destructive", title: "Update failed", description: err.message });
+        setIsPriceUpdating(false);
+      },
+    });
+  };
 
   return (
-    <Card className={cn(
-      "border transition-all shadow-[3px_3px_0px_rgba(201,184,255,0.3)]",
-      box.isActive ? "border-green-200" : "border-orange-200"
+    <div className={cn(
+      "rounded-2xl border bg-white transition-all duration-200",
+      box.isActive ? "border-slate-200" : "border-orange-200 bg-orange-50/30"
     )}>
-      <CardContent className="p-5">
+      {/* ── Header row ── */}
+      <div className="flex items-center gap-4 px-5 py-4">
+        {/* Status dot */}
+        <span className={cn(
+          "w-2 h-2 rounded-full flex-shrink-0",
+          box.isActive ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-orange-400"
+        )} />
 
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={cn(
-              "w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1",
-              box.isActive ? "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-orange-400"
-            )} />
-            <div className="min-w-0">
-              <h3 className="font-headline font-bold text-lg truncate text-foreground">{box.name}</h3>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                <span className={cn(
-                  "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full",
-                  box.isActive
-                    ? "bg-green-100 text-green-700"
-                    : "bg-orange-100 text-orange-700"
-                )}>
-                  {box.isActive ? "Live" : "Paused"}
-                </span>
-                {box.pityEnabled && (
-                  <Badge variant="outline" className="text-[9px] border-purple-300 text-purple-600 py-0">Pity</Badge>
-                )}
-                {box.multiOpenEnabled && (
-                  <Badge variant="outline" className="text-[9px] border-blue-300 text-blue-600 py-0">{box.multiOpenSize}x Multi</Badge>
-                )}
-              </div>
-            </div>
+        {/* Name + badges */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-slate-800 truncate">{box.name}</span>
+            <span className={cn(
+              "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
+              box.isActive ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-600"
+            )}>
+              {box.isActive ? "Live" : "Paused"}
+            </span>
+            {box.pityEnabled && (
+              <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 text-violet-600">
+                Pity
+              </span>
+            )}
+            {box.multiOpenEnabled && (
+              <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-600">
+                {box.multiOpenSize}× Multi
+              </span>
+            )}
           </div>
+          {/* Inline mini stats */}
+          <div className="flex items-center gap-4 mt-1">
+            <span className="text-[10px] text-slate-400">
+              <span className="font-semibold text-slate-600">{parseInt(box.totalOpens || "0").toLocaleString()}</span> opens
+            </span>
+            <span className="text-[10px] text-slate-400">
+              <span className="font-semibold text-emerald-600">{mistToSui(box.totalRevenueMist || "0")}</span> SUI
+            </span>
+            <span className="text-[10px] text-slate-400">
+              <span className="font-semibold text-pink-600">{parseInt(box.totalGyateSpent || "0").toLocaleString()}</span> GYATE
+            </span>
+            <span className="text-[10px] text-slate-400">
+              <span className="font-semibold text-slate-600">{mistToSui(box.price || "0")}</span> SUI / open
+            </span>
+          </div>
+        </div>
 
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => onPauseToggle(box.id, box.isActive)}
             disabled={isPending}
             className={cn(
-              "h-8 px-4 text-xs font-bold border gap-1.5 flex-shrink-0",
+              "h-8 px-3 text-xs font-semibold gap-1.5",
               box.isActive
-                ? "border-orange-300 text-orange-600 hover:bg-orange-50"
-                : "border-green-300 text-green-600 hover:bg-green-50"
+                ? "text-orange-500 hover:bg-orange-50"
+                : "text-emerald-600 hover:bg-emerald-50"
             )}
           >
             {isPending
@@ -295,205 +546,162 @@ function LiveBoxPanel({
                 : <><Play className="w-3 h-3" /> Resume</>
             }
           </Button>
-        </div>
-
-        {/* Stats row */}
-        <div className="grid grid-cols-4 gap-3 mt-5">
-          <StatPill
-            icon={TrendingUp}
-            label="Total Opens"
-            value={parseInt(box.totalOpens || "0").toLocaleString()}
-            color="text-purple-600"
-          />
-          <StatPill
-            icon={Coins}
-            label="SUI Revenue"
-            value={`${mistToSui(box.totalRevenueMist)} SUI`}
-            color="text-green-600"
-          />
-          <StatPill
-            icon={Zap}
-            label="GYATE Spent"
-            value={parseInt(box.totalGyateSpent || "0").toLocaleString()}
-            color="text-pink-600"
-          />
-          <StatPill
-            icon={DollarSign}
-            label="Price"
-            value={`${mistToSui(box.price)} SUI`}
-            color="text-slate-700"
-          />
-        </div>
-
-        {/* Inventory health */}
-        {fullData && (
-          <div className="mt-4 p-3 rounded-xl bg-white border border-primary/20 space-y-3">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <Layers className="w-3 h-3" /> Inventory Health
-              </span>
-              <span>{totalNfts(fullData)} types · {totalVariants(fullData)} variants</span>
-            </div>
-            <div className="grid grid-cols-6 gap-1.5">
-              {(["common_configs", "rare_configs", "super_rare_configs", "ssr_configs", "ultra_rare_configs", "legend_rare_configs"] as const).map((key, i) => {
-                const count  = fullData[key].length;
-                const labels = ["C", "R", "SR", "SSR", "UR", "LR"];
-                return (
-                  <div key={i} className={cn(
-                    "rounded-lg p-2 text-center border",
-                    count > 0 ? "bg-white border-primary/20" : "bg-red-50 border-red-300"
-                  )}>
-                    <div className={cn("text-[9px] font-bold uppercase", RARITY_COLORS[i])}>{labels[i]}</div>
-                    <div className={cn("text-sm font-bold", count > 0 ? "text-foreground" : "text-red-500")}>{count}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 mt-4 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => {
-              setShowInspector(!showInspector);
-              if (!fullData && !isFetching) onRefreshFull();
+              setExpanded(!expanded);
+              if (!expanded && !fullData && !isFetching) onRefreshFull();
             }}
-            className="h-8 text-xs border-primary/30 gap-1.5 text-foreground hover:bg-primary/5"
+            className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:border-slate-300 hover:text-slate-600 transition-all"
           >
-            <Eye className="w-3 h-3" />
-            {showInspector ? "Hide" : "Inspect"}
-          </Button>
+            {expanded
+              ? <ChevronUp className="w-3.5 h-3.5" />
+              : <ChevronDown className="w-3.5 h-3.5" />
+            }
+          </button>
+        </div>
+      </div>
 
-          {/* Only show Variants button after fullData is loaded */}
-          {fullData && variants.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowVariants(!showVariants)}
-              className="h-8 text-xs border-primary/30 gap-1.5 text-foreground hover:bg-primary/5"
-            >
-              <Sparkles className="w-3 h-3" />
-              Variants
-              {inactiveVariants > 0 && (
-                <span className="ml-1 text-[9px] bg-red-100 text-red-600 rounded-full px-1.5 font-bold">
-                  {inactiveVariants} off
-                </span>
-              )}
-            </Button>
+      {/* ── Expanded content ── */}
+      {expanded && (
+        <div className="border-t border-slate-100 px-5 py-4 space-y-4">
+
+          {/* Rarity inventory */}
+          {fullData && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                <Layers className="w-3 h-3" /> Inventory
+              </p>
+              <div className="grid grid-cols-6 gap-1.5">
+                {rarityKeys.map((key, i) => {
+                  const count = fullData[key].length;
+                  return (
+                    <div key={i} className={cn(
+                      "rounded-xl p-2.5 text-center border",
+                      count > 0 ? `${RARITY_BG[i]} border-transparent` : "bg-red-50 border-red-200"
+                    )}>
+                      <div className={cn("text-[9px] font-bold", RARITY_COLORS[i])}>{rarityLabels[i]}</div>
+                      <div className={cn("text-sm font-bold mt-0.5", count > 0 ? "text-slate-700" : "text-red-500")}>{count}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowPriceEdit(!showPriceEdit)}
-            className="h-8 text-xs border-primary/30 gap-1.5 text-foreground hover:bg-primary/5"
-          >
-            <DollarSign className="w-3 h-3" /> Edit Price
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRefreshFull}
-            disabled={isFetching}
-            className="h-8 text-xs text-foreground gap-1.5 ml-auto hover:bg-primary/5"
-          >
-            <RefreshCw className={cn("w-3 h-3", isFetching && "animate-spin")} />
-            Sync
-          </Button>
-        </div>
-
-        {/* Price edit panel */}
-        {showPriceEdit && (
-          <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4 animate-in fade-in slide-in-from-top-2">
-            {/* Warn if box is live — update_prices requires paused */}
-            {box.isActive && (
-              <div className="flex items-center gap-2 text-[11px] text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                Pause the lootbox first — Move requires the box to be paused to update prices.
-              </div>
-            )}
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Update Prices</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] text-slate-600">New SUI Price</Label>
-                <Input
-                  type="number"
-                  className="h-8 text-xs"
-                  placeholder={`Current: ${mistToSui(box.price)} SUI`}
-                  value={newSuiPrice}
-                  onChange={(e) => setNewSuiPrice(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] text-slate-600">New GYATE Price</Label>
-                <Input
-                  type="number"
-                  className="h-8 text-xs"
-                  placeholder={`Current: ${box.gyatePrice} GYATE`}
-                  value={newGyatePrice}
-                  onChange={(e) => setNewGyatePrice(e.target.value)}
-                />
-              </div>
-            </div>
-            <Button
-              size="sm"
-              onClick={handleUpdatePrice}
-              disabled={isPriceUpdating || (!newSuiPrice && !newGyatePrice) || box.isActive}
-              className="w-full h-9 font-bold text-xs bg-slate-900 text-white hover:bg-slate-800"
-            >
-              {isPriceUpdating && <Loader2 className="w-3 h-3 animate-spin mr-2" />}
-              Confirm Price Update
-            </Button>
-          </div>
-        )}
-
-        {/* Variant toggle panel */}
-        {showVariants && fullData && variants.length > 0 && (
-          <div className="mt-4 space-y-2 animate-in fade-in slide-in-from-top-2">
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold flex items-center gap-1.5">
-              <Sparkles className="w-3 h-3" /> Variant Controls
-              <span className="text-green-600 ml-2">{activeVariants} active</span>
-              {inactiveVariants > 0 && (
-                <span className="text-red-500">· {inactiveVariants} disabled</span>
+          {/* Action tabs */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => { setShowInspect(!showInspect); if (!fullData && !isFetching) onRefreshFull(); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border transition-all",
+                showInspect ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
               )}
-            </p>
-            <div className="grid gap-1.5">
-              {variants.map((v, idx) => (
-                <VariantToggleRow
-                  key={`${v.nftName}-${v.variantName}-${idx}`}
-                  boxId={box.id}
-                  nftName={v.nftName}
-                  rarity={v.rarity}
-                  variantName={v.variantName}
-                  enabled={v.enabled}
-                  onToggled={onRefreshFull}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+            >
+              <Eye className="w-3 h-3" /> Inspect
+            </button>
 
-        {/* Inspector */}
-        {showInspector && (
-          <div className="mt-4 animate-in fade-in slide-in-from-top-2">
-            <ProtocolInspector
-              data={fullData}
-              isFetching={isFetching}
-              title={`${box.name} Contents`}
-            />
+            {fullData && variants.length > 0 && (
+              <button
+                onClick={() => setShowVariants(!showVariants)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border transition-all",
+                  showVariants ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                )}
+              >
+                <Sparkles className="w-3 h-3" /> Variants
+                {disabledVariants > 0 && (
+                  <span className="ml-0.5 bg-red-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {disabledVariants}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowPrice(!showPrice)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border transition-all",
+                showPrice ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+              )}
+            >
+              <DollarSign className="w-3 h-3" /> Edit Price
+            </button>
+
+            <button
+              onClick={onRefreshFull}
+              disabled={isFetching}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border bg-white text-slate-600 border-slate-200 hover:border-slate-300 transition-all ml-auto disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-3 h-3", isFetching && "animate-spin")} />
+              Sync
+            </button>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {/* Price edit */}
+          {showPrice && (
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              {box.isActive && (
+                <div className="flex items-center gap-2 text-[11px] text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  Pause this box before updating prices.
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] text-slate-500 font-semibold">SUI Price</Label>
+                  <Input type="number" className="h-8 text-xs" placeholder={`${mistToSui(box.price)} SUI`} value={newSuiPrice} onChange={e => setNewSuiPrice(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] text-slate-500 font-semibold">GYATE Price</Label>
+                  <Input type="number" className="h-8 text-xs" placeholder={`${box.gyatePrice} GYATE`} value={newGyatePrice} onChange={e => setNewGyatePrice(e.target.value)} />
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleUpdatePrice}
+                disabled={isPriceUpdating || (!newSuiPrice && !newGyatePrice) || box.isActive}
+                className="w-full h-8 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800"
+              >
+                {isPriceUpdating && <Loader2 className="w-3 h-3 animate-spin mr-1.5" />}
+                Confirm
+              </Button>
+            </div>
+          )}
+
+          {/* Variants */}
+          {showVariants && fullData && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3" /> Variant Controls
+              </p>
+              <div className="space-y-1.5">
+                {variants.map((v, idx) => (
+                  <VariantToggleRow
+                    key={`${v.nftName}-${v.variantName}-${idx}`}
+                    boxId={box.id}
+                    nftName={v.nftName}
+                    rarity={v.rarity}
+                    variantName={v.variantName}
+                    enabled={v.enabled}
+                    onToggled={onRefreshFull}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Inspector */}
+          {showInspect && (
+            <ProtocolInspector data={fullData} isFetching={isFetching} title={`${box.name} Contents`} />
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
 // ─────────────────────────────────────────────
-// Main Tab
+// Main export
 // ─────────────────────────────────────────────
 
 interface LiveProtocolsTabProps {
@@ -514,8 +722,8 @@ export function LiveProtocolsTab({
   const { toast } = useToast();
   const [isPending, setIsPending] = useState(false);
 
-  const [boxFullData, setBoxFullData] = useState<Record<string, LootboxFullData | null>>({});
-  const [boxFetching, setBoxFetching] = useState<Record<string, boolean>>({});
+  const [boxFullData, setBoxFullData]   = useState<Record<string, LootboxFullData | null>>({});
+  const [boxFetching, setBoxFetching]   = useState<Record<string, boolean>>({});
 
   const refreshBox = useCallback((id: string) => {
     setBoxFetching(prev => ({ ...prev, [id]: true }));
@@ -526,24 +734,16 @@ export function LiveProtocolsTab({
     );
   }, [fetchFullBoxData]);
 
-  // FIX: pause/unpause — correct, matches Move signature:
-  // pause(registry: &mut LootboxRegistry, lootbox: &mut LootboxConfig, ctx)
   const handlePauseToggle = async (boxId: string, currentlyActive: boolean) => {
     setIsPending(true);
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${currentlyActive ? FUNCTIONS.PAUSE : FUNCTIONS.UNPAUSE}`,
-      arguments: [
-        txb.object(LOOTBOX_REGISTRY), // registry first ✓
-        txb.object(boxId),            // lootbox second ✓
-      ],
+      arguments: [txb.object(LOOTBOX_REGISTRY), txb.object(boxId)],
     });
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
-        toast({
-          title: currentlyActive ? "Lootbox Paused" : "Lootbox Resumed",
-          description: currentlyActive ? "Removed from active shop." : "Now live in the shop.",
-        });
+        toast({ title: currentlyActive ? "Paused" : "Resumed" });
         setIsPending(false);
         setTimeout(fetchLootboxes, 3000);
       },
@@ -554,59 +754,40 @@ export function LiveProtocolsTab({
     });
   };
 
-  const totalOpens   = liveBoxes.reduce((acc, b) => acc + parseInt(b.totalOpens   || "0"), 0);
-  const totalRevenue = liveBoxes.reduce((acc, b) => acc + parseInt(b.totalRevenueMist || "0"), 0);
-  const activeCount  = liveBoxes.filter(b => b.isActive).length;
-  const pausedCount  = liveBoxes.length - activeCount;
-
   return (
     <div className="space-y-8">
 
-      {/* Summary bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border-slate-200 p-4 space-y-1 shadow-[3px_3px_0px_rgba(201,184,255,0.3)]">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-            <Activity className="w-3 h-3 text-green-500" /> Live
-          </div>
-          <div className="text-3xl font-bold font-headline text-green-600">{activeCount}</div>
-        </Card>
-        <Card className="border-slate-200 p-4 space-y-1 shadow-[3px_3px_0px_rgba(201,184,255,0.3)]">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-            <Pause className="w-3 h-3 text-orange-400" /> Paused
-          </div>
-          <div className="text-3xl font-bold font-headline text-orange-500">{pausedCount}</div>
-        </Card>
-        <Card className="border-slate-200 p-4 space-y-1 shadow-[3px_3px_0px_rgba(201,184,255,0.3)]">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-            <BarChart3 className="w-3 h-3 text-purple-500" /> Total Opens
-          </div>
-          <div className="text-3xl font-bold font-headline text-slate-800">{totalOpens.toLocaleString()}</div>
-        </Card>
-        <Card className="border-slate-200 p-4 space-y-1 shadow-[3px_3px_0px_rgba(201,184,255,0.3)]">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-            <Coins className="w-3 h-3 text-yellow-500" /> Total Revenue
-          </div>
-          <div className="text-3xl font-bold font-headline text-yellow-600">
-            {(totalRevenue / 1_000_000_000).toFixed(2)} SUI
-          </div>
-        </Card>
-      </div>
+      {/* Analytics section */}
+      {!isLoadingBoxes && liveBoxes.length > 0 && (
+        <AnalyticsPanel boxes={liveBoxes} />
+      )}
+
+      {/* Divider */}
+      {liveBoxes.length > 0 && (
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-slate-100" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            Protocols
+          </span>
+          <div className="flex-1 h-px bg-slate-100" />
+        </div>
+      )}
 
       {/* Box list */}
       {isLoadingBoxes ? (
-        <div className="flex items-center justify-center py-20 text-sm text-slate-500">
-          <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading protocols...
+        <div className="flex items-center justify-center py-20 text-sm text-slate-400 gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin" /> Loading protocols...
         </div>
       ) : liveBoxes.length === 0 ? (
-        <div className="text-center py-20 rounded-3xl border-2 border-dashed border-slate-200">
-          <Package className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-sm text-slate-500">No finalized lootboxes yet.</p>
-          <p className="text-[11px] text-slate-400 mt-1">Activate a draft from the Lootbox Factory tab first.</p>
+        <div className="text-center py-20 rounded-2xl border-2 border-dashed border-slate-200">
+          <Package className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+          <p className="text-sm font-medium text-slate-400">No finalized lootboxes yet.</p>
+          <p className="text-xs text-slate-300 mt-1">Activate a draft from the Lootbox Factory tab first.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           {liveBoxes.map((box) => (
-            <LiveBoxPanel
+            <BoxCard
               key={box.id}
               box={box}
               fullData={boxFullData[box.id] ?? null}

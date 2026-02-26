@@ -26,10 +26,10 @@ interface Preset {
   key: PresetKey;
   label: string;
   description: string;
-  color: string;          // Tailwind bg for swatch
-  ringColor: string;      // Tailwind ring for selected state
-  glowClass: string;      // Custom glow style
-  defaultName: string;    // Pre-fills variant name field
+  color: string;
+  ringColor: string;
+  glowClass: string;
+  defaultName: string;
   defaultMultiplier: string;
   defaultDropRate: string;
 }
@@ -161,7 +161,6 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
     ];
   }, [variantBoxData]);
 
-  // The currently selected NFT's base image (used for preview + generation source)
   const selectedNftBaseImage = useMemo(() => {
     if (!selectedNftForVariant || !variantBoxData) return null;
     const [name] = selectedNftForVariant.split(":::");
@@ -175,7 +174,6 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
     setVariantName(preset.defaultName);
     setVariantDropRate(preset.defaultDropRate);
     setVariantMultiplier(preset.defaultMultiplier);
-    // Clear any previously generated image so user doesn't reuse old one
     setVariantImage("");
     setGenState({ status: "idle", url: null, error: null });
   };
@@ -460,11 +458,12 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
               </div>
             )}
 
-
             {/* Pinata Group ID */}
             <div className="flex items-center gap-3">
               <div className="flex-1 space-y-1.5">
-                <Label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Pinata Group ID <span className="normal-case font-normal">(optional — overrides env var)</span></Label>
+                <Label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                  Pinata Group ID <span className="normal-case font-normal">(optional — overrides env var)</span>
+                </Label>
                 <Input
                   value={pinataGroupId}
                   onChange={(e) => setPinataGroupId(e.target.value)}
@@ -491,7 +490,6 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
                         : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
                     )}
                   >
-                    {/* Color swatch */}
                     <div className={cn(
                       "w-10 h-10 rounded-lg",
                       preset.color,
@@ -507,7 +505,7 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
               })}
             </div>
 
-            {/* Generation panel — shown when a preset is selected */}
+            {/* Generation panel */}
             {selectedPreset && selectedNftBaseImage && (
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
                 <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
@@ -521,10 +519,7 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
 
                   {/* Arrow + preset label */}
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center",
-                      activePreset?.color
-                    )}>
+                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", activePreset?.color)}>
                       <Wand2 className="w-4 h-4 text-primary" />
                     </div>
                     <span className="text-[9px] text-center font-bold uppercase tracking-wider">{activePreset?.label}</span>
@@ -567,11 +562,8 @@ export function VariantLabTab({ draftBoxes, fetchFullBoxData }: VariantLabTabPro
                   <Button
                     className={cn(
                       "flex-1 h-11 font-bold transition-all",
-                      activePreset?.color
-                        ? "text-accent-foreground"
-                        : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                      activePreset?.color ? "text-accent-foreground" : "bg-primary hover:bg-primary/90 text-primary-foreground"
                     )}
-                    style={activePreset ? undefined : undefined}
                     onClick={handleGenerateImage}
                     disabled={!canGenerate}
                   >
