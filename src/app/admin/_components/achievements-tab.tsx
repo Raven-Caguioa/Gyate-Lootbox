@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trophy, Gift, Image as ImageIcon, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import Image from "next/image";
-import { PACKAGE_ID, ACHIEVEMENT_REGISTRY, STATS_REGISTRY, GATEKEEPER_CAP, MODULE_NAMES } from "@/lib/sui-constants";
+import { PACKAGE_ID, ACHIEVEMENT_REGISTRY, STATS_REGISTRY, GATEKEEPER_CAP, ADMIN_REGISTRY, MODULE_NAMES } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { RARITY_LABELS } from "@/lib/mock-data";
 import { ImagePickerField } from "@/components/ImagePickerField";
@@ -94,6 +94,7 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::create_achievement`,
       arguments: [
+        txb.object(ADMIN_REGISTRY),       // NEW: first arg
         txb.object(ACHIEVEMENT_REGISTRY),
         txb.pure.string(newAch.name.trim()),
         txb.pure.string(newAch.description.trim()),
@@ -125,6 +126,7 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.ACHIEVEMENT}::admin_grant_achievement`,
       arguments: [
+        txb.object(ADMIN_REGISTRY),       // NEW: first arg
         txb.object(ACHIEVEMENT_REGISTRY),
         txb.object(resolvedStatsId),
         txb.pure.u64(BigInt(selectedGrantAch)),
@@ -179,7 +181,6 @@ export function AchievementsTab({ achievements, isLoadingAchievements, fetchAchi
               <Input value={newAch.description} onChange={(e) => setNewAch({ ...newAch, description: e.target.value })} />
             </div>
 
-            {/* ── Badge image picker ── */}
             <ImagePickerField
               value={newAch.imageUrl}
               onChange={(url) => setNewAch({ ...newAch, imageUrl: url })}

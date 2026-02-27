@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
 import {
   PACKAGE_ID, TREASURY_POOL, LOOTBOX_REGISTRY,
-  MODULE_NAMES, ACHIEVEMENT_REGISTRY, PUBLISHER
+  MODULE_NAMES, ACHIEVEMENT_REGISTRY, PUBLISHER,
+  ADMIN_REGISTRY,
 } from "@/lib/sui-constants";
 
 // ─────────────────────────────────────────────
@@ -56,7 +57,6 @@ export interface LootboxFullData {
   name: string;
   price: string;
   gyate_price: string;
-  admin: string;
   is_active: boolean;
   is_setup_mode: boolean;
   pity_enabled: boolean;
@@ -93,9 +93,18 @@ export interface TreasuryStats {
   totalWithdrawn: string;
 }
 
+export interface AdminRole {
+  isSuperAdmin: boolean;
+  isAdmin: boolean;
+  isAnyAdmin: boolean;
+}
+
 // ─────────────────────────────────────────────
 // Hook
 // ─────────────────────────────────────────────
+
+// The admin wallet that ran create_transfer_policy — cap lives here.
+const ADMIN_WALLET = "0x262da71b77b62fe106c8a0b7ffa6e3ad6bb2898ffda5db074107bf0bf5e6aa7a";
 
 export function useAdminData() {
   const account = useCurrentAccount();
@@ -111,13 +120,52 @@ export function useAdminData() {
   const [isFetchingTreasury, setIsFetchingTreasury] = useState(false);
 
   const [policyExists, setPolicyExists] = useState<boolean | null>(null);
+  // The shared TransferPolicy<GyateNFT> object ID — extracted from the cap's `for` field.
+  const [policyObjectId, setPolicyObjectId] = useState<string | null>(null);
   const [isCheckingPolicy, setIsCheckingPolicy] = useState(false);
 
-  // ── Derived splits ─────────────────────────────────────────────────
+  const [adminRole, setAdminRole] = useState<AdminRole>({
+    isSuperAdmin: false,
+    isAdmin: false,
+    isAnyAdmin: false,
+  });
+  const [isCheckingRole, setIsCheckingRole] = useState(false);
+
   const liveBoxes  = useMemo(() => myLootboxes.filter(b => !b.isSetup), [myLootboxes]);
   const draftBoxes = useMemo(() => myLootboxes.filter(b => b.isSetup),  [myLootboxes]);
 
-  // ── Full box data fetcher (shared, used by multiple tabs) ──────────
+  // ── Admin role ──────────────────────────────────────────────────────
+  const fetchAdminRole = useCallback(async () => {
+    if (!account?.address) {
+      setAdminRole({ isSuperAdmin: false, isAdmin: false, isAnyAdmin: false });
+      return;
+    }
+    setIsCheckingRole(true);
+    try {
+      const obj = await suiClient.getObject({
+        id: ADMIN_REGISTRY,
+        options: { showContent: true },
+      });
+      const fields = (obj.data?.content as any)?.fields;
+      if (!fields) {
+        setAdminRole({ isSuperAdmin: false, isAdmin: false, isAnyAdmin: false });
+        return;
+      }
+      const superAdmin: string = fields.super_admin ?? "";
+      const admins: string[]   = fields.admins ?? [];
+      const wallet             = account.address.toLowerCase();
+      const isSuperAdmin       = superAdmin.toLowerCase() === wallet;
+      const isAdmin            = admins.some((a: string) => a.toLowerCase() === wallet);
+      setAdminRole({ isSuperAdmin, isAdmin, isAnyAdmin: isSuperAdmin || isAdmin });
+    } catch (err) {
+      console.error("Failed to fetch admin role:", err);
+      setAdminRole({ isSuperAdmin: false, isAdmin: false, isAnyAdmin: false });
+    } finally {
+      setIsCheckingRole(false);
+    }
+  }, [account?.address, suiClient]);
+
+  // ── Full box data fetcher ───────────────────────────────────────────
   const fetchFullBoxData = useCallback(async (
     id: string,
     setter: (data: LootboxFullData | null) => void,
@@ -134,13 +182,11 @@ export function useAdminData() {
           name:               fields.name,
           price:              fields.price,
           gyate_price:        fields.gyate_price,
-          admin:              fields.admin,
           is_active:          fields.is_active,
           is_setup_mode:      fields.is_setup_mode,
           pity_enabled:       fields.pity_enabled,
           multi_open_enabled: fields.multi_open_enabled,
           multi_open_size:    fields.multi_open_size,
-          // FIX: Move uses `total_opened`, not `total_opens`
           total_opens:        fields.total_opened        ?? "0",
           total_revenue_mist: fields.total_revenue_mist  ?? "0",
           total_gyate_spent:  fields.total_gyate_spent   ?? "0",
@@ -178,18 +224,17 @@ export function useAdminData() {
           const f = obj.data.content.fields;
           return {
             id:               obj.data.objectId,
-            name:             f.name              ?? "Unnamed Box",
-            isSetup:          f.is_setup_mode     ?? false,
-            isActive:         f.is_active         ?? false,
-            price:            f.price             ?? "0",
-            gyatePrice:       f.gyate_price       ?? "0",
-            // FIX: Move field is `total_opened`, not `total_opens`
-            totalOpens:       f.total_opened      ?? "0",
+            name:             f.name               ?? "Unnamed Box",
+            isSetup:          f.is_setup_mode      ?? false,
+            isActive:         f.is_active          ?? false,
+            price:            f.price              ?? "0",
+            gyatePrice:       f.gyate_price        ?? "0",
+            totalOpens:       f.total_opened       ?? "0",
             totalRevenueMist: f.total_revenue_mist ?? "0",
             totalGyateSpent:  f.total_gyate_spent  ?? "0",
-            pityEnabled:      f.pity_enabled      ?? false,
+            pityEnabled:      f.pity_enabled       ?? false,
             multiOpenEnabled: f.multi_open_enabled ?? false,
-            multiOpenSize:    f.multi_open_size   ?? "10",
+            multiOpenSize:    f.multi_open_size    ?? "10",
           };
         });
       setMyLootboxes(boxes);
@@ -200,7 +245,7 @@ export function useAdminData() {
     }
   }, [suiClient]);
 
-  // ── Achievements (Table-aware) ──────────────────────────────────────
+  // ── Achievements ────────────────────────────────────────────────────
   const fetchAchievements = useCallback(async () => {
     setIsLoadingAchievements(true);
     try {
@@ -259,11 +304,10 @@ export function useAdminData() {
       const fields = (obj.data?.content as any)?.fields;
       if (fields) {
         setTreasuryStats({
-          // Treasury balance is nested: fields.balance.fields.value
-          balance:               fields.balance?.fields?.value ?? fields.balance ?? "0",
-          totalFromLootboxes:    fields.total_from_lootboxes   ?? "0",
-          totalFromMarketplace:  fields.total_from_marketplace  ?? "0",
-          totalWithdrawn:        fields.total_withdrawn         ?? "0",
+          balance:              fields.balance?.fields?.value ?? fields.balance ?? "0",
+          totalFromLootboxes:   fields.total_from_lootboxes  ?? "0",
+          totalFromMarketplace: fields.total_from_marketplace ?? "0",
+          totalWithdrawn:       fields.total_withdrawn        ?? "0",
         });
       }
     } catch (err) {
@@ -274,44 +318,67 @@ export function useAdminData() {
   }, [suiClient]);
 
   // ── TransferPolicy ──────────────────────────────────────────────────
+  // Always checks the ADMIN_WALLET (who ran create_transfer_policy) so
+  // this works regardless of which wallet the current user has connected.
+  // The TransferPolicyCap.for field = the shared TransferPolicy object ID.
   const checkPolicy = useCallback(async () => {
-    if (!account) return;
     setIsCheckingPolicy(true);
     try {
       const NFT_TYPE = `${PACKAGE_ID}::${MODULE_NAMES.NFT}::GyateNFT`;
+      const capType  = `0x2::transfer_policy::TransferPolicyCap<${NFT_TYPE}>`;
+
       const capResponse = await suiClient.getOwnedObjects({
-        owner: account.address,
-        filter: { StructType: `0x2::transfer_policy::TransferPolicyCap<${NFT_TYPE}>` },
+        owner: ADMIN_WALLET,
+        filter: { StructType: capType },
+        options: { showContent: true },
       });
-      setPolicyExists(capResponse.data.length > 0);
+
+      const found = capResponse.data.length > 0;
+      setPolicyExists(found);
+
+      if (found) {
+        // Extract the shared TransferPolicy object ID from the cap's `for` field.
+        // The RPC may return it as a plain string or nested { id: "0x..." }.
+        const rawFor = (capResponse.data[0].data?.content as any)?.fields?.for;
+        const id =
+          typeof rawFor === "string"
+            ? rawFor
+            : typeof rawFor?.id === "string"
+              ? rawFor.id
+              : null;
+        setPolicyObjectId(id);
+      } else {
+        setPolicyObjectId(null);
+      }
     } catch (err) {
+      console.error("Failed to check policy:", err);
       setPolicyExists(false);
+      setPolicyObjectId(null);
     } finally {
       setIsCheckingPolicy(false);
     }
-  }, [account, suiClient]);
+  }, [suiClient]);
 
   // ── Initial load ────────────────────────────────────────────────────
   const syncAll = useCallback(() => {
+    fetchAdminRole();
     fetchLootboxes();
     fetchTreasuryData();
     fetchAchievements();
     checkPolicy();
-  }, [fetchLootboxes, fetchTreasuryData, fetchAchievements, checkPolicy]);
+  }, [fetchAdminRole, fetchLootboxes, fetchTreasuryData, fetchAchievements, checkPolicy]);
 
   useEffect(() => { syncAll(); }, [syncAll]);
+  useEffect(() => { fetchAdminRole(); }, [fetchAdminRole]);
 
   return {
-    // Data
     myLootboxes, liveBoxes, draftBoxes,
     achievements, treasuryStats,
-    policyExists, isCheckingPolicy,
-    // Loading states
+    policyExists, policyObjectId, isCheckingPolicy,
+    adminRole, isCheckingRole,
     isLoadingBoxes, isLoadingAchievements, isFetchingTreasury,
-    // Actions
     fetchLootboxes, fetchAchievements, fetchTreasuryData, checkPolicy, syncAll,
-    fetchFullBoxData,
-    // Setters (for policy)
+    fetchFullBoxData, fetchAdminRole,
     setPolicyExists,
   };
 }

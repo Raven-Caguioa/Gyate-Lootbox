@@ -1,0 +1,5 @@
+1. initialize kiosk if the wallet has no kiosk 
+2. Marketplace having error problem
+3. Collection Page needed in Profile / Pokedex with reward
+4. Adding Lore / Story to the Website
+5. Redirect to Initialize stats when trying to go on inventory/store/Marketplace

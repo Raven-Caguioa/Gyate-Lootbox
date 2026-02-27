@@ -11,17 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
-import { PACKAGE_ID, LOOTBOX_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
+import { PACKAGE_ID, LOOTBOX_REGISTRY, ADMIN_REGISTRY, MODULE_NAMES, FUNCTIONS } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { ProtocolInspector } from "./protocol-inspector";
 import { ImagePickerField } from "@/components/ImagePickerField";
 import type { LootboxOption, LootboxFullData } from "../_hooks/use-admin-data";
 import { RARITY_LABELS } from "@/lib/mock-data";
 
-// ── Set this to the Pinata group ID you want the image picker to read from ───
-// Falls back to PINATA_VARIANT_GROUP_ID (server) but here we pass a dedicated
-// group for source NFT art (PINATA_NFT_IMAGE_GROUP_ID).
-// You can also hard-code the group ID string here if you prefer.
 const NFT_IMAGE_GROUP_ID = process.env.NEXT_PUBLIC_NFT_IMAGE_GROUP_ID ?? undefined;
 
 interface LootboxFactoryTabProps {
@@ -53,7 +49,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
   const [nftRarity, setNftRarity]       = useState("0");
   const [nftName, setNftName]           = useState("");
   const [nftValue, setNftValue]         = useState("1000000000");
-  const [nftImage, setNftImage]         = useState("");        // ← managed by ImagePickerField
+  const [nftImage, setNftImage]         = useState("");
   const [burnGyateValue, setBurnGyateValue] = useState("0");
   const [stats, setStats] = useState({
     minHp: "100", maxHp: "200",
@@ -64,7 +60,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
   useEffect(() => {
     fetchFullBoxData(targetBoxId, setContentBoxData, setIsFetchingFullData);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetBoxId]); // intentionally omit fetchFullBoxData — new ref every render
+  }, [targetBoxId]);
 
   const handleCreateDraft = async () => {
     if (!newBoxName || !newBoxPrice) return;
@@ -73,6 +69,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.CREATE_DRAFT}`,
       arguments: [
+        txb.object(ADMIN_REGISTRY),   // NEW: first arg
         txb.object(LOOTBOX_REGISTRY),
         txb.pure.string(newBoxName.trim()),
         txb.pure.u64(BigInt(Math.floor(parseFloat(newBoxPrice) * 1_000_000_000))),
@@ -110,6 +107,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.ADD_NFT_TYPE}`,
       arguments: [
+        txb.object(ADMIN_REGISTRY),   // NEW: first arg
         txb.object(targetBoxId),
         txb.pure.u8(parseInt(nftRarity)),
         txb.pure.string(nftName.trim()),
@@ -131,7 +129,6 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
         setNftName("");
         setNftImage("");
         setBurnGyateValue("0");
-        // Delay to allow the node to index the new object before re-fetching
         setTimeout(() => fetchFullBoxData(targetBoxId, setContentBoxData, setIsFetchingFullData), 2000);
       },
       onError: (err) => {
@@ -158,7 +155,11 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
     const txb = new Transaction();
     txb.moveCall({
       target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${FUNCTIONS.FINALIZE_AND_ACTIVATE}`,
-      arguments: [txb.object(LOOTBOX_REGISTRY), txb.object(targetBoxId)],
+      arguments: [
+        txb.object(ADMIN_REGISTRY),   // NEW: first arg
+        txb.object(LOOTBOX_REGISTRY),
+        txb.object(targetBoxId),
+      ],
     });
     signAndExecute({ transaction: txb }, {
       onSuccess: () => {
@@ -178,7 +179,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
       <div className="space-y-8">
         <div className="grid md:grid-cols-2 gap-8">
 
-          {/* ── Create Draft ────────────────────────────────────── */}
+          {/* ── Create Draft ── */}
           <Card className="glass-card border-primary/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -260,7 +261,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
             </CardContent>
           </Card>
 
-          {/* ── Add Contents ────────────────────────────────────── */}
+          {/* ── Add Contents ── */}
           <Card className="glass-card border-primary/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -302,7 +303,6 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
                 <Input type="number" value={nftValue} onChange={(e) => setNftValue(e.target.value)} />
               </div>
 
-              {/* ── Image picker (replaces plain URL input) ────────── */}
               <ImagePickerField
                 value={nftImage}
                 onChange={setNftImage}
@@ -310,7 +310,6 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
                 label="NFT Image"
               />
 
-              {/* Burn GYATE value */}
               <div className="space-y-2">
                 <Label className="flex items-center justify-between">
                   <span>Burn $GYATE Reward</span>
@@ -352,7 +351,7 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
           </Card>
         </div>
 
-        {/* ── Finalize ─────────────────────────────────────────── */}
+        {/* ── Finalize ── */}
         <Card className="glass-card border-accent/20">
           <CardHeader>
             <CardTitle className="text-lg">Finalize Protocol</CardTitle>
