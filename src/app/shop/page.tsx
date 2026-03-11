@@ -1,17 +1,14 @@
 "use client";
 
 import { Navigation } from "@/components/navigation";
-import { Store, Sparkles, Loader2, RefreshCw, Zap, Info, Coins, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Coins } from "lucide-react";
 import Image from "next/image";
-import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect, useCallback } from "react";
 import { RevealLootboxDialog } from "@/components/reveal-lootbox-dialog";
 import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID, LOOTBOX_REGISTRY, TREASURY_POOL, MODULE_NAMES, FUNCTIONS, RANDOM_STATE, GATEKEEPER_CAP, STATS_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import useEmblaCarousel from "embla-carousel-react";
 import { NFT } from "@/lib/mock-data";
 
@@ -28,20 +25,8 @@ interface LootboxData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Resolve a player's PlayerStats shared-object ID from the StatsRegistry table.
- *
- * StatsRegistry holds a NESTED Table<address, ID> called stats_by_owner.
- * That inner table has its own object ID (table.fields.id.id).
- * We must fetch the registry first to get the inner table ID, THEN
- * call getDynamicFieldObject on that inner table ID — NOT on STATS_REGISTRY directly.
- *
- * Wrong:  getDynamicFieldObject(STATS_REGISTRY, address)      ← was broken
- * Correct: getDynamicFieldObject(innerTableId,   address)      ← fixed
- */
 async function resolveStatsId(suiClient: any, playerAddress: string): Promise<string | null> {
   try {
-    // Step 1: get the StatsRegistry object to find the inner table's own ID
     const registryObj = await suiClient.getObject({
       id: STATS_REGISTRY,
       options: { showContent: true },
@@ -51,14 +36,10 @@ async function resolveStatsId(suiClient: any, playerAddress: string): Promise<st
       console.error("resolveStatsId: could not find inner table ID in StatsRegistry");
       return null;
     }
-
-    // Step 2: query the inner table for this player's entry
     const field = await suiClient.getDynamicFieldObject({
       parentId: tableId,
       name: { type: "address", value: playerAddress },
     });
-
-    // Step 3: the value IS the PlayerStats object ID
     const rawId = (field?.data?.content as any)?.fields?.value;
     if (!rawId) return null;
     return typeof rawId === "string" ? rawId : rawId?.id ?? null;
@@ -331,39 +312,61 @@ export default function ShopPage() {
   const handleSummon = async (box: LootboxData, mode: 'single' | 'multi' | 'pity' = 'single') => {
     if (!account) { toast({ variant: "destructive", title: "Wallet required" }); return; }
 
-    // ── Snapshot the signer address immediately ───────────────────────────────
-    // account.address from useCurrentAccount() can change mid-async if the user
-    // switches wallets. Capture it once here so every subsequent async call uses
-    // the same address that will actually sign the transaction. This prevents
-    // object ownership mismatches (e.g. KioskOwnerCap from a different wallet
-    // ending up in a tx signed by the current wallet).
     const signerAddress = account.address;
 
     const totalChars = box.common_count + box.rare_count + box.super_rare_count + box.ssr_count + box.ultra_rare_count + box.legend_rare_count;
-    if (totalChars === 0) { toast({ variant: "destructive", title: "Empty Protocol", description: "This lootbox has no character types registered yet." }); return; }
+    if (totalChars === 0) {
+      toast({ variant: "destructive", title: "Empty Protocol", description: "This lootbox has no character types registered yet." });
+      return;
+    }
+
     setIsPending(true);
+
     try {
-      // ── Kiosk ──────────────────────────────────────────────────────────────
+      // ── Build transaction first so we can use PTB results as args ──────────
+      const txb = new Transaction();
+
+      // ── Kiosk: reuse existing or auto-create in same PTB ──────────────────
       const ownedCaps = await suiClient.getOwnedObjects({
         owner: signerAddress,
         filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
         options: { showContent: true },
       });
-      if (ownedCaps.data.length === 0) {
-        toast({ variant: "destructive", title: "Kiosk Required", description: "You need a Kiosk to receive characters." });
-        setIsPending(false); return;
-      }
-      const kioskCapId = ownedCaps.data[0].data?.objectId;
-      if (!kioskCapId) {
-        toast({ variant: "destructive", title: "Kiosk Error", description: "Could not read your KioskOwnerCap. Try refreshing." });
-        setIsPending(false); return;
-      }
-      const kioskId = (ownedCaps.data[0].data?.content as any)?.fields?.for;
 
-      // ── PlayerStats (SHARED object — resolve via StatsRegistry) ────────────
-      // PlayerStats is NOT owned by the player. It's a shared object registered
-      // in StatsRegistry.stats_by_owner (Table<address, ID>). We fetch it via
-      // getDynamicFieldObject so we get its on-chain object ID.
+      let kioskArg: any;
+      let kioskCapArg: any;
+      let autoCreatingKiosk = false;
+
+      if (ownedCaps.data.length === 0) {
+        // No kiosk found — create one inline as part of this PTB.
+        // The results (newKiosk, newKioskCap) are used directly as arguments
+        // to the lootbox call below, all within the same atomic transaction.
+        // After the lootbox call we share the kiosk and transfer the cap.
+        autoCreatingKiosk = true;
+        toast({
+          title: "🎒 Setting up your Kiosk",
+          description: "No Kiosk found — one will be created for you in this transaction!",
+        });
+        const [newKiosk, newKioskCap] = txb.moveCall({
+          target: "0x2::kiosk::new",
+          arguments: [],
+        });
+        kioskArg = newKiosk;
+        kioskCapArg = newKioskCap;
+      } else {
+        // Existing kiosk — just use it
+        const capId = ownedCaps.data[0].data?.objectId;
+        if (!capId) {
+          toast({ variant: "destructive", title: "Kiosk Error", description: "Could not read your KioskOwnerCap. Try refreshing." });
+          setIsPending(false);
+          return;
+        }
+        const kioskIdStr = (ownedCaps.data[0].data?.content as any)?.fields?.for;
+        kioskArg = txb.object(kioskIdStr);
+        kioskCapArg = txb.object(capId);
+      }
+
+      // ── PlayerStats ────────────────────────────────────────────────────────
       const statsId = await resolveStatsId(suiClient, signerAddress);
       if (!statsId) {
         toast({
@@ -371,11 +374,11 @@ export default function ShopPage() {
           title: "Profile Setup Required",
           description: "Please initialize your player profile in the Account / Profile section first.",
         });
-        setIsPending(false); return;
+        setIsPending(false);
+        return;
       }
 
-      // ── Build transaction ──────────────────────────────────────────────────
-      const txb = new Transaction();
+      // ── Payment ────────────────────────────────────────────────────────────
       let paymentAmount = mode === 'multi'
         ? BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price) * BigInt(box.multi_open_size)
         : BigInt(paymentMethod === 'SUI' ? box.price : box.gyate_price);
@@ -405,6 +408,7 @@ export default function ShopPage() {
         paymentCoin = coin;
       }
 
+      // ── Pity progress (if applicable) ──────────────────────────────────────
       let progressId: string | null = null;
       if (mode === 'pity') {
         const progressObjects = await suiClient.getOwnedObjects({
@@ -415,11 +419,13 @@ export default function ShopPage() {
         const progress = progressObjects.data.find((p: any) => p.data?.content?.fields?.lootbox_id === box.id);
         if (!progress) {
           toast({ variant: "destructive", title: "Pity Tracking Disabled", description: "Initialize pity progress for this box in your profile." });
-          setIsPending(false); return;
+          setIsPending(false);
+          return;
         }
         progressId = progress.data!.objectId;
       }
 
+      // ── Build call args ────────────────────────────────────────────────────
       const callArgs = [
         txb.object(box.id),
         txb.object(LOOTBOX_REGISTRY),
@@ -428,14 +434,30 @@ export default function ShopPage() {
       if (mode === 'pity' && progressId) callArgs.push(txb.object(progressId));
       callArgs.push(
         paymentCoin,
-        txb.object(statsId),   // shared PlayerStats object — pass by ID directly
+        txb.object(statsId),
         txb.object(RANDOM_STATE),
-        txb.object(kioskId),
-        txb.object(kioskCapId!),
+        kioskArg,
+        kioskCapArg,
       );
 
-      txb.moveCall({ target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`, arguments: callArgs });
+      txb.moveCall({
+        target: `${PACKAGE_ID}::${MODULE_NAMES.LOOTBOX}::${targetFunction}`,
+        arguments: callArgs,
+      });
 
+      // ── If we auto-created a kiosk, finalize it AFTER the lootbox call ─────
+      // The kiosk must be shared and the cap transferred to the user.
+      // This happens atomically in the same transaction as the lootbox open.
+      if (autoCreatingKiosk) {
+        txb.moveCall({
+          target: "0x2::transfer::public_share_object",
+          typeArguments: ["0x2::kiosk::Kiosk"],
+          arguments: [kioskArg],
+        });
+        txb.transferObjects([kioskCapArg], txb.pure.address(signerAddress));
+      }
+
+      // ── Sign & execute ─────────────────────────────────────────────────────
       signAndExecute({ transaction: txb }, {
         onSuccess: async (result) => {
           toast({ title: "Transaction Sent", description: "Waiting for blockchain confirmation..." });
@@ -455,7 +477,10 @@ export default function ShopPage() {
                 lootboxSource: fields.lootbox_source, globalId: parseInt(fields.global_sequential_id),
               };
             });
-            setRevealBox(box); setRevealResults(results); setShowReveal(true); setIsPending(false);
+            setRevealBox(box);
+            setRevealResults(results);
+            setShowReveal(true);
+            setIsPending(false);
           } catch (err: any) {
             toast({ variant: "destructive", title: "Reveal Error", description: err.message });
             setIsPending(false);
