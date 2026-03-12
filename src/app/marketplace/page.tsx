@@ -6,7 +6,7 @@ import { Search, RefreshCw, Info, Loader2, Filter, X, Sparkles } from "lucide-re
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
-import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL, TRANSFER_POLICY } from "@/lib/sui-constants";
+import { PACKAGE_ID, MODULE_NAMES, FUNCTIONS, TREASURY_POOL, TRANSFER_POLICY, PRICE_HISTORY_REGISTRY } from "@/lib/sui-constants";
 import { useToast } from "@/hooks/use-toast";
 import { Transaction } from "@mysten/sui/transactions";
 import { NFT, RARITY_LABELS } from "@/lib/mock-data";
@@ -948,7 +948,9 @@ export default function MarketplacePage() {
           txb.object(normalizeSuiId(item.kioskId)),
           txb.object(TRANSFER_POLICY),
           txb.object(TREASURY_POOL),
+          txb.object(PRICE_HISTORY_REGISTRY),          // ← NEW: price history registry
           txb.pure.address(normalizeSuiId(item.id)),
+          txb.pure.string(item.name ?? ""),             // ← NEW: nft name for history
           paymentCoin,
           txb.object(normalizeSuiId(buyerKioskId)),
           txb.object(normalizeSuiId(buyerCapId)),

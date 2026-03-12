@@ -44,6 +44,10 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
   const [multiOpenSize, setMultiOpenSize]   = useState("10");
   const [guaranteeRarity, setGuaranteeRarity] = useState("1");
 
+  const [isSeasonal, setIsSeasonal] = useState(false);
+  const [seasonalFrom, setSeasonalFrom] = useState("0");
+  const [seasonalUntil, setSeasonalUntil] = useState("0");
+
   // Add NFT type form
   const [targetBoxId, setTargetBoxId]   = useState("");
   const [nftRarity, setNftRarity]       = useState("0");
@@ -84,6 +88,9 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
         txb.pure.bool(multiOpenEnabled),
         txb.pure.u64(BigInt(multiOpenSize || "0")),
         txb.pure.u8(parseInt(guaranteeRarity || "0")),
+        txb.pure.u64(BigInt(seasonalFrom || "0")),   // ← NEW: available_from epoch
+        txb.pure.u64(BigInt(seasonalUntil || "0")),  // ← NEW: available_until epoch
+        txb.pure.bool(isSeasonal),                   // ← NEW: is_seasonal flag
       ],
     });
     signAndExecute({ transaction: txb }, {
@@ -253,6 +260,25 @@ export function LootboxFactoryTab({ draftBoxes, fetchLootboxes, fetchFullBoxData
                   </div>
                 )}
               </div>
+                 <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                  <div className="space-y-0.5">
+                    <Label>Seasonal / Limited Banner</Label>
+                    <p className="text-[10px] text-muted-foreground">Auto-deactivates after expiry epoch</p>
+                  </div>
+                  <Switch checked={isSeasonal} onCheckedChange={setIsSeasonal} />
+                </div>
+                {isSeasonal && (
+                  <div className="grid grid-cols-2 gap-3 p-4 bg-white/5 rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px]">Available From (epoch, 0 = now)</Label>
+                      <Input type="number" className="h-8 text-xs" value={seasonalFrom} onChange={(e) => setSeasonalFrom(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px]">Available Until (epoch, 0 = forever)</Label>
+                      <Input type="number" className="h-8 text-xs" value={seasonalUntil} onChange={(e) => setSeasonalUntil(e.target.value)} />
+                    </div>
+                  </div>
+                )}
 
               <Button className="w-full glow-violet bg-accent font-bold h-12" onClick={handleCreateDraft} disabled={isPending}>
                 {isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
