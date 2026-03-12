@@ -2,7 +2,7 @@
 
 import { Navigation } from "@/components/navigation";
 import { NFTCard } from "@/components/nft-card";
-import { Search, RefreshCw, Info, Loader2, Filter, X, Sparkles, TrendingUp, Tag, Clock, AlertCircle } from "lucide-react";
+import { Search, RefreshCw, Info, Loader2, Filter, X, Sparkles, TrendingUp, Tag, Clock, AlertCircle, Inbox, CheckCircle2 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { NFTDetailDialog } from "@/components/nft-detail-dialog";
 import { useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
@@ -252,7 +252,7 @@ const ALL_STYLES = `
 
   /* ─── My Offers Panel ─── */
   .my-offers-panel {
-    margin-bottom: 28px; background: white;
+    margin-bottom: 20px; background: white;
     border: 2px solid #1a1a1a; border-radius: 20px; padding: 20px;
     box-shadow: 4px 4px 0px #c9b8ff;
   }
@@ -265,6 +265,79 @@ const ALL_STYLES = `
   .cancel-offer-btn { padding: 5px 12px; border-radius: 20px; border: 1.5px solid #fda4af; background: #fff1f2; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; color: #9f1239; cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
   .cancel-offer-btn:hover { background: #9f1239; color: white; border-color: #9f1239; }
   .cancel-offer-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ─── Offers Received Panel ─── */
+  .offers-received-panel {
+    margin-bottom: 28px; background: white;
+    border: 2px solid #1a1a1a; border-radius: 20px; padding: 20px;
+    box-shadow: 4px 4px 0px #bbf7d0;
+  }
+  .offers-received-title {
+    font-family: 'Caveat', cursive; font-size: 22px; font-weight: 700;
+    color: #1a1a1a; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+  }
+  .offers-received-subtitle {
+    font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 14px;
+    padding: 8px 12px; background: #f0fdf4; border: 1.5px solid #bbf7d0;
+    border-radius: 10px; display: flex; align-items: flex-start; gap: 6px; line-height: 1.5;
+  }
+  .offer-received-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border: 1.5px solid #e2e8f0;
+    border-radius: 14px; background: #fafaf8;
+    transition: border-color 0.15s ease;
+  }
+  .offer-received-row:hover { border-color: #bbf7d0; }
+  .offer-received-row.expired { opacity: 0.5; }
+  .offer-received-nft { flex: 1; min-width: 0; }
+  .offer-received-nft-name {
+    font-family: 'Caveat', cursive; font-size: 17px; font-weight: 700;
+    color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .offer-received-buyer {
+    font-size: 10px; color: #94a3b8; font-weight: 700; font-family: monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+  }
+  .offer-received-amount {
+    font-family: 'Caveat', cursive; font-size: 20px; font-weight: 700; color: #15803d;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .offer-received-expiry { font-size: 10px; font-weight: 700; color: #94a3b8; white-space: nowrap; flex-shrink: 0; }
+  .offer-received-expiry.expiring-soon { color: #f59e0b; }
+  .offer-received-expiry.expired-label { color: #ef4444; }
+  .accept-offer-btn {
+    padding: 7px 14px; border-radius: 20px;
+    border: 1.5px solid #22c55e; background: #f0fdf4;
+    font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800;
+    color: #15803d; cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .accept-offer-btn:hover { background: #22c55e; color: white; border-color: #22c55e; }
+  .accept-offer-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .offers-received-empty {
+    text-align: center; padding: 24px; color: #94a3b8;
+    font-size: 13px; font-weight: 600;
+  }
+
+  /* ─── Tab bar for panels ─── */
+  .panels-tab-bar {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .panel-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    border: 2px solid #e2e8f0; background: white;
+    font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; color: #64748b;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .panel-tab:hover { border-color: #c9b8ff; color: #7e22ce; }
+  .panel-tab.active { background: linear-gradient(135deg, #f3e8ff, #fce7f3); border-color: #1a1a1a; color: #1a1a1a; box-shadow: 2px 2px 0px #c9b8ff; }
+  .panel-tab .tab-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #1a1a1a; color: white; font-size: 10px; font-weight: 900;
+  }
+  .panel-tab.active .tab-badge { background: #7e22ce; }
 
   /* ─── Success toast ─── */
   .buy-success-toast {
@@ -472,6 +545,9 @@ export default function MarketplacePage() {
   const [offerTargetHistory, setOfferTargetHistory] = useState<PriceHistoryEntry[]>([]);
   const [priceHistories, setPriceHistories] = useState<Record<string, PriceHistoryEntry[]>>({});
   const [myOffers, setMyOffers] = useState<OfferData[]>([]);
+  const [offersReceived, setOffersReceived] = useState<OfferData[]>([]);
+  const [isAcceptingOffer, setIsAcceptingOffer] = useState<string | null>(null);
+  const [activePanel, setActivePanel] = useState<"sent" | "received">("sent");
 
   // Success state
   const [successMsg, setSuccessMsg] = useState("");
@@ -543,7 +619,6 @@ export default function MarketplacePage() {
       }));
       setListings(verifiedListings);
 
-      // Fetch price histories for all unique names
       const names = [...new Set(verifiedListings.map(l => l.name))];
       fetchPriceHistories(names);
     } catch (err) {
@@ -572,7 +647,6 @@ export default function MarketplacePage() {
           const count = Number(hist.count ?? 0);
           const cursor = Number(hist.write_cursor ?? 0);
           const entries: PriceHistoryEntry[] = [];
-          // Reconstruct ordered entries from circular buffer
           for (let i = 0; i < count; i++) {
             const idx = (cursor - count + i + 20) % 20;
             if (prices[idx] > 0) {
@@ -586,31 +660,53 @@ export default function MarketplacePage() {
     } catch { }
   }, [suiClient]);
 
-  // ── Fetch my open offers ─────────────────────────────────────────────────────
+  // ── Paginated event fetcher — fetches ALL pages until exhausted ─────────────
+  const fetchAllEvents = useCallback(async (eventType: string): Promise<any[]> => {
+    const all: any[] = [];
+    let cursor: any = null;
+    let page = 0;
+    while (true) {
+      const res: any = await suiClient.queryEvents({
+        query: { MoveEventType: eventType },
+        limit: 50,
+        order: "descending",
+        ...(cursor ? { cursor } : {}),
+      });
+      all.push(...res.data);
+      page++;
+      if (!res.hasNextPage || !res.nextCursor) break;
+      cursor = res.nextCursor;
+      // Safety: stop after 20 pages (1000 events) — adjust if needed
+      if (page >= 20) break;
+    }
+    return all;
+  }, [suiClient]);
+
+  // ── Fetch my open offers (sent by me) ───────────────────────────────────────
   const fetchMyOffers = useCallback(async () => {
     if (!account) return;
     try {
-      // Query OfferMadeEvent for this buyer
-      const events = await suiClient.queryEvents({
-        query: { MoveEventType: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferMadeEvent` },
-        limit: 50, order: "descending",
+      const myAddress = normalizeSuiId(account.address);
+      // Paginate through ALL offer events — no limit blindspot
+      const [allOfferEvents, allCancelledEvents, allAcceptedEvents] = await Promise.all([
+        fetchAllEvents(`${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferMadeEvent`),
+        fetchAllEvents(`${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferCancelledEvent`),
+        fetchAllEvents(`${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferAcceptedEvent`),
+      ]);
+      console.log("[fetchMyOffers] my address:", myAddress, "| total OfferMadeEvents:", allOfferEvents.length);
+      allOfferEvents.forEach((e: any) => {
+        console.log("  buyer:", normalizeSuiId(e.parsedJson?.buyer), "| nft:", e.parsedJson?.nft_name, "| offer_id:", e.parsedJson?.offer_id);
       });
-      const myEvents = events.data.filter((e: any) => e.parsedJson?.buyer === account.address);
-      const cancelledEvents = await suiClient.queryEvents({
-        query: { MoveEventType: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferCancelledEvent` },
-        limit: 50, order: "descending",
-      });
-      const cancelledIds = new Set(cancelledEvents.data.map((e: any) => normalizeSuiId(e.parsedJson?.offer_id)));
-      const acceptedEvents = await suiClient.queryEvents({
-        query: { MoveEventType: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferAcceptedEvent` },
-        limit: 50, order: "descending",
-      });
-      const acceptedIds = new Set(acceptedEvents.data.map((e: any) => normalizeSuiId(e.parsedJson?.offer_id)));
+      const myEvents = allOfferEvents.filter((e: any) => normalizeSuiId(e.parsedJson?.buyer) === myAddress);
+      console.log("[fetchMyOffers] matched as buyer:", myEvents.length);
+      const cancelledIds = new Set(allCancelledEvents.map((e: any) => normalizeSuiId(e.parsedJson?.offer_id)));
+      const acceptedIds = new Set(allAcceptedEvents.map((e: any) => normalizeSuiId(e.parsedJson?.offer_id)));
 
       const activeOffers: OfferData[] = [];
       for (const e of myEvents) {
         const p = e.parsedJson as any;
         const offerId = normalizeSuiId(p.offer_id);
+        console.log("[fetchMyOffers] offer:", offerId, "| cancelled:", cancelledIds.has(offerId), "| accepted:", acceptedIds.has(offerId));
         if (cancelledIds.has(offerId) || acceptedIds.has(offerId)) continue;
         activeOffers.push({
           id: offerId,
@@ -624,12 +720,80 @@ export default function MarketplacePage() {
           createdAt: Number(p.created_at ?? 0),
         });
       }
+      console.log("[fetchMyOffers] active offers to display:", activeOffers.length);
       setMyOffers(activeOffers);
+    } catch (err) {
+      console.error("[fetchMyOffers] error:", err);
+    }
+  }, [suiClient, account, fetchAllEvents]);
+
+  // ── Fetch offers received (on my listed NFTs / targeting me as seller) ───────
+  const fetchOffersReceived = useCallback(async () => {
+    if (!account) return;
+    try {
+      const myAddress = normalizeSuiId(account.address);
+      // Paginate through ALL events — no missed old offers
+      const [allOfferEvents, allCancelledEvents, allAcceptedEvents] = await Promise.all([
+        fetchAllEvents(`${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferMadeEvent`),
+        fetchAllEvents(`${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferCancelledEvent`),
+        fetchAllEvents(`${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::OfferAcceptedEvent`),
+      ]);
+      console.log("[fetchOffersReceived] my address:", myAddress, "| total events:", allOfferEvents.length);
+      allOfferEvents.forEach((e: any) => {
+        console.log("  [recv] seller in event:", e.parsedJson?.seller, "| buyer:", e.parsedJson?.buyer?.slice(0,10), "| nft:", e.parsedJson?.nft_name);
+      });
+
+      // The seller field may be the wallet address OR the kiosk object ID
+      // (depends on what was passed as seller arg in make_offer).
+      // Collect all kiosk IDs owned by this user to match against both.
+      const myKioskIds = new Set<string>();
+      myKioskIds.add(myAddress);
+      try {
+        const capsRes = await suiClient.getOwnedObjects({
+          owner: account.address,
+          filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
+          options: { showContent: true },
+        });
+        for (const cap of capsRes.data) {
+          const rawFor = (cap.data?.content as any)?.fields?.for;
+          const kioskId = typeof rawFor === "string" ? rawFor
+            : typeof rawFor?.id === "string" ? rawFor.id : null;
+          if (kioskId) myKioskIds.add(normalizeSuiId(kioskId));
+        }
+      } catch { }
+      console.log("[fetchOffersReceived] matching against ids:", [...myKioskIds]);
+
+      const receivedEvents = allOfferEvents.filter(
+        (e: any) => myKioskIds.has(normalizeSuiId(e.parsedJson?.seller))
+      );
+      console.log("[fetchOffersReceived] matched as seller:", receivedEvents.length);
+      const cancelledIds = new Set(allCancelledEvents.map((e: any) => normalizeSuiId(e.parsedJson?.offer_id)));
+      const acceptedIds_r = new Set(allAcceptedEvents.map((e: any) => normalizeSuiId(e.parsedJson?.offer_id)));
+      const activeOffers: OfferData[] = [];
+      for (const e of receivedEvents) {
+        const p = e.parsedJson as any;
+        const offerId = normalizeSuiId(p.offer_id);
+        if (cancelledIds.has(offerId) || acceptedIds_r.has(offerId)) continue;
+        activeOffers.push({
+          id: offerId,
+          nftId: normalizeSuiId(p.nft_id),
+          nftName: p.nft_name ?? "Unknown",
+          buyer: p.buyer,
+          seller: p.seller,
+          amount: mistToSui(p.amount),
+          amountMist: p.amount?.toString() ?? "0",
+          expiresAt: Number(p.expires_at ?? 0),
+          createdAt: Number(p.created_at ?? 0),
+        });
+      }
+      // Sort by amount descending (best offers first)
+      activeOffers.sort((a, b) => b.amount - a.amount);
+      setOffersReceived(activeOffers);
     } catch { }
-  }, [suiClient, account]);
+  }, [suiClient, account, fetchAllEvents]);
 
   useEffect(() => { fetchListings(); }, [fetchListings]);
-  useEffect(() => { fetchMyOffers(); }, [fetchMyOffers]);
+  useEffect(() => { fetchMyOffers(); fetchOffersReceived(); }, [fetchMyOffers, fetchOffersReceived]);
 
   // ── Buy NFT ──────────────────────────────────────────────────────────────────
   const executeBuy = async (item: NFT & { priceMist?: string }) => {
@@ -701,7 +865,6 @@ export default function MarketplacePage() {
     if (!item || !account) return;
     setIsPending(true);
     try {
-      // Get current epoch for expiry calc
       const { epoch } = await suiClient.getLatestSuiSystemState();
       const expiresAt = expiryEpochs > 0 ? Number(epoch) + expiryEpochs : 0;
       const amountMist = suiToMist(amountSui);
@@ -767,6 +930,77 @@ export default function MarketplacePage() {
     }
   };
 
+  // ── Accept offer ─────────────────────────────────────────────────────────────
+  const acceptOffer = async (offer: OfferData) => {
+    if (!account) return;
+    setIsAcceptingOffer(offer.id);
+    try {
+      // Get seller (my) kiosk cap
+      const capsRes = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: "0x2::kiosk::KioskOwnerCap" },
+        options: { showContent: true },
+      });
+      if (capsRes.data.length === 0) {
+        toast({ variant: "destructive", title: "No Kiosk Found" });
+        setIsAcceptingOffer(null); return;
+      }
+      const sellerCapId = capsRes.data[0].data!.objectId;
+      const rawFor = (capsRes.data[0].data?.content as any)?.fields?.for;
+      const sellerKioskId: string | undefined = typeof rawFor === "string" ? rawFor : typeof rawFor?.id === "string" ? rawFor.id : undefined;
+      if (!sellerKioskId) {
+        toast({ variant: "destructive", title: "Could not resolve your Kiosk ID." });
+        setIsAcceptingOffer(null); return;
+      }
+
+      // We need to find the buyer's kiosk too
+      // Query KioskCreatedEvent for the buyer to find their kiosk
+      const buyerKioskEvents = await suiClient.queryEvents({
+        query: { MoveEventType: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::KioskCreatedEvent` },
+        limit: 200, order: "descending",
+      });
+      const buyerKioskEvent = buyerKioskEvents.data.find(
+        (e: any) => e.parsedJson?.owner === offer.buyer
+      );
+      if (!buyerKioskEvent) {
+        toast({ variant: "destructive", title: "Buyer has no kiosk", description: "The buyer must have a kiosk to receive the NFT." });
+        setIsAcceptingOffer(null); return;
+      }
+      const buyerKioskId = normalizeSuiId((buyerKioskEvent.parsedJson as any)?.kiosk_id);
+
+      // Get buyer's KioskOwnerCap — buyer must pass their cap
+      // NOTE: In practice, accept_offer requires buyer_cap. This is a limitation:
+      // the seller can't accept on behalf of the buyer without their cap.
+      // A common pattern is to use a shared/escrow approach or require buyer involvement.
+      // For now we show a helpful error message pointing this out.
+      toast({
+        variant: "destructive",
+        title: "Accept Offer Limitation",
+        description: "Accepting offers requires the buyer to co-sign (provide their KioskOwnerCap). This feature requires a contract update to support single-signer acceptance.",
+      });
+      setIsAcceptingOffer(null);
+
+      // ─── If your contract is updated to not require buyer_cap, use this: ───
+      // const txb = new Transaction();
+      // txb.moveCall({
+      //   target: `${PACKAGE_ID}::${MODULE_NAMES.MARKETPLACE}::${FUNCTIONS.ACCEPT_OFFER}`,
+      //   arguments: [
+      //     txb.object(OFFER_REGISTRY),
+      //     txb.object(normalizeSuiId(offer.id)),
+      //     txb.object(normalizeSuiId(sellerKioskId)),
+      //     txb.object(normalizeSuiId(sellerCapId)),
+      //     txb.object(normalizeSuiId(buyerKioskId)),
+      //     txb.object(BUYER_CAP_ID),  // <— can't get this without buyer signing
+      //     txb.object(TREASURY_POOL),
+      //     txb.object(PRICE_HISTORY_REGISTRY),
+      //   ],
+      // });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Accept Error", description: err.message });
+      setIsAcceptingOffer(null);
+    }
+  };
+
   // ── Filters ──────────────────────────────────────────────────────────────────
   const filteredListings = useMemo(() => {
     const minHp = parseInt(hpRange.min) || 0, maxHp = parseInt(hpRange.max) || 999999;
@@ -784,6 +1018,8 @@ export default function MarketplacePage() {
     setSearchTerm(""); setSelectedRarities([]);
     setHpRange({ min: "0", max: "9999" }); setAtkRange({ min: "0", max: "9999" }); setSpdRange({ min: "0", max: "9999" });
   };
+
+  const showOffersPanel = !!account;
 
   return (
     <div className="mkt-page">
@@ -810,7 +1046,7 @@ export default function MarketplacePage() {
             <div className="mkt-subtitle">Verified on-chain listings · 10% kiosk-enforced royalty · Offers system live</div>
           </div>
           <div className="mkt-header-actions">
-            <button className="mkt-btn icon-only" onClick={fetchListings} disabled={isLoading}>
+            <button className="mkt-btn icon-only" onClick={() => { fetchListings(); fetchMyOffers(); fetchOffersReceived(); }} disabled={isLoading}>
               <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
             </button>
             <div className="mkt-search-wrap">
@@ -823,30 +1059,133 @@ export default function MarketplacePage() {
           </div>
         </div>
 
-        {/* ── My Open Offers ── */}
-        {myOffers.length > 0 && (
-          <div className="my-offers-panel">
-            <div className="my-offers-title">
-              <Tag size={18} /> My Open Offers
+        {/* ── My Offers + Offers Received ── */}
+        {showOffersPanel && (
+          <div>
+            {/* Tab bar */}
+            <div className="panels-tab-bar">
+              <button
+                className={`panel-tab ${activePanel === "sent" ? "active" : ""}`}
+                onClick={() => setActivePanel("sent")}
+              >
+                <Tag size={13} />
+                My Offers
+                {myOffers.length > 0 && <span className="tab-badge">{myOffers.length}</span>}
+              </button>
+              <button
+                className={`panel-tab ${activePanel === "received" ? "active" : ""}`}
+                onClick={() => setActivePanel("received")}
+              >
+                <Inbox size={13} />
+                Offers Received
+                {offersReceived.length > 0 && <span className="tab-badge">{offersReceived.length}</span>}
+              </button>
             </div>
-            <div className="my-offers-list">
-              {myOffers.map(offer => (
-                <div key={offer.id} className="offer-row">
-                  <span className="offer-row-name">{offer.nftName}</span>
-                  <span className="offer-row-amount">{offer.amount.toFixed(2)} SUI</span>
-                  <span className="offer-row-expiry">
-                    {offer.expiresAt > 0 ? `exp. ep.${offer.expiresAt}` : "No expiry"}
-                  </span>
-                  <button
-                    className="cancel-offer-btn"
-                    onClick={() => cancelOffer(offer)}
-                    disabled={isPending}
-                  >
-                    {isPending ? <Loader2 size={10} className="animate-spin" /> : "Cancel"}
-                  </button>
+
+            {/* My Offers Panel */}
+            {activePanel === "sent" && (
+              <div className="my-offers-panel">
+                <div className="my-offers-title">
+                  <Tag size={18} /> My Open Offers
                 </div>
-              ))}
-            </div>
+                {myOffers.length > 0 && (
+                <div
+                  style={{
+                    fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 12,
+                    padding: "8px 12px", background: "#fffbeb", border: "1.5px solid #fde68a",
+                    borderRadius: 10, display: "flex", gap: 6, lineHeight: 1.5, alignItems: "flex-start"
+                  }}
+                >
+                  <AlertCircle size={13} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 1 }} />
+                  <span>
+                    Cancelling returns your <strong>full SUI immediately</strong>. Expired offers also return your SUI — just press Cancel to reclaim it.
+                  </span>
+                </div>
+                )}
+                {myOffers.length === 0 ? (
+                  <div className="offers-received-empty">
+                    No open offers. Hit "Make Offer" on any listing to bid below the asking price!
+                  </div>
+                ) : null}
+                <div className="my-offers-list">
+                  {myOffers.map(offer => (
+                    <div key={offer.id} className="offer-row">
+                      <span className="offer-row-name">{offer.nftName}</span>
+                      <span className="offer-row-amount">{offer.amount.toFixed(2)} SUI</span>
+                      <span className="offer-row-expiry">
+                        {offer.expiresAt > 0 ? `exp. ep.${offer.expiresAt}` : "No expiry"}
+                      </span>
+                      <button
+                        className="cancel-offer-btn"
+                        onClick={() => cancelOffer(offer)}
+                        disabled={isPending}
+                      >
+                        {isPending ? <Loader2 size={10} className="animate-spin" /> : "Cancel & Reclaim"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Offers Received Panel */}
+            {activePanel === "received" && (
+              <div className="offers-received-panel">
+                <div className="offers-received-title">
+                  <Inbox size={18} /> Offers Received
+                </div>
+                <div className="offers-received-subtitle">
+                  <Info size={13} style={{ color: "#15803d", flexShrink: 0, marginTop: 1 }} />
+                  <span>
+                    These are offers made on your listed NFTs. You receive <strong>90% of the offer amount</strong> (10% protocol fee). 
+                    Note: accepting requires a contract update for single-signer flow — see comments in code.
+                  </span>
+                </div>
+                {offersReceived.length === 0 ? (
+                  <div className="offers-received-empty">
+                    No offers received yet. List some NFTs to start getting bids!
+                  </div>
+                ) : (
+                  <div className="my-offers-list">
+                    {offersReceived.map(offer => {
+                      const isExpired = offer.expiresAt > 0; // we don't know current epoch here easily
+                      const netAmount = offer.amount * 0.9;
+                      return (
+                        <div key={offer.id} className="offer-received-row">
+                          <div className="offer-received-nft">
+                            <div className="offer-received-nft-name">{offer.nftName}</div>
+                            <div className="offer-received-buyer" title={offer.buyer}>
+                              from {offer.buyer.slice(0, 6)}…{offer.buyer.slice(-4)}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <div className="offer-received-amount">{offer.amount.toFixed(2)} SUI</div>
+                            <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
+                              you get ~{netAmount.toFixed(2)} SUI
+                            </div>
+                          </div>
+                          <div className="offer-received-expiry">
+                            {offer.expiresAt > 0 ? `exp. ep.${offer.expiresAt}` : "No expiry"}
+                          </div>
+                          <button
+                            className="accept-offer-btn"
+                            onClick={() => acceptOffer(offer)}
+                            disabled={isAcceptingOffer !== null}
+                            title="Accept this offer"
+                          >
+                            {isAcceptingOffer === offer.id
+                              ? <Loader2 size={11} className="animate-spin" />
+                              : <CheckCircle2 size={11} />
+                            }
+                            Accept
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -942,12 +1281,10 @@ export default function MarketplacePage() {
                           </div>
                         )}
 
-                        {/* Price history sparkline */}
                         {history && history.length > 0 && (
                           <PriceSparkline history={history} />
                         )}
 
-                        {/* Buy button */}
                         <button
                           className={`buy-btn ${isYours ? "yours" : ""}`}
                           onClick={() => !isYours && executeBuy(item as any)}
@@ -957,7 +1294,6 @@ export default function MarketplacePage() {
                           {isYours ? "Your Listing" : "✦ Buy Now"}
                         </button>
 
-                        {/* Make Offer button */}
                         {!isYours && (
                           <button
                             className="offer-btn"
